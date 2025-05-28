@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Disrupt - Login Portal</title>
+        <link rel="stylesheet" href="style.css" />
+        <script src="script.js"></script>
+    </head>
+    <body>
+        <!-- Login Page -->
+        <div class="login-page" id="loginPage">
+            <div class="login-container">
+                <div class="company-name">DISRUPT</div>
+                <div class="portal-title">Login Portal</div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        placeholder="Enter your email"
+                    />
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        placeholder="Enter your password"
+                    />
+                </div>
+                <button id="loginButton">Login</button>
+                <div class="error" id="errorMessage">
+                    Invalid email or password
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard (hidden until login) -->
+        <div id="dashboard">
+            <div class="dashboard-header">
+                <div class="company-name">DISRUPT</div>
+            </div>
+
+            <div class="user-info-bar">
+                <div id="userGreeting">Welcome, User</div>
+                <div id="currentDate"></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="dashboard-container">
+                <div class="side-nav">
+                    <div
+                        class="nav-item active"
+                        data-content="welcome"
+                        onclick="showContent('welcome')"
+                    >
+                        <i>🏠</i> Home
+                    </div>
+                    <div
+                        class="nav-item"
+                        data-content="accounting"
+                        onclick="showContent('accounting')"
+                    >
+                        <i>💰</i> Accounting
+                    </div>
+                    <div
+                        class="nav-item"
+                        data-content="team"
+                        onclick="showContent('team')"
+                    >
+                        <i>👥</i> Team
+                    </div>
+                    <div
+                        class="nav-item"
+                        data-content="logout()"
+                        onclick="logout()"
+                    >
+                        <i>🚪</i> Logout
+                    </div>
+                </div>
+
+                <div class="main-content">
+                    <!-- Welcome Content -->
+                    <div id="welcomeContent" class="content-card">
+                        <h2>Welcome to Disrupt Portal</h2>
+                        <p>
+                            You have successfully logged in to the Disrupt
+                            management system.
+                        </p>
+                        <p>
+                            Use the navigation menu to access different sections
+                            of the portal.
+                        </p>
+                        <div
+                            class="user-details"
+                            style="
+                                margin-top: 20px;
+                                padding: 15px;
+                                background-color: #f8f9fa;
+                                border-radius: 4px;
+                            "
+                        >
+                            <p>
+                                <strong>Email:</strong>
+                                <span id="displayEmail"></span>
+                            </p>
+                            <p>
+                                <strong>Role:</strong>
+                                <span id="displayRole"></span>
+                            </p>
+                            <p>
+                                <strong>Department:</strong>
+                                <span id="displayDept"></span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Accounting Content -->
+                    <div
+                        id="accountingContent"
+                        class="content-card"
+                        style="display: none"
+                    >
+                        <div class="accounting-header">
+                            <h2>Accounting</h2>
+                        </div>
+                        <div id="loadingSpinner" style="display: none">
+                            Loading...
+                        </div>
+                        <div
+                            style="
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                margin-bottom: 20px;
+                            "
+                        >
+                            <div class="balance-display">
+                                Balance:
+                                <span class="btc-amount" id="currentBalance"
+                                    >0.42 BTC</span
+                                >
+                            </div>
+                            <button class="new-btn" id="newPaymentBtn">
+                                + New
+                            </button>
+                        </div>
+
+                        <h3 class="history-title">History</h3>
+
+                        <table
+                            class="transactions-table"
+                            id="transactionsTable"
+                        >
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Receiver</th>
+                                    <th>Amount</th>
+                                    <th>ID</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Transactions will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- New Payment Modal -->
+                    <div class="modal" id="paymentModal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3 class="modal-title">New Payment</h3>
+                                <button class="close-btn" id="closeModalBtn">
+                                    &times;
+                                </button>
+                            </div>
+                            <div class="form-group">
+                                <label for="paymentName">Name:</label>
+                                <input
+                                    type="text"
+                                    id="paymentName"
+                                    placeholder="Receiver's name"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="paymentEmail">Email:</label>
+                                <input
+                                    type="email"
+                                    id="paymentEmail"
+                                    placeholder="Receiver's email"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="paymentAddress"
+                                    >Lightning Address:</label
+                                >
+                                <input
+                                    type="text"
+                                    id="paymentAddress"
+                                    placeholder="user@wallet.com"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="paymentAmount">Amount (BTC):</label>
+                                <input
+                                    type="number"
+                                    id="paymentAmount"
+                                    placeholder="0.00"
+                                    step="0.00000001"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="paymentNote">Note:</label>
+                                <input
+                                    type="text"
+                                    id="paymentNote"
+                                    placeholder="Optional note"
+                                />
+                            </div>
+                            <div class="modal-footer">
+                                <button
+                                    class="submit-btn"
+                                    id="submitPaymentBtn"
+                                >
+                                    Submit Payment
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Team Content -->
+                    <div
+                        id="teamContent"
+                        class="content-card"
+                        style="display: none"
+                    >
+                        <div class="team-header">
+                            <h2>Team Members</h2>
+                            <div>
+                                <button class="add-btn" id="addMemberBtn">
+                                    + Add
+                                </button>
+                                <button class="remove-btn" id="removeMemberBtn">
+                                    - Remove
+                                </button>
+                            </div>
+                        </div>
+
+                        <table class="team-table" id="teamTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Department</th>
+                                    <th>Email</th>
+                                    <th>Date Added</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Team members will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Add Member Modal -->
+                    <div class="modal" id="addMemberModal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Add New Team Member</h3>
+                                <button
+                                    class="close-btn"
+                                    id="closeMemberModalBtn"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <div class="form-group">
+                                <label for="memberName">Name:</label>
+                                <input
+                                    type="text"
+                                    id="memberName"
+                                    placeholder="Full name"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="memberRole">Role:</label>
+                                <input
+                                    type="text"
+                                    id="memberRole"
+                                    placeholder="e.g., Developer, Manager"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="memberDepartment"
+                                    >Department:</label
+                                >
+                                <select id="memberDepartment" required>
+                                    <option value="">Select Department</option>
+                                    <option value="Engineering">
+                                        Engineering
+                                    </option>
+                                    <option value="Marketing">Marketing</option>
+                                    <option value="Executive">Executive</option>
+                                    <option value="Human Resources">
+                                        Human Resources
+                                    </option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="memberEmail">Email:</label>
+                                <input
+                                    type="email"
+                                    id="memberEmail"
+                                    placeholder="email@company.com"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="memberLightning"
+                                    >Lightning Address:</label
+                                >
+                                <input
+                                    type="text"
+                                    id="memberLightning"
+                                    placeholder="user@wallet.com"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label>Default Password: 1234</label>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="submit-btn" id="submitMemberBtn">
+                                    Add Member
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Success Modal -->
+                    <div class="modal" id="successModal">
+                        <div
+                            class="modal-content"
+                            style="text-align: center; padding: 30px"
+                        >
+                            <h3 style="color: #2ecc71">Success!</h3>
+                            <p id="successMessage">Member added successfully</p>
+                            <button
+                                class="submit-btn"
+                                id="closeSuccessBtn"
+                                style="margin-top: 20px"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Remove Member modal -->
+                    <div class="modal" id="removeMemberModal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Remove Member</h3>
+                                <button
+                                    class="close-btn"
+                                    id="closeRemoveModalBtn"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="membersListContainer">
+                                    <!-- Members will be listed here -->
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="cancel-btn" id="cancelRemoveBtn">
+                                    Cancel
+                                </button>
+                                <button
+                                    class="danger-btn"
+                                    id="confirmRemoveBtn"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script></script>
+    </body>
+</html>

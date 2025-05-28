@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "email": "ceo@company.com",
+      "password": "1234",
+      "name": "John Doe",
+      "role": "Admin",
+      "department": "Executive",
+      "dateAdded": "2023-11-01"
+    },
+    {
+      "name": "Joe",
+      "role": "Manager",
+      "department": "Engineering",
+      "email": "joe@company.com",
+      "address": "ericscalibur@blink.sv",
+      "password": "1234",
+      "dateAdded": "2025-05-28"
+    }
+  ]
+}
