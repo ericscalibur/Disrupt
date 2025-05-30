@@ -1,21 +1,38 @@
-{
-  "users": [
-    {
-      "email": "ceo@company.com",
-      "password": "1234",
-      "name": "John Doe",
-      "role": "Admin",
-      "department": "Executive",
-      "dateAdded": "2023-11-01"
-    },
-    {
-      "name": "Joe",
-      "role": "Manager",
-      "department": "Engineering",
-      "email": "joe@company.com",
-      "address": "ericscalibur@blink.sv",
-      "password": "1234",
-      "dateAdded": "2025-05-28"
-    }
-  ]
-}
+[
+  {
+    "name": "Eric Summers",
+    "role": "Admin",
+    "department": "Executive",
+    "email": "ericscalibur@protonmail.com",
+    "address": "ericscalibur@blink.sv",
+    "password": "9555",
+    "dateAdded": "2025-05-25"
+  },
+  {
+    "name": "Joe",
+    "role": "Manager",
+    "department": "Engineering",
+    "email": "joe@company.com",
+    "address": "ericscalibur@blink.sv",
+    "password": "1234",
+    "dateAdded": "2025-05-28"
+  },
+  {
+    "name": "Stephen",
+    "role": "Employee",
+    "email": "tilcboy44@gmail.com",
+    "department": "Engineering",
+    "address": "stephen@blink.sv",
+    "password": "1234",
+    "dateAdded": "2025-05-30"
+  },
+  {
+    "name": "Emily",
+    "role": "Employee",
+    "email": "Emily@complany.com",
+    "department": "Engineering",
+    "address": "ericscalibur@blink.sv",
+    "password": "1234",
+    "dateAdded": "2025-05-30"
+  }
+]

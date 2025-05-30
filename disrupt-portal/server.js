@@ -3,15 +3,17 @@ const fs = require("fs").promises;
 const path = require("path");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-//const lightningService = require("./lightning-service.js");
-
+const nodemailer = require("nodemailer");
 const app = express();
-const PORT = 3001;
+app.use(express.json());
+require("dotenv").config();
+
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(
   cors({
-    origin: "http://localhost:3001",
+    origin: "http://localhost:5500",
     credentials: true,
   }),
 );
@@ -79,7 +81,13 @@ app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     const data = await fs.readFile(USERS_FILE, "utf8");
-    const { users } = JSON.parse(data);
+    let users = [];
+    try {
+      const parsed = data.trim() === "" ? [] : JSON.parse(data);
+      users = Array.isArray(parsed) ? parsed : [];
+    } catch (parseError) {
+      console.warn("Invalid JSON in users.json, initializing empty array");
+    }
 
     const user = users.find(
       (u) => u.email === email && u.password === password,
@@ -111,32 +119,25 @@ app.post("/login", async (req, res) => {
 // User Management
 app.get("/users", async (req, res) => {
   try {
-    // Read users file
     const data = await fs.readFile(USERS_FILE, "utf8");
-
-    // Parse with fallback for empty/invalid files
     let users = [];
     try {
-      const parsed = JSON.parse(data);
-      users = parsed.users || [];
+      const parsed = data.trim() === "" ? [] : JSON.parse(data);
+      users = Array.isArray(parsed) ? parsed : [];
     } catch (parseError) {
-      console.warn("Invalid JSON, initializing new users array");
+      console.warn("Invalid JSON in users.json, initializing empty array");
     }
 
     // Remove passwords before sending
-    const sanitizedUsers = users.map((user) => {
-      const { password, ...rest } = user;
-      return rest;
-    });
+    const sanitizedUsers = users.map(({ password, ...rest }) => rest);
 
     res.json({
       success: true,
       users: sanitizedUsers,
     });
   } catch (err) {
-    console.error("Error in /api/users:", err);
+    console.error("Error in /users:", err);
 
-    // Differentiate between file not found and other errors
     if (err.code === "ENOENT") {
       // File doesn't exist - return empty array
       res.json({
@@ -162,7 +163,13 @@ app.post("/users", async (req, res) => {
 
     // Read current users
     const data = await fs.readFile(USERS_FILE, "utf8");
-    const { users } = JSON.parse(data);
+    let users = [];
+    try {
+      const parsed = data.trim() === "" ? [] : JSON.parse(data);
+      users = Array.isArray(parsed) ? parsed : [];
+    } catch (parseError) {
+      console.warn("Invalid JSON in users.json, initializing empty array");
+    }
 
     if (action === "remove") {
       // Remove user by email
@@ -209,7 +216,13 @@ app.post("/users", async (req, res) => {
     if (action === "remove") {
       // Read current users
       const data = await fs.readFile(USERS_FILE, "utf8");
-      const { users } = JSON.parse(data);
+      let users = [];
+      try {
+        const parsed = data.trim() === "" ? [] : JSON.parse(data);
+        users = Array.isArray(parsed) ? parsed : [];
+      } catch (parseError) {
+        console.warn("Invalid JSON in users.json, initializing empty array");
+      }
 
       // Filter out the user to remove
       const updatedUsers = users.filter((user) => user.email !== email);
@@ -307,47 +320,69 @@ app.post("/transactions", async (req, res) => {
   }
 });
 
+// Set up nodemailer (replace with your actual email service and credentials)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+app.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  let users;
+
+  try {
+    const usersData = await fs.readFile(USERS_FILE, "utf-8");
+    users = JSON.parse(usersData);
+    if (!Array.isArray(users)) {
+      throw new Error("Users data is not an array");
+    }
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to load users." });
+  }
+
+  const user = users.find((u) => u.email === email);
+  if (!user)
+    return res.status(404).json({ success: false, message: "User not found" });
+
+  // Generate a new 4-digit PIN
+  const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+
+  // Update the user's password
+  user.password = newPin;
+
+  // Save updated users array back to file
+  try {
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to update user." });
+  }
+
+  // Send the email
+  try {
+    await transporter.sendMail({
+      from: '"Disrupt Portal" <noreply@company.com>',
+      to: user.email,
+      subject: "Your New Password",
+      text: `Your new password is: ${newPin}`,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to send email:", err);
+    res.status(500).json({ success: false, message: "Failed to send email." });
+  }
+});
+
 // Serve frontend
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
-
-// // Lightning Endpoints
-// app.get("/api/lightning/balance", async (req, res) => {
-//   try {
-//     const { accessToken } = req.user; // Get from authenticated session
-//     const balance = await lightningService.getBalance(accessToken);
-//     res.json({ success: true, balance });
-//   } catch (err) {
-//     res.status(500).json({ success: false, error: err.message });
-//   }
-// });
-
-// app.post("/api/lightning/pay", async (req, res) => {
-//   try {
-//     const { accessToken } = req.user;
-//     const { invoice } = req.body;
-//     const payment = await lightningService.makePayment(accessToken, invoice);
-//     res.json({ success: true, payment });
-//   } catch (err) {
-//     res.status(500).json({ success: false, error: err.message });
-//   }
-// });
-
-// app.post("/api/lightning/invoice", async (req, res) => {
-//   try {
-//     const { accessToken } = req.user;
-//     const { amount, memo } = req.body;
-//     const invoice = await lightningService.createInvoice(
-//       accessToken,
-//       amount,
-//       memo,
-//     );
-//     res.json({ success: true, invoice });
-//   } catch (err) {
-//     res.status(500).json({ success: false, error: err.message });
-//   }
-// });
 
 // Start server
 async function startServer() {
