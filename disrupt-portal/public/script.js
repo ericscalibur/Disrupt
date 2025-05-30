@@ -4,10 +4,13 @@ let currentUser = null;
 let membersToRemove = [];
 let selectedMemberEmail = null;
 
-// Initialize the page
-document.addEventListener("DOMContentLoaded", () => {
-  // Set current date
-});
+// Restore currentUser from sessionStorage if available
+if (!currentUser) {
+  const userStr = sessionStorage.getItem("user");
+  if (userStr) {
+    currentUser = JSON.parse(userStr);
+  }
+}
 
 // Login function
 async function login() {
@@ -116,6 +119,7 @@ async function showContent(contentId, event) {
   document.getElementById("welcomeContent").style.display = "none";
   document.getElementById("accountingContent").style.display = "none";
   document.getElementById("teamContent").style.display = "none";
+  document.getElementById("settingsContent").style.display = "none";
 
   // Show selected content
   const contentElement = document.getElementById(contentId + "Content");
@@ -251,7 +255,7 @@ function renderTransactions(transactions) {
                   <td>${formatDate(txn.date)}</td>
                   <td>${txn.receiver || txn.name || "N/A"}</td>
                   <td class="amount-cell">${txn.amount} BTC</td>
-                  <td class="txn-id">${txn.id.substring(0, 8)}...</td>
+                  <td class="txn-id">${txn.id}</td>
                   <td>${txn.note || ""}</td>
                 `;
     tbody.appendChild(row);
@@ -289,51 +293,49 @@ async function loadTeamMembers() {
   const tbody = document.querySelector("#teamTable tbody");
   if (!tbody) return;
 
-  // Show loading state
   tbody.innerHTML =
-    '<tr><td colspan="4" class="loading-message">Loading team members...</td></tr>';
+    '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
 
   try {
     const response = await fetch(`${API_BASE}/users`);
-
-    // Check if response is OK (status 200-299)
     if (!response.ok) {
-      // Try to get error details from response
       let errorMsg = `HTTP error! Status: ${response.status}`;
       try {
         const errorData = await response.json();
-        if (errorData.message) {
-          errorMsg += ` - ${errorData.message}`;
-        }
-      } catch (e) {
-        console.log("Could not parse error response");
-      }
+        if (errorData.message) errorMsg += ` - ${errorData.message}`;
+      } catch (e) {}
       throw new Error(errorMsg);
     }
-
     const data = await response.json();
-
-    // Verify response structure
     if (!data || !Array.isArray(data.users)) {
       throw new Error("Invalid response format from server");
     }
 
-    // Render the team members
-    renderTeamMembers(data.users);
+    // --- Filtering logic based on currentUser role ---
+    let filteredUsers = data.users;
+    if (currentUser) {
+      if (currentUser.role === "Admin") {
+        // CEO sees all
+      } else if (
+        currentUser.role === "Manager" ||
+        currentUser.role === "Employee"
+      ) {
+        filteredUsers = data.users.filter(
+          (user) => user.department === currentUser.department,
+        );
+      }
+    }
+    renderTeamMembers(filteredUsers);
   } catch (err) {
     console.error("Failed to load team members:", err);
-
-    // Show error in UI
     tbody.innerHTML = `
-                        <tr>
-                            <td colspan="4" class="error-message">
-                                Failed to load team members.
-                                ${err.message || "Please try again later."}
-                            </td>
-                        </tr>
-                    `;
-
-    // Optionally show a retry button
+      <tr>
+        <td colspan="5" class="error-message">
+          Failed to load team members.
+          ${err.message || "Please try again later."}
+        </td>
+      </tr>
+    `;
     const retryButton = document.createElement("button");
     retryButton.textContent = "Retry";
     retryButton.className = "retry-btn";
@@ -346,15 +348,24 @@ function renderTeamMembers(users) {
   const tbody = document.querySelector("#teamTable tbody");
   tbody.innerHTML = "";
 
+  if (users.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="loading-message">No team members found for your department.</td>
+      </tr>
+    `;
+    return;
+  }
+
   users.forEach((user) => {
     const row = document.createElement("tr");
     row.innerHTML = `
-                        <td>${user.name}</td>
-                        <td>${user.role}</td>
-                        <td>${user.department}</td>
-                        <td>${user.email}</td>
-                        <td>${user.dateAdded || "N/A"}</td>
-                    `;
+      <td>${user.name}</td>
+      <td>${user.role}</td>
+      <td>${user.department}</td>
+      <td>${user.email}</td>
+      <td>${user.dateAdded || "N/A"}</td>
+    `;
     tbody.appendChild(row);
   });
 }
@@ -666,5 +677,28 @@ document.addEventListener("DOMContentLoaded", () => {
     loginBtn.addEventListener("click", login);
   }
 
-  // Remove the redundant DOMContentLoaded listener!
+  // Forgot Password handler
+  const forgotBtn = document.getElementById("forgotPasswordBtn");
+  if (forgotBtn) {
+    forgotBtn.onclick = async function () {
+      const msgDiv = document.getElementById("forgotPasswordMessage");
+      msgDiv.textContent = "Sending email...";
+      try {
+        const response = await fetch(`${API_BASE}/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: currentUser.email }),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          msgDiv.textContent = "A new password has been sent to your email.";
+        } else {
+          msgDiv.textContent = data.message || "Failed to send email.";
+        }
+      } catch (err) {
+        msgDiv.textContent = "Error sending email. Please try again.";
+        console.error(err);
+      }
+    };
+  }
 });

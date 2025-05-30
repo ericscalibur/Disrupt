@@ -74,6 +74,13 @@
                     </div>
                     <div
                         class="nav-item"
+                        data-content="settings"
+                        onclick="showContent('settings', event)"
+                    >
+                        <i>⚙️</i>Settings
+                    </div>
+                    <div
+                        class="nav-item"
                         data-content="logout()"
                         onclick="logout()"
                     >
@@ -84,7 +91,7 @@
                 <div class="main-content">
                     <!-- Welcome Content -->
                     <div id="welcomeContent" class="content-card">
-                        <h2>Welcome to Disrupt Portal</h2>
+                        <h2 id="welcomeContenth2">Welcome to Disrupt Portal</h2>
                         <p>
                             You have successfully logged in to the Disrupt
                             management system.
@@ -389,6 +396,19 @@
                                     Remove
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                    <!-- Settings Content -->
+                    <div id="settingsContent" style="display: none">
+                        <div class="content-card">
+                            <h2>Settings</h2>
+                            <button id="forgotPasswordBtn" class="submit-btn">
+                                Forgot Password
+                            </button>
+                            <div
+                                id="forgotPasswordMessage"
+                                style="margin-top: 15px"
+                            ></div>
                         </div>
                     </div>
                 </div>
