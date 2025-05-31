@@ -60,28 +60,28 @@
                         data-content="welcome"
                         onclick="showContent('welcome')"
                     >
-                        <i>🏠</i> Home
+                        🏠 Home
                     </div>
                     <div
                         class="nav-item"
                         data-content="accounting"
                         onclick="showContent('accounting')"
                     >
-                        <i>💰</i> Accounting
+                        💰 Accounting
                     </div>
                     <div
                         class="nav-item"
                         data-content="team"
                         onclick="showContent('team')"
                     >
-                        <i>👥</i> Team
+                        👥 Team
                     </div>
                     <div
                         class="nav-item"
                         data-content="settings"
                         onclick="showContent('settings', event)"
                     >
-                        <i>⚙️</i>Settings
+                        ⚙️ Settings
                     </div>
                     <div
                         class="nav-item"
@@ -95,7 +95,7 @@
                         data-content="logout()"
                         onclick="logout()"
                     >
-                        <i>🚪</i> Logout
+                        🚪 Logout
                     </div>
                 </div>
 
@@ -140,15 +140,6 @@
                             <h2>Accounting</h2>
                         </div>
                         <div
-                            id="loadingSpinner"
-                            style="display: none; text-align: center"
-                        >
-                            <i class="fa fa-spinner fa-spin fa-3x"></i>
-                            <div style="margin-top: 10px; color: #7f8c8d">
-                                Loading...
-                            </div>
-                        </div>
-                        <div
                             style="
                                 display: flex;
                                 justify-content: space-between;
@@ -158,22 +149,30 @@
                         >
                             <div class="balance-display">
                                 Balance:
-                                <span class="btc-amount" id="currentBalance"
-                                    >0.42 BTC</span
+                                <span id="balanceAmount" class="btc-amount"
+                                    >0.0 BTC</span
                                 >
+                                <span
+                                    id="balanceSpinner"
+                                    style="display: none; margin-left: 8px"
+                                >
+                                    <i class="fa fa-spinner fa-spin"></i>
+                                </span>
                             </div>
-                            <button
-                                class="new-btn"
-                                onclick="openNewPaymentModal()"
-                            >
-                                +New Payment
-                            </button>
-                            <button
-                                class="pay-invoice-btn"
-                                onclick="openPayInvoiceModal()"
-                            >
-                                Pay Invoice
-                            </button>
+                            <div style="display: flex; gap: 10px">
+                                <button
+                                    class="new-btn"
+                                    onclick="openNewPaymentModal()"
+                                >
+                                    +New Payment
+                                </button>
+                                <button
+                                    class="pay-invoice-btn"
+                                    onclick="openPayInvoiceModal()"
+                                >
+                                    Pay Invoice
+                                </button>
+                            </div>
                         </div>
 
                         <h3 class="history-title">History</h3>
