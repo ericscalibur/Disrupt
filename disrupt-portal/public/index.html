@@ -5,6 +5,10 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Disrupt - Login Portal</title>
         <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+        />
         <script src="script.js"></script>
     </head>
     <body>
@@ -81,6 +85,13 @@
                     </div>
                     <div
                         class="nav-item"
+                        data-content="suppliers"
+                        onclick="showContent('suppliers', event)"
+                    >
+                        <i class="fa fa-truck"></i> Suppliers
+                    </div>
+                    <div
+                        class="nav-item"
                         data-content="logout()"
                         onclick="logout()"
                     >
@@ -91,14 +102,9 @@
                 <div class="main-content">
                     <!-- Welcome Content -->
                     <div id="welcomeContent" class="content-card">
-                        <h2 id="welcomeContenth2">Welcome to Disrupt Portal</h2>
-                        <p>
-                            You have successfully logged in to the Disrupt
-                            management system.
-                        </p>
-                        <p>
-                            Use the navigation menu to access different sections
-                            of the portal.
+                        <h2>Welcome to Disrupt</h2>
+                        <p id="personalWelcome">
+                            You have successfully logged in.
                         </p>
                         <div
                             class="user-details"
@@ -133,8 +139,14 @@
                         <div class="accounting-header">
                             <h2>Accounting</h2>
                         </div>
-                        <div id="loadingSpinner" style="display: none">
-                            Loading...
+                        <div
+                            id="loadingSpinner"
+                            style="display: none; text-align: center"
+                        >
+                            <i class="fa fa-spinner fa-spin fa-3x"></i>
+                            <div style="margin-top: 10px; color: #7f8c8d">
+                                Loading...
+                            </div>
                         </div>
                         <div
                             style="
@@ -150,8 +162,17 @@
                                     >0.42 BTC</span
                                 >
                             </div>
-                            <button class="new-btn" id="newPaymentBtn">
-                                + New
+                            <button
+                                class="new-btn"
+                                onclick="openNewPaymentModal()"
+                            >
+                                +New Payment
+                            </button>
+                            <button
+                                class="pay-invoice-btn"
+                                onclick="openPayInvoiceModal()"
+                            >
+                                Pay Invoice
                             </button>
                         </div>
 
@@ -177,65 +198,147 @@
                     </div>
 
                     <!-- New Payment Modal -->
-                    <div class="modal" id="paymentModal">
+                    <div id="newPaymentModal" class="modal">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h3 class="modal-title">New Payment</h3>
-                                <button class="close-btn" id="closeModalBtn">
+                                <span class="modal-title">New Payment</span>
+                                <button
+                                    class="close-btn"
+                                    onclick="closeNewPaymentModal()"
+                                >
                                     &times;
                                 </button>
                             </div>
-                            <div class="form-group">
-                                <label for="paymentName">Name:</label>
-                                <input
-                                    type="text"
-                                    id="paymentName"
-                                    placeholder="Receiver's name"
-                                />
-                            </div>
-                            <div class="form-group">
-                                <label for="paymentEmail">Email:</label>
-                                <input
-                                    type="email"
-                                    id="paymentEmail"
-                                    placeholder="Receiver's email"
-                                />
-                            </div>
-                            <div class="form-group">
-                                <label for="paymentAddress"
-                                    >Lightning Address:</label
-                                >
-                                <input
-                                    type="text"
-                                    id="paymentAddress"
-                                    placeholder="user@wallet.com"
-                                />
-                            </div>
-                            <div class="form-group">
-                                <label for="paymentAmount">Amount (BTC):</label>
-                                <input
-                                    type="number"
-                                    id="paymentAmount"
-                                    placeholder="0.00"
-                                    step="0.00000001"
-                                />
-                            </div>
-                            <div class="form-group">
-                                <label for="paymentNote">Note:</label>
-                                <input
-                                    type="text"
-                                    id="paymentNote"
-                                    placeholder="Optional note"
-                                />
-                            </div>
-                            <div class="modal-footer">
+                            <form
+                                id="newPaymentForm"
+                                onsubmit="submitNewPayment(event)"
+                            >
+                                <div class="form-group">
+                                    <label for="recipientType"
+                                        >Recipient Type</label
+                                    >
+                                    <select
+                                        id="recipientType"
+                                        required
+                                        onchange="updateRecipientDropdown()"
+                                    >
+                                        <option value="employee">
+                                            Employee
+                                        </option>
+                                        <option value="supplier">
+                                            Supplier
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="recipientSelect"
+                                        >Recipient</label
+                                    >
+                                    <select
+                                        id="recipientSelect"
+                                        required
+                                        onchange="populateRecipientDetails()"
+                                    >
+                                        <!-- options -->
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input
+                                        type="text"
+                                        id="recipientName"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input
+                                        type="text"
+                                        id="recipientEmail"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label>Lightning Address</label>
+                                    <input
+                                        type="text"
+                                        id="recipientLightningAddress"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentAmount"
+                                        >Amount (BTC)</label
+                                    >
+                                    <input
+                                        type="number"
+                                        id="paymentAmount"
+                                        min="0.00000001"
+                                        step="0.00000001"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentNote"
+                                        >Note (optional)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="paymentNote"
+                                        maxlength="100"
+                                    />
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="submit-btn">
+                                        Send
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Pay Invoice Modal -->
+                    <div id="payInvoiceModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <span class="modal-title">Pay Invoice</span>
                                 <button
-                                    class="submit-btn"
-                                    id="submitPaymentBtn"
+                                    class="close-btn"
+                                    onclick="closePayInvoiceModal()"
                                 >
-                                    Submit Payment
+                                    &times;
                                 </button>
                             </div>
+                            <form
+                                id="payInvoiceForm"
+                                onsubmit="submitPayInvoice(event)"
+                            >
+                                <div class="form-group">
+                                    <label for="invoiceString"
+                                        >Lightning Invoice</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="invoiceString"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="invoiceNote"
+                                        >Note (optional)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="invoiceNote"
+                                        maxlength="100"
+                                    />
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="submit-btn">
+                                        Pay
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
 
@@ -411,10 +514,148 @@
                             ></div>
                         </div>
                     </div>
+                    <div
+                        id="suppliersContent"
+                        class="content-card"
+                        style="display: none"
+                    >
+                        <div class="team-header">
+                            <h2>Suppliers</h2>
+                            <div>
+                                <button
+                                    class="add-btn"
+                                    onclick="openAddSupplierModal()"
+                                >
+                                    +Add
+                                </button>
+                                <button
+                                    class="remove-btn"
+                                    onclick="openRemoveSupplierModal()"
+                                >
+                                    -Remove
+                                </button>
+                            </div>
+                        </div>
+                        <table class="team-table" id="suppliersTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Contact</th>
+                                    <th>Email</th>
+                                    <th>Lightning Address</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Suppliers will be rendered here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Add Supplier Modal -->
+                    <div id="addSupplierModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <span class="modal-title">Add Supplier</span>
+                                <button
+                                    class="close-btn"
+                                    onclick="closeAddSupplierModal()"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <form
+                                id="addSupplierForm"
+                                onsubmit="submitAddSupplier(event)"
+                            >
+                                <div class="form-group">
+                                    <label for="supplierName"
+                                        >Supplier Name</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="supplierName"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierContact">Contact</label>
+                                    <input
+                                        type="text"
+                                        id="supplierContact"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierEmail">Email</label>
+                                    <input
+                                        type="email"
+                                        id="supplierEmail"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierLightningAddress"
+                                        >Lightning Address</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="supplierLightningAddress"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierNote"
+                                        >Note (optional)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="supplierNote"
+                                        maxlength="100"
+                                    />
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="submit-btn">
+                                        Save
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <!-- Remove Supplier Modal -->
+                    <div id="removeSupplierModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <span class="modal-title">Remove Supplier</span>
+                                <button
+                                    class="close-btn"
+                                    onclick="closeRemoveSupplierModal()"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <form
+                                id="removeSupplierForm"
+                                onsubmit="submitRemoveSupplier(event)"
+                            >
+                                <div class="form-group">
+                                    <label for="removeSupplierSelect"
+                                        >Select Supplier</label
+                                    >
+                                    <select
+                                        id="removeSupplierSelect"
+                                        required
+                                    ></select>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="danger-btn">
+                                        Remove
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-
-        <script></script>
     </body>
 </html>

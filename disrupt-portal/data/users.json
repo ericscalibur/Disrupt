@@ -4,35 +4,39 @@
     "role": "Admin",
     "department": "Executive",
     "email": "ericscalibur@protonmail.com",
-    "address": "ericscalibur@blink.sv",
+    "lightningAddress": "ericscalibur@blink.sv",
     "password": "9555",
-    "dateAdded": "2025-05-25"
+    "dateAdded": "2025-05-25",
+    "id": "00303956d3b6afba911d26734c9f7c3e3ad3123055fad46e2d090181acd84922"
   },
   {
     "name": "Joe",
     "role": "Manager",
     "department": "Engineering",
     "email": "joe@company.com",
-    "address": "ericscalibur@blink.sv",
+    "lightningAddress": "joe@blink.sv",
     "password": "1234",
-    "dateAdded": "2025-05-28"
+    "dateAdded": "2025-05-28",
+    "id": "de4575027563c86ca7a03f0cb6cd8a08418ccf44c1f29e2b14f2514c9cd123b9"
   },
   {
     "name": "Stephen",
     "role": "Employee",
     "email": "tilcboy44@gmail.com",
     "department": "Engineering",
-    "address": "stephen@blink.sv",
+    "lightningAddress": "stephen@blink.sv",
     "password": "1234",
-    "dateAdded": "2025-05-30"
+    "dateAdded": "2025-05-30",
+    "id": "8a05cdb4c4b27918c49eac9fc83a7199faa423400a6ab7b4eeba071786bae2b2"
   },
   {
     "name": "Emily",
     "role": "Employee",
     "email": "Emily@complany.com",
     "department": "Engineering",
-    "address": "ericscalibur@blink.sv",
+    "lightningAddress": "emily@blink.sv",
     "password": "1234",
-    "dateAdded": "2025-05-30"
+    "dateAdded": "2025-05-30",
+    "id": "ef44822563fc8b45c73129c9559434b7b6089271bc744f036e678dc0496324d9"
   }
 ]
