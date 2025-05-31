@@ -5,6 +5,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const app = express();
+const axios = require("axios");
 app.use(express.json());
 require("dotenv").config();
 
@@ -15,6 +16,75 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 const SUPPLIERS_FILE = path.join(DATA_DIR, "suppliers.json");
 
+async function getBlinkWallets() {
+  const apiKey = process.env.BLINK_API_KEY;
+  const query = `
+    query {
+      me {
+        defaultAccount {
+          wallets {
+            id
+            walletCurrency
+            balance
+          }
+        }
+      }
+    }
+  `;
+  const response = await axios.post(
+    "https://api.blink.sv/graphql",
+    { query },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": apiKey,
+      },
+    },
+  );
+  // Returns an array of wallet objects (BTC and/or USD)
+  return response.data.data.me.defaultAccount.wallets;
+}
+
+async function getBlinkTransactions() {
+  const apiKey = process.env.BLINK_API_KEY;
+  const query = `
+    query {
+      me {
+        defaultAccount {
+          transactions(first: 50) {
+            edges {
+              node {
+                id
+                initiationVia { __typename }
+                settlementAmount
+                settlementCurrency
+                createdAt
+                status
+                direction
+                memo
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  const response = await axios.post(
+    "https://api.blink.sv/graphql",
+    { query },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": apiKey,
+      },
+    },
+  );
+  // Flatten the edges array to get an array of transactions
+  return response.data.data.me.defaultAccount.transactions.edges.map(
+    (edge) => edge.node,
+  );
+}
+
 // Middleware to avoid CORS error
 app.use(
   cors({
@@ -24,57 +94,6 @@ app.use(
 );
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
-
-// Ensure data directory exists and initialize files
-async function initDataFiles() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-
-    // Initialize users.json if it doesn't exist
-    try {
-      await fs.access(USERS_FILE);
-    } catch {
-      await fs.writeFile(
-        USERS_FILE,
-        JSON.stringify(
-          {
-            users: [
-              {
-                email: "ceo@company.com",
-                password: "1234",
-                name: "John Doe",
-                role: "Admin",
-                department: "Executive",
-                address: "ericscalibur@blink.sv",
-                dateAdded: new Date().toISOString().split("T")[0],
-              },
-            ],
-          },
-          null,
-          2,
-        ),
-      );
-    }
-
-    // Initialize transactions.json if it doesn't exist
-    try {
-      await fs.access(TRANSACTIONS_FILE);
-    } catch {
-      await fs.writeFile(
-        TRANSACTIONS_FILE,
-        JSON.stringify(
-          {
-            transactions: [],
-          },
-          null,
-          2,
-        ),
-      );
-    }
-  } catch (err) {
-    console.error("Error initializing data files:", err);
-  }
-}
 
 // User Authentication
 app.post("/login", async (req, res) => {
@@ -262,33 +281,193 @@ app.get("/employees", async (req, res) => {
   }
 });
 
+app.get("/lightning-balance", async (req, res) => {
+  try {
+    const wallets = await getBlinkWallets();
+    const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+    res.json({ success: true, balanceSats: btcWallet.balance });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch balance" });
+  }
+});
+
 // Transaction Management
 app.get("/transactions", async (req, res) => {
   try {
-    const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
-    let transactions = [];
-    if (data.trim()) {
-      const parsed = JSON.parse(data);
-      // Support both formats for backward compatibility
-      transactions = Array.isArray(parsed) ? parsed : parsed.transactions || [];
+    // 1. Fetch Blink transactions
+    let blinkTxns = [];
+    try {
+      blinkTxns = await getBlinkTransactions();
+    } catch (blinkErr) {
+      console.error("Error fetching Blink transactions:", blinkErr.message);
     }
+
+    // 2. Read local transactions.json
+    let localTxns = [];
+    try {
+      const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+      if (data.trim()) {
+        const parsed = JSON.parse(data);
+        localTxns = Array.isArray(parsed) ? parsed : parsed.transactions || [];
+      }
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+
+    const mergedTxns = blinkTxns.map((blinkTxn) => {
+      const local = localTxns.find((t) => t.id === blinkTxn.id);
+      // Determine if USD or BTC
+      let amount, currency;
+      if (blinkTxn.settlementCurrency === "BTC") {
+        amount = blinkTxn.settlementAmount; // sats
+        currency = "SATS";
+      } else if (blinkTxn.settlementCurrency === "USD") {
+        amount = (blinkTxn.settlementAmount / 100).toFixed(2); // dollars
+        currency = "USD";
+      } else {
+        amount = blinkTxn.settlementAmount;
+        currency = blinkTxn.settlementCurrency || "";
+      }
+      return {
+        id: blinkTxn.id,
+        date: blinkTxn.createdAt,
+        receiver: local?.recipient_name || blinkTxn.memo || "Unknown",
+        amount,
+        currency,
+        note: blinkTxn.memo || "",
+        type: "lightning",
+      };
+    });
+
     res.json({
       success: true,
-      transactions,
+      transactions: mergedTxns,
     });
   } catch (err) {
-    if (err.code === "ENOENT") {
-      res.json({ success: true, transactions: [] });
-    } else {
-      console.error("Error reading transactions:", err);
-      res.status(500).json({
-        success: false,
-        message: "Error reading transactions",
-        error: err.message,
-      });
-    }
+    console.error("Error reading transactions:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error reading transactions",
+      error: err.message,
+    });
   }
 });
+
+app.post("/new-transaction", async (req, res) => {
+  const { recipient, amountSats, memo } = req.body;
+  const apiKey = process.env.BLINK_API_KEY;
+
+  // Get your BTC wallet ID from Blink
+  let wallets;
+  try {
+    wallets = await getBlinkWallets();
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch wallets" });
+  }
+  const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+  if (!btcWallet) {
+    return res
+      .status(400)
+      .json({ success: false, message: "No BTC wallet found" });
+  }
+
+  // Prepare GraphQL mutation for Lightning Address payment
+  const query = `
+    mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
+      lnLightningAddressPaymentSend(input: $input) {
+        status
+        errors { message }
+        payment {
+          id
+          status
+          paymentHash
+        }
+      }
+    }
+  `;
+  const variables = {
+    input: {
+      walletId: btcWallet.id,
+      paymentRequest: null,
+      lnAddress: recipient,
+      amount: Number(amountSats),
+      memo: memo || "",
+    },
+  };
+
+  try {
+    const response = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query, variables },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+    const result = response.data.data.lnLightningAddressPaymentSend;
+    if (result.errors && result.errors.length > 0) {
+      return res.json({ success: false, message: result.errors[0].message });
+    }
+
+    // Save to transactions.json (optional, but recommended)
+    const newTxn = {
+      id: result.payment.id,
+      date: new Date().toISOString(),
+      receiver: recipient,
+      amount: amountSats,
+      currency: "SATS",
+      note: memo || "",
+      type: "lightning",
+      direction: "SENT",
+      status: result.payment.status,
+    };
+    // Read, append, and write
+    let txns = [];
+    try {
+      const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+      txns = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {}
+    txns.push(newTxn);
+    await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(txns, null, 2));
+
+    res.json({ success: true, payment: result.payment });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+async function submitNewPayment() {
+  const recipient = document.getElementById("newPaymentRecipient").value.trim();
+  const amountSats = document.getElementById("newPaymentAmount").value.trim();
+  const memo = document.getElementById("newPaymentMemo").value.trim();
+
+  // Optional: Validate inputs here
+
+  try {
+    const response = await fetch(`${API_BASE}/new-transaction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient, amountSats, memo }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert("Payment sent!");
+      closeNewPaymentModal();
+      await loadTransactions();
+      await updateLightningBalance();
+    } else {
+      alert("Payment failed: " + data.message);
+    }
+  } catch (err) {
+    alert("Payment failed: " + err.message);
+  }
+}
 
 app.post("/transactions", async (req, res) => {
   try {
@@ -509,20 +688,125 @@ app.post("/pay", express.json(), async (req, res) => {
       .status(400)
       .json({ success: false, message: "Missing required fields." });
   }
-  // TODO: Integrate with BlinkAPI here
-  // For now, just simulate:
+
+  // 1. Get BTC wallet ID from Blink
+  let walletId;
+  try {
+    const apiKey = process.env.BLINK_API_KEY;
+    const walletQuery = `
+      query {
+        me {
+          defaultAccount {
+            wallets {
+              id
+              walletCurrency
+            }
+          }
+        }
+      }
+    `;
+    const walletResp = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query: walletQuery },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+    const wallets = walletResp.data.data.me.defaultAccount.wallets;
+    const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+    if (!btcWallet) throw new Error("No BTC wallet found");
+    walletId = btcWallet.id;
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch wallet: " + err.message,
+    });
+  }
+
+  // 2. Send payment via Blink
+  let paymentResult;
+  try {
+    const apiKey = process.env.BLINK_API_KEY;
+    const mutation = `
+      mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
+        lnLightningAddressPaymentSend(input: $input) {
+          status
+          errors { message }
+          payment {
+            id
+            status
+            paymentHash
+          }
+        }
+      }
+    `;
+    const variables = {
+      input: {
+        walletId,
+        lnAddress: lightningAddress,
+        amount: Number(amount),
+        memo: note || "",
+      },
+    };
+
+    const payResp = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query: mutation, variables },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+
+    const result = payResp.data.data.lnLightningAddressPaymentSend;
+    if (result.errors && result.errors.length > 0) {
+      return res.json({ success: false, message: result.errors[0].message });
+    }
+    paymentResult = result.payment;
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Payment failed: " + err.message });
+  }
+
+  // 3. Save transaction locally
+  let transactions = [];
+  try {
+    const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+    transactions = data.trim() ? JSON.parse(data) : [];
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
   const transaction = {
-    id: "txn_" + Date.now(),
+    id: paymentResult.id,
     date: new Date().toISOString(),
     type: "lightning",
     receiver: name,
     lightningAddress,
-    amount,
+    amount: Number(amount),
+    currency: "SATS",
     note: note || "",
+    direction: "SENT",
+    status: paymentResult.status,
+    paymentHash: paymentResult.paymentHash,
   };
-  // Save transaction to transactions.json (as before)
-  // ... (see previous answers)
-  res.json({ success: true, transaction });
+  transactions.unshift(transaction);
+  try {
+    await fs.writeFile(
+      TRANSACTIONS_FILE,
+      JSON.stringify(transactions, null, 2),
+    );
+    res.json({ success: true, transaction });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to write transaction." });
+  }
 });
 
 // PAY INVOICE
@@ -533,30 +817,171 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
       .status(400)
       .json({ success: false, message: "Missing invoice." });
   }
-  // Simulate payment
-  const transaction = {
-    id: "txn_" + Date.now(),
-    date: new Date().toISOString(),
-    type: "lightning_invoice",
-    receiver: "Invoice Payment",
-    invoice,
-    amount: "TBD",
-    note: note || "",
-  };
 
-  // Read existing transactions
+  // 1. Get BTC wallet ID from Blink
+  let walletId;
+  try {
+    const apiKey = process.env.BLINK_API_KEY;
+    const walletQuery = `
+      query {
+        me {
+          defaultAccount {
+            wallets {
+              id
+              walletCurrency
+            }
+          }
+        }
+      }
+    `;
+    const walletResp = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query: walletQuery },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+    const wallets = walletResp.data.data.me.defaultAccount.wallets;
+    const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+    if (!btcWallet) throw new Error("No BTC wallet found");
+    walletId = btcWallet.id;
+  } catch (err) {
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to fetch wallet: " + err.message,
+      });
+  }
+
+  // 2. Decode the invoice (optional but gives you amount & description)
+  let invoiceDetails = {};
+  try {
+    const apiKey = process.env.BLINK_API_KEY;
+    const decodeQuery = `
+      query decodeInvoice($input: LnInvoiceDecodeInput!) {
+        lnInvoiceDecode(input: $input) {
+          invoice {
+            description
+            amount
+            paymentHash
+            destination
+          }
+          errors {
+            message
+          }
+        }
+      }
+    `;
+    const decodeVariables = {
+      input: {
+        paymentRequest: invoice,
+      },
+    };
+    const decodeResp = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query: decodeQuery, variables: decodeVariables },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+    const decodeResult = decodeResp.data.data.lnInvoiceDecode;
+    if (decodeResult.errors && decodeResult.errors.length > 0) {
+      return res.json({
+        success: false,
+        message: "Invalid invoice: " + decodeResult.errors[0].message,
+      });
+    }
+    invoiceDetails = decodeResult.invoice;
+  } catch (err) {
+    // If decoding fails, still try to pay the invoice
+    invoiceDetails = {};
+  }
+
+  // 3. Pay the invoice via Blink
+  let paymentResult;
+  try {
+    const apiKey = process.env.BLINK_API_KEY;
+    const mutation = `
+      mutation payInvoice($input: LnInvoicePaymentInput!) {
+        lnInvoicePaymentSend(input: $input) {
+          status
+          errors { message }
+          payment {
+            id
+            status
+            paymentHash
+            settlementAmount
+            settlementCurrency
+          }
+        }
+      }
+    `;
+    const variables = {
+      input: {
+        walletId,
+        paymentRequest: invoice,
+      },
+    };
+    const payResp = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query: mutation, variables },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": apiKey,
+        },
+      },
+    );
+    const result = payResp.data.data.lnInvoicePaymentSend;
+    if (result.errors && result.errors.length > 0) {
+      return res.json({ success: false, message: result.errors[0].message });
+    }
+    paymentResult = result.payment;
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Payment failed: " + err.message });
+  }
+
+  // 4. Save transaction locally
   let transactions = [];
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
     transactions = data.trim() ? JSON.parse(data) : [];
   } catch (err) {
-    if (err.code !== "ENOENT") throw err; // Ignore file not found
+    if (err.code !== "ENOENT") throw err;
   }
 
-  // Append new transaction
-  transactions.push(transaction);
+  // Format amount based on currency
+  let amount = paymentResult.settlementAmount;
+  let currency = paymentResult.settlementCurrency;
+  if (currency === "USD") {
+    amount = (amount / 100).toFixed(2);
+  }
 
-  // Write back to file
+  const transaction = {
+    id: paymentResult.id,
+    date: new Date().toISOString(),
+    type: "lightning_invoice",
+    receiver: invoiceDetails.description || "Invoice Payment",
+    invoice,
+    amount,
+    currency: currency === "BTC" ? "SATS" : currency,
+    note: note || invoiceDetails.description || "",
+    direction: "SENT",
+    status: paymentResult.status,
+    paymentHash: paymentResult.paymentHash,
+  };
+
+  transactions.unshift(transaction);
+
   try {
     await fs.writeFile(
       TRANSACTIONS_FILE,
@@ -577,8 +1002,6 @@ app.get("*", (req, res) => {
 
 // Start server
 async function startServer() {
-  await initDataFiles();
-
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Data files:`);

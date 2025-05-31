@@ -51,5 +51,23 @@
     "invoice": "fakeinvoicedootdoot",
     "amount": "TBD",
     "note": "derp"
+  },
+  {
+    "id": "txn_1748720553145",
+    "date": "2025-05-31T19:42:33.145Z",
+    "type": "lightning_invoice",
+    "receiver": "Invoice Payment",
+    "invoice": "lightningslkdjflasjdflkasdf",
+    "amount": "TBD",
+    "note": "required"
+  },
+  {
+    "id": "txn_1748720898837",
+    "date": "2025-05-31T19:48:18.837Z",
+    "type": "lightning",
+    "receiver": "Eric Summers",
+    "lightningAddress": "ericscalibur@blink.sv",
+    "amount": "3",
+    "note": "yay"
   }
 ]

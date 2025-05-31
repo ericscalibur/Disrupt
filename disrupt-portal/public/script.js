@@ -86,14 +86,14 @@ function logout() {
 
 // ===== Main Accounting Loader =====
 async function loadAccountingPage() {
-  // showLoadingSpinner(true);
+  showLoadingSpinner();
 
   try {
     await Promise.all([loadTransactions(), updateLightningBalance()]);
   } catch (err) {
     console.log("Failed to load accounting data");
   } finally {
-    // showLoadingSpinner(false);
+    hideLoadingSpinner();
   }
 }
 
@@ -131,6 +131,32 @@ async function showContent(contentId, event) {
     }
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
+  }
+}
+
+async function updateLightningBalance() {
+  const balanceElem = document.getElementById("balanceAmount");
+  const spinnerElem = document.getElementById("balanceSpinner");
+  try {
+    // Show spinner, hide balance amount
+    if (spinnerElem) spinnerElem.style.display = "inline";
+    if (balanceElem) balanceElem.style.visibility = "hidden";
+
+    const response = await fetch(`${API_BASE}/lightning-balance`);
+    const data = await response.json();
+    if (data.success) {
+      const sats = data.balanceSats;
+      const btc = (sats / 100_000_000).toFixed(8);
+      balanceElem.textContent = `${btc} BTC`;
+    } else {
+      balanceElem.textContent = "Error";
+    }
+  } catch (err) {
+    balanceElem.textContent = "Error";
+  } finally {
+    // Hide spinner, show balance amount
+    if (spinnerElem) spinnerElem.style.display = "none";
+    if (balanceElem) balanceElem.style.visibility = "visible";
   }
 }
 
@@ -285,6 +311,14 @@ function closePayInvoiceModal() {
 
 async function submitNewPayment(event) {
   event.preventDefault();
+
+  // Show spinner (optional: if you have a spinner for the modal)
+  const submitBtn = document.querySelector("#newPaymentModal .submit-btn");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending...";
+  }
+
   const type = document.getElementById("recipientType").value;
   const id = document.getElementById("recipientSelect").value;
   const name = document.getElementById("recipientName").value;
@@ -313,19 +347,33 @@ async function submitNewPayment(event) {
     if (data.success) {
       alert("Payment sent!");
       closeNewPaymentModal();
-      loadTransactions();
+      await loadTransactions();
+      await updateLightningBalance();
     } else {
       alert("Error: " + (data.message || "Failed to send payment."));
     }
   } catch (err) {
     alert("Error sending payment.");
+  } finally {
+    // Re-enable button and restore text
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Send";
+    }
   }
 }
 
 async function submitPayInvoice(event) {
   event.preventDefault();
-  const invoice = document.getElementById("invoiceString").value;
-  const note = document.getElementById("invoiceNote").value;
+  const invoice = document.getElementById("invoiceString").value.trim();
+  const note = document.getElementById("invoiceNote").value.trim();
+
+  // Find and disable the submit button, show spinner text
+  const submitBtn = document.querySelector("#payInvoiceModal .submit-btn");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Paying...";
+  }
 
   try {
     const response = await fetch(`${API_BASE}/pay-invoice`, {
@@ -337,13 +385,30 @@ async function submitPayInvoice(event) {
     if (data.success) {
       alert("Invoice paid!");
       closePayInvoiceModal();
-      loadTransactions();
+      await loadTransactions();
+      await updateLightningBalance();
     } else {
       alert("Error: " + (data.message || "Failed to pay invoice."));
     }
   } catch (err) {
     alert("Error paying invoice.");
+  } finally {
+    // Re-enable the button and reset text
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Pay";
+    }
   }
+}
+
+function saveTransaction(txn) {
+  const filePath = path.join(__dirname, "transactions.json");
+  let transactions = [];
+  if (fs.existsSync(filePath)) {
+    transactions = JSON.parse(fs.readFileSync(filePath));
+  }
+  transactions.push(txn);
+  fs.writeFileSync(filePath, JSON.stringify(transactions, null, 2));
 }
 
 // Update current date
@@ -388,7 +453,7 @@ function renderTransactions(transactions) {
     row.innerHTML = `
                   <td>${formatDate(txn.date)}</td>
                   <td>${txn.receiver || txn.name || "N/A"}</td>
-                  <td class="amount-cell">${txn.amount} BTC</td>
+                  <td class="amount-cell">${txn.amount} ${txn.currency}</td>
                   <td class="txn-id">${txn.id}</td>
                   <td>${txn.note || ""}</td>
                 `;
@@ -402,8 +467,10 @@ function formatDate(dateString) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   };
-  return new Date(dateString).toLocaleDateString("en-US", options);
+  return new Date(dateString).toLocaleString("en-US", options);
 }
 
 // Team Members Functions
