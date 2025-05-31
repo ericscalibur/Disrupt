@@ -1,0 +1,24 @@
+[
+  {
+    "id": "sup1",
+    "name": "Acme Corp",
+    "contact": "Jane Doe",
+    "email": "jane@acmecorp.com",
+    "lightningAddress": "acme@blink.sv"
+  },
+  {
+    "id": "sup2",
+    "name": "Bolt Supplies",
+    "contact": "John Smith",
+    "email": "john@boltsupplies.com",
+    "lightningAddress": "bolt@blink.sv"
+  },
+  {
+    "id": "sup1748667613694",
+    "name": "Kittens",
+    "contact": "Avery",
+    "email": "avery@kittens.com",
+    "lightningAddress": "avery@blink.sv",
+    "note": "the kittens were terrible"
+  }
+]

@@ -1,466 +1,477 @@
 /* Accounting Page Specific Styles */
-            .accounting-header {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                margin-bottom: 30px;
-            }
-
-            .balance-display {
-                font-size: 18px;
-                color: #2c3e50;
-            }
-
-            .btc-amount {
-                font-weight: bold;
-                color: #f7931a; /* Bitcoin orange */
-            }
-
-            .new-btn {
-                width: 100px;
-                background-color: #2ecc71;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 14px;
-                transition: background-color 0.3s;
-            }
-
-            .new-btn:hover {
-                background-color: #27ae60;
-            }
-
-            .history-title {
-                margin: 30px 0 15px 0;
-                color: #2c3e50;
-            }
-
-            .transactions-table {
-                width: 100%;
-                border-collapse: collapse;
-                background-color: white;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-                border-radius: 8px;
-                overflow: hidden;
-                margin-top: 20px;
-            }
-
-            .transactions-table th {
-                background-color: #f8f9fa;
-                padding: 12px 15px;
-                text-align: left;
-                font-weight: bold;
-                color: #7f8c8d;
-                border-bottom: 2px solid #e0e0e0;
-            }
-
-            .transactions-table td {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-
-            .transactions-table tr:last-child td {
-                border-bottom: none;
-            }
-
-            .amount-cell {
-                font-family: monospace;
-                font-weight: bold;
-                color: #2ecc71;
-            }
-
-            .txn-id {
-                font-family: monospace;
-                color: #7f8c8d;
-                font-size: 0.9em;
-            }
-
-            /* Modal Styles */
-            .modal {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.5);
-                z-index: 1000;
-                justify-content: center;
-                align-items: center;
-            }
-
-            .modal-content {
-                background-color: white;
-                padding: 25px;
-                border-radius: 8px;
-                width: 400px;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            }
-
-            .modal-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-
-            .modal-title {
-                font-size: 20px;
-                color: #2c3e50;
-            }
-
-            .close-btn {
-                background: none;
-                border: none;
-                font-size: 20px;
-                cursor: pointer;
-                color: #7f8c8d;
-            }
-
-            .form-group {
-                margin-bottom: 15px;
-            }
-
-            .form-group label {
-                display: block;
-                margin-bottom: 5px;
-                font-weight: bold;
-                color: #555;
-            }
-
-            .form-group input {
-                width: 100%;
-                padding: 8px 12px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-
-            .modal-footer {
-                display: flex;
-                justify-content: flex-end;
-                margin-top: 20px;
-            }
-
-            .submit-btn {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-
-            .submit-btn:hover {
-                background-color: #2980b9;
-            }
-
-            /* Login Page Styles */
-            body {
-                font-family: Arial, sans-serif;
-                background-color: #f4f4f9;
-                margin: 0;
-                padding: 0;
-            }
-
-            .login-page {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-            }
-
-            .login-container {
-                background-color: white;
-                padding: 30px;
-                border-radius: 8px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                width: 350px;
-                text-align: center;
-            }
-
-            .company-name {
-                color: white;
-                font-size: 28px;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-
-            .portal-title {
-                color: #7f8c8d;
-                font-size: 18px;
-                margin-bottom: 24px;
-            }
-
-            .form-group {
-                margin-bottom: 20px;
-                text-align: left;
-            }
-
-            .form-group select {
-                width: 100%;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                box-sizing: border-box;
-            }
-
-            label {
-                display: block;
-                margin-bottom: 6px;
-                font-weight: bold;
-                color: #555;
-            }
-
-            input {
-                width: 100%;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                box-sizing: border-box;
-            }
-
-            button {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 12px 20px;
-                border-radius: 4px;
-                cursor: pointer;
-                width: 100%;
-                font-size: 16px;
-                transition: background-color 0.3s;
-            }
-
-            button:hover {
-                background-color: #2980b9;
-            }
-
-            .error {
-                color: #e74c3c;
-                margin-top: 10px;
-                display: none;
-            }
-
-            /* Dashboard Styles */
-            #dashboard {
-                display: none;
-            }
-
-            .dashboard-header {
-                background-color: #2c3e50;
-                color: white;
-                padding: 20px 0;
-                text-align: center;
-                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            }
-
-            .user-info-bar {
-                background-color: #34495e;
-                padding: 10px 30px;
-                display: flex;
-                justify-content: space-between;
-                color: #ecf0f1;
-            }
-
-            .divider {
-                height: 1px;
-                background: linear-gradient(
-                    to right,
-                    transparent,
-                    #bdc3c7,
-                    transparent
-                );
-                margin: 0 30px;
-            }
-
-            .dashboard-container {
-                display: flex;
-                min-height: calc(100vh - 120px);
-            }
-
-            .side-nav {
-                width: 220px;
-                background-color: white;
-                border-right: 1px solid #e0e0e0;
-                padding: 20px 0;
-            }
-
-            .nav-item {
-                padding: 12px 25px;
-                cursor: pointer;
-                transition: all 0.3s;
-                display: flex;
-                align-items: center;
-            }
-
-            .nav-item:hover {
-                background-color: #f1f5f9;
-                border-left: 4px solid #3498db;
-                padding-left: 21px;
-            }
-
-            .nav-item.active {
-                background-color: #ebf5ff;
-                border-left: 4px solid #3498db;
-                padding-left: 21px;
-                font-weight: bold;
-            }
-
-            .nav-item i {
-                margin-right: 10px;
-                color: #7f8c8d;
-            }
-
-            .main-content {
-                flex: 1;
-                padding: 30px;
-                background-color: #f8f9fa;
-            }
-
-            .content-card {
-                background-color: white;
-                border-radius: 8px;
-                padding: 25px;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            }
-
-            /* Team Page Styles */
-            .team-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-
-            .add-btn {
-                background-color: #2ecc71;
-                color: white;
-                padding: 8px 16px;
-                margin-right: 10px;
-                width: 110px;
-            }
-
-            .remove-btn {
-                background-color: #e74c3c;
-                color: white;
-                padding: 8px 16px;
-                width: 110px;
-            }
-
-            .team-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-            }
-
-            .team-table th {
-                background-color: #f8f9fa;
-                padding: 12px 15px;
-                text-align: left;
-            }
-
-            .team-table td {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-
-            .team-table tr:last-child td {
-                border-bottom: none;
-            }
-
-            .loading {
-                text-align: center;
-                color: #7f8c8d;
-                padding: 20px;
-            }
-
-            .error {
-                text-align: center;
-                color: #e74c3c;
-                padding: 20px;
-            }
-
-            .loading-message {
-                text-align: center;
-                color: #7f8c8d;
-                padding: 20px;
-                font-style: italic;
-            }
-
-            .error-message {
-                text-align: center;
-                color: #e74c3c;
-                padding: 20px;
-            }
-
-            .retry-btn {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                margin-top: 10px;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-
-            .retry-btn:hover {
-                background-color: #2980b9;
-            }
-
-            /* Add to your existing styles */
-            #membersListContainer {
-                max-height: 300px;
-                overflow-y: auto;
-                margin-bottom: 20px;
-            }
-
-            .member-remove-item {
-                display: flex;
-                align-items: center;
-                padding: 10px;
-                border-bottom: 1px solid #eee;
-            }
-
-            .member-remove-item label {
-                display: flex;
-                align-items: center;
-                width: 100%;
-                cursor: pointer;
-            }
-
-            .member-remove-item input[type="radio"] {
-                margin-right: 10px;
-            }
-
-            .member-info {
-                flex-grow: 1;
-            }
-
-            .member-name {
-                font-weight: bold;
-            }
-
-            .member-email {
-                color: #666;
-                font-size: 0.9em;
-            }
-
-            .modal-footer {
-                display: flex;
-                justify-content: flex-end;
-                gap: 10px;
-            }
-
-            .cancel-btn {
-                background-color: #95a5a6;
-            }
-
-            .danger-btn {
-                background-color: #e74c3c;
-            }
-
-            .danger-btn:hover {
-                background-color: #c0392b;
-            }
+.accounting-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.balance-display {
+    font-size: 18px;
+    color: #2c3e50;
+}
+
+.btc-amount {
+    font-weight: bold;
+    color: #f7931a; /* Bitcoin orange */
+}
+
+.new-btn {
+    width: 120px;
+    background-color: #2ecc71; /* Green */
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+    margin-right: 10px;
+}
+.new-btn:hover {
+    background-color: #27ae60;
+}
+
+.pay-invoice-btn {
+    width: 120px;
+    background-color: #3498db; /* Blue */
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+.pay-invoice-btn:hover {
+    background-color: #2980b9;
+}
+
+.history-title {
+    margin: 30px 0 15px 0;
+    color: #2c3e50;
+}
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.transactions-table th {
+    background-color: #f8f9fa;
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: bold;
+    color: #7f8c8d;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.transactions-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.transactions-table tr:last-child td {
+    border-bottom: none;
+}
+
+.amount-cell {
+    font-family: monospace;
+    font-weight: bold;
+    color: #2ecc71;
+}
+
+.txn-id {
+    font-family: monospace;
+    color: #7f8c8d;
+    font-size: 0.9em;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: darkslategray;
+    padding: 25px;
+    border-radius: 8px;
+    width: 400px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-title {
+    font-size: 20px;
+    color: ghostwhite;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #7f8c8d;
+    width: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: ghostwhite;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.submit-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    background-color: #2980b9;
+}
+
+/* Login Page Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 0;
+    padding: 0;
+}
+
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.login-container {
+    background-color: darkslategray;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 350px;
+    text-align: center;
+}
+
+.company-name {
+    color: ghostwhite;
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.portal-title {
+    color: #7f8c8d;
+    font-size: 18px;
+    margin-bottom: 24px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+    color: ghostwhite;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.error {
+    color: #e74c3c;
+    margin-top: 10px;
+    display: none;
+}
+
+/* Dashboard Styles */
+#dashboard {
+    display: none;
+}
+
+.dashboard-header {
+    background-color: darkslategray;
+    color: white;
+    padding: 20px 0;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.user-info-bar {
+    background-color: darkslategray;
+    padding: 10px 30px;
+    display: flex;
+    justify-content: space-between;
+    color: #ecf0f1;
+}
+
+.divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #bdc3c7, transparent);
+    margin: 0 30px;
+}
+
+.dashboard-container {
+    display: flex;
+    min-height: calc(100vh - 120px);
+}
+
+.side-nav {
+    width: 220px;
+    background-color: white;
+    border-right: 1px solid #e0e0e0;
+    padding: 20px 0;
+}
+
+.nav-item {
+    padding: 12px 25px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+}
+
+.nav-item:hover {
+    background-color: #f1f5f9;
+    border-left: 4px solid #3498db;
+    padding-left: 21px;
+}
+
+.nav-item.active {
+    background-color: #ebf5ff;
+    border-left: 4px solid #3498db;
+    padding-left: 21px;
+    font-weight: bold;
+}
+
+.nav-item i {
+    margin-right: 10px;
+    color: #7f8c8d;
+}
+
+.main-content {
+    flex: 1;
+    padding: 30px;
+    background-color: #f8f9fa;
+}
+
+.content-card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 25px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Team Page Styles */
+.team-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.add-btn {
+    background-color: #2ecc71;
+    color: white;
+    padding: 8px 16px;
+    margin-right: 10px;
+    width: 110px;
+}
+
+.remove-btn {
+    background-color: #e74c3c;
+    color: white;
+    padding: 8px 16px;
+    width: 110px;
+}
+
+.team-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.team-table th {
+    background-color: #f8f9fa;
+    padding: 12px 15px;
+    text-align: left;
+}
+
+.team-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.team-table tr:last-child td {
+    border-bottom: none;
+}
+
+.loading {
+    text-align: center;
+    color: #7f8c8d;
+    padding: 20px;
+}
+
+.error {
+    text-align: center;
+    color: #e74c3c;
+    padding: 20px;
+}
+
+.loading-message {
+    text-align: center;
+    color: #7f8c8d;
+    padding: 20px;
+    font-style: italic;
+}
+
+.error-message {
+    text-align: center;
+    color: #e74c3c;
+    padding: 20px;
+}
+
+.retry-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin-top: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.retry-btn:hover {
+    background-color: #2980b9;
+}
+
+/* Add to your existing styles */
+#membersListContainer {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+}
+
+.member-remove-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.member-remove-item label {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    cursor: pointer;
+}
+
+.member-remove-item input[type="radio"] {
+    margin-right: 10px;
+}
+
+.member-info {
+    flex-grow: 1;
+}
+
+.member-name {
+    font-weight: bold;
+}
+
+.member-email {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.cancel-btn {
+    background-color: #95a5a6;
+}
+
+.danger-btn {
+    background-color: #e74c3c;
+}
+
+.danger-btn:hover {
+    background-color: #c0392b;
+}

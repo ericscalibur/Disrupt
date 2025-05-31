@@ -8,9 +8,14 @@ const app = express();
 app.use(express.json());
 require("dotenv").config();
 
+// Path configuration
 const PORT = process.env.PORT || 3001;
+const DATA_DIR = path.join(__dirname, "data");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
+const SUPPLIERS_FILE = path.join(DATA_DIR, "suppliers.json");
 
-// Middleware
+// Middleware to avoid CORS error
 app.use(
   cors({
     origin: "http://localhost:5500",
@@ -19,11 +24,6 @@ app.use(
 );
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
-
-// Path configuration
-const DATA_DIR = path.join(__dirname, "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 
 // Ensure data directory exists and initialize files
 async function initDataFiles() {
@@ -245,22 +245,40 @@ app.post("/users", async (req, res) => {
   }
 });
 
+app.get("/employees", async (req, res) => {
+  try {
+    let employees = [];
+    try {
+      const data = await fs.readFile(USERS_FILE, "utf8");
+      employees = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    res.json({ success: true, employees });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Error loading employees." });
+  }
+});
+
 // Transaction Management
 app.get("/transactions", async (req, res) => {
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
-    const { transactions } = JSON.parse(data);
+    let transactions = [];
+    if (data.trim()) {
+      const parsed = JSON.parse(data);
+      // Support both formats for backward compatibility
+      transactions = Array.isArray(parsed) ? parsed : parsed.transactions || [];
+    }
     res.json({
       success: true,
-      transactions: transactions || [],
+      transactions,
     });
   } catch (err) {
     if (err.code === "ENOENT") {
-      // File doesn't exist - return empty array
-      res.json({
-        success: true,
-        transactions: [],
-      });
+      res.json({ success: true, transactions: [] });
     } else {
       console.error("Error reading transactions:", err);
       res.status(500).json({
@@ -280,7 +298,12 @@ app.post("/transactions", async (req, res) => {
     let transactions = [];
     try {
       const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
-      transactions = JSON.parse(data).transactions || [];
+      if (data.trim()) {
+        const parsed = JSON.parse(data);
+        transactions = Array.isArray(parsed)
+          ? parsed
+          : parsed.transactions || [];
+      }
     } catch (err) {
       if (err.code === "ENOENT") {
         console.log("Creating new transactions file");
@@ -299,10 +322,10 @@ app.post("/transactions", async (req, res) => {
     // Add to beginning of array (newest first)
     transactions.unshift(transactionWithId);
 
-    // Write back to file
+    // Write back to file as a raw array
     await fs.writeFile(
       TRANSACTIONS_FILE,
-      JSON.stringify({ transactions }, null, 2),
+      JSON.stringify(transactions, null, 2),
       { flag: "w" },
     );
 
@@ -376,6 +399,174 @@ app.post("/forgot-password", async (req, res) => {
   } catch (err) {
     console.error("Failed to send email:", err);
     res.status(500).json({ success: false, message: "Failed to send email." });
+  }
+});
+
+// Suppliers
+app.get("/suppliers", async (req, res) => {
+  try {
+    const data = await fs.readFile(SUPPLIERS_FILE, "utf8");
+    const suppliers = data.trim() === "" ? [] : JSON.parse(data);
+    res.json({ success: true, suppliers });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to load suppliers." });
+  }
+});
+
+// Add Supplier
+app.post("/suppliers", express.json(), async (req, res) => {
+  const { name, contact, email, lightningAddress, note } = req.body;
+  if (!name || !contact || !email || !lightningAddress) {
+    return res.status(400).json({
+      success: false,
+      message: "Name, contact, email, and lightning address are required.",
+    });
+  }
+
+  try {
+    // Read existing suppliers
+    let suppliers = [];
+    try {
+      const data = await fs.readFile(SUPPLIERS_FILE, "utf8");
+      suppliers = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+
+    // Check for duplicates by email or lightning address
+    if (
+      suppliers.some(
+        (s) => s.email === email || s.lightningAddress === lightningAddress,
+      )
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Supplier with this email or lightning address already exists.",
+      });
+    }
+
+    // Add new supplier
+    const newSupplier = {
+      id: "sup" + Date.now(),
+      name,
+      contact, // NEW
+      email,
+      lightningAddress,
+      note: note || "",
+    };
+    suppliers.push(newSupplier);
+
+    // Save
+    await fs.writeFile(SUPPLIERS_FILE, JSON.stringify(suppliers, null, 2));
+    res.json({ success: true, supplier: newSupplier });
+  } catch (err) {
+    console.error("Error adding supplier:", err);
+    res.status(500).json({ success: false, message: "Error adding supplier." });
+  }
+});
+
+// Remove Supplier
+app.delete("/suppliers/:id", async (req, res) => {
+  const supplierId = req.params.id;
+  try {
+    // Read existing suppliers
+    let suppliers = [];
+    try {
+      const data = await fs.readFile(SUPPLIERS_FILE, "utf8");
+      suppliers = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+
+    const originalLength = suppliers.length;
+    suppliers = suppliers.filter((s) => s.id !== supplierId);
+
+    if (suppliers.length === originalLength) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Supplier not found." });
+    }
+
+    // Save updated list
+    await fs.writeFile(SUPPLIERS_FILE, JSON.stringify(suppliers, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error removing supplier:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Error removing supplier." });
+  }
+});
+
+// PAY SUPPLIER OR EMPLOYEE
+app.post("/pay", express.json(), async (req, res) => {
+  const { name, lightningAddress, amount, note } = req.body;
+  if (!name || !lightningAddress || !amount) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing required fields." });
+  }
+  // TODO: Integrate with BlinkAPI here
+  // For now, just simulate:
+  const transaction = {
+    id: "txn_" + Date.now(),
+    date: new Date().toISOString(),
+    type: "lightning",
+    receiver: name,
+    lightningAddress,
+    amount,
+    note: note || "",
+  };
+  // Save transaction to transactions.json (as before)
+  // ... (see previous answers)
+  res.json({ success: true, transaction });
+});
+
+// PAY INVOICE
+app.post("/pay-invoice", express.json(), async (req, res) => {
+  const { invoice, note } = req.body;
+  if (!invoice) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing invoice." });
+  }
+  // Simulate payment
+  const transaction = {
+    id: "txn_" + Date.now(),
+    date: new Date().toISOString(),
+    type: "lightning_invoice",
+    receiver: "Invoice Payment",
+    invoice,
+    amount: "TBD",
+    note: note || "",
+  };
+
+  // Read existing transactions
+  let transactions = [];
+  try {
+    const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+    transactions = data.trim() ? JSON.parse(data) : [];
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err; // Ignore file not found
+  }
+
+  // Append new transaction
+  transactions.push(transaction);
+
+  // Write back to file
+  try {
+    await fs.writeFile(
+      TRANSACTIONS_FILE,
+      JSON.stringify(transactions, null, 2),
+    );
+    res.json({ success: true, transaction });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to write transaction." });
   }
 });
 

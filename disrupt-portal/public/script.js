@@ -3,6 +3,8 @@ const API_BASE = "http://localhost:3001";
 let currentUser = null;
 let membersToRemove = [];
 let selectedMemberEmail = null;
+let employeesList = [];
+let suppliersList = [];
 
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
@@ -42,36 +44,14 @@ async function login() {
 }
 
 function showLoadingSpinner() {
-  // Example: Show a loading spinner or overlay
-  // You can customize this based on your HTML/CSS
   const spinner = document.getElementById("loadingSpinner");
   if (spinner) spinner.style.display = "block";
 }
 
-// Alby OAuth
-// document.getElementById("connectAlby").addEventListener("click", async () => {
-//   try {
-//     const alby = new window.AlbySDK();
-//     const result = await alby.login();
-
-//     // Save the access token to your user session
-//     const response = await fetch("/api/auth/link-alby", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({
-//         userId: currentUser.id,
-//         accessToken: result.accessToken,
-//       }),
-//     });
-
-//     if (response.ok) {
-//       alert("Alby wallet connected!");
-//       updateLightningBalance();
-//     }
-//   } catch (err) {
-//     console.error("Alby connection failed:", err);
-//   }
-// });
+function hideLoadingSpinner() {
+  const spinner = document.getElementById("loadingSpinner");
+  if (spinner) spinner.style.display = "none";
+}
 
 // Show dashboard after login
 function showDashboard() {
@@ -85,6 +65,10 @@ function showDashboard() {
   document.getElementById("displayRole").textContent = currentUser.role;
   document.getElementById("displayDept").textContent = currentUser.department;
 
+  // Personalized welcome message
+  const firstName = currentUser.name.split(" ")[0];
+  document.getElementById("personalWelcome").textContent =
+    `${firstName} has successfully logged in.`;
   // Load initial content
   showContent("welcome");
 }
@@ -120,6 +104,7 @@ async function showContent(contentId, event) {
   document.getElementById("accountingContent").style.display = "none";
   document.getElementById("teamContent").style.display = "none";
   document.getElementById("settingsContent").style.display = "none";
+  document.getElementById("suppliersContent").style.display = "none";
 
   // Show selected content
   const contentElement = document.getElementById(contentId + "Content");
@@ -141,10 +126,39 @@ async function showContent(contentId, event) {
       loadAccountingPage(); // Calls both functions
     } else if (contentId === "team") {
       await loadTeamMembers();
+    } else if (contentId === "suppliers") {
+      loadSuppliers(); // <-- Add this listeners
     }
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
   }
+}
+
+async function loadSuppliers() {
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`);
+    const data = await response.json();
+    if (data.success) {
+      renderSuppliers(data.suppliers);
+    }
+  } catch (err) {
+    console.error("Error loading suppliers:", err);
+  }
+}
+
+function renderSuppliers(suppliers) {
+  const tbody = document.querySelector("#suppliersTable tbody");
+  tbody.innerHTML = "";
+  suppliers.forEach((supplier) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+            <td>${supplier.name}</td>
+            <td>${supplier.contact || ""}</td>
+            <td>${supplier.email || ""}</td>
+            <td>${supplier.lightningAddress || ""}</td>
+        `;
+    tbody.appendChild(row);
+  });
 }
 
 // Load transactions
@@ -165,51 +179,170 @@ async function loadTransactions() {
 function renderTransactions(transactions) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
-
   transactions.forEach((txn) => {
-    const row = document.createElement("tr");
-
-    // Add lightning icon if it's a lightning transaction
     const icon = txn.type === "lightning" ? "⚡" : "";
-
-    row.innerHTML = `
-                  <td>${txn.date}</td>
-                  <td>${icon} ${txn.receiver}</td>
-                  <td>${txn.amount} sats</td>
-                  <td>${txn.status || "completed"}</td>
-                  <td>${txn.memo || ""}</td>
-                `;
-    tbody.appendChild(row);
+    const receiver = txn.receiver || "";
+    const address = txn.address || "";
+    const amount = txn.amount || "";
+    const note = txn.note || "";
+    const id = txn.id || "";
+    const date = txn.date ? txn.date.split("T")[0] : "";
+    tbody.innerHTML += `
+        <tr>
+          <td>${date}</td>
+          <td>${receiver}</td>
+          <td>${address}</td>
+          <td>${amount}</td>
+          <td>${note}</td>
+          <td>${id}</td>
+        </tr>
+      `;
   });
 }
 
-// Submit New Payment
-async function submitPayment() {
-  const paymentData = {
-    name: document.getElementById("paymentName").value,
-    email: document.getElementById("paymentEmail").value,
-    address: document.getElementById("paymentAddress").value,
-    amount: document.getElementById("paymentAmount").value,
-    note: document.getElementById("paymentNote").value,
-  };
+// Load employees and suppliers from backend
+async function loadRecipientLists() {
+  // Load employees
+  try {
+    const empRes = await fetch(`${API_BASE}/employees`);
+    const empData = await empRes.json();
+    employeesList = empData.success ? empData.employees : [];
+  } catch {
+    employeesList = [];
+  }
+  // Load suppliers
+  try {
+    const supRes = await fetch(`${API_BASE}/suppliers`);
+    const supData = await supRes.json();
+    suppliersList = supData.success ? supData.suppliers : [];
+  } catch {
+    suppliersList = [];
+  }
+  updateRecipientDropdown();
+}
+
+function closeNewPaymentModal() {
+  document.getElementById("newPaymentModal").style.display = "none";
+}
+
+function updateRecipientDropdown() {
+  const type = document.getElementById("recipientType").value;
+  const select = document.getElementById("recipientSelect");
+  select.innerHTML = "";
+  const list = type === "employee" ? employeesList : suppliersList;
+  list.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    select.appendChild(option);
+  });
+  // Auto-populate details for the first recipient in the list
+  if (list.length > 0) {
+    select.value = list[0].id;
+    populateRecipientDetails();
+  } else {
+    // Clear fields if no recipients
+    document.getElementById("recipientName").value = "";
+    document.getElementById("recipientEmail").value = "";
+    document.getElementById("recipientLightningAddress").value = "";
+  }
+}
+
+function populateRecipientDetails() {
+  const type = document.getElementById("recipientType").value;
+  const id = document.getElementById("recipientSelect").value;
+  const list = type === "employee" ? employeesList : suppliersList;
+  const recipient = list.find((item) => item.id === id);
+  document.getElementById("recipientName").value = recipient
+    ? recipient.name
+    : "";
+  document.getElementById("recipientEmail").value = recipient
+    ? recipient.email
+    : "";
+  document.getElementById("recipientLightningAddress").value = recipient
+    ? recipient.lightningAddress
+    : "";
+}
+
+function openNewPaymentModal() {
+  document.getElementById("newPaymentModal").style.display = "flex";
+  document.getElementById("newPaymentForm").reset();
+  loadRecipientLists();
+}
+
+function closeNewPaymentModal() {
+  document.getElementById("newPaymentModal").style.display = "none";
+}
+
+// PAY INVOICE MODAL
+function openPayInvoiceModal() {
+  document.getElementById("payInvoiceModal").style.display = "flex";
+  document.getElementById("payInvoiceForm").reset();
+}
+function closePayInvoiceModal() {
+  document.getElementById("payInvoiceModal").style.display = "none";
+}
+
+async function submitNewPayment(event) {
+  event.preventDefault();
+  const type = document.getElementById("recipientType").value;
+  const id = document.getElementById("recipientSelect").value;
+  const name = document.getElementById("recipientName").value;
+  const email = document.getElementById("recipientEmail").value;
+  const lightningAddress = document.getElementById(
+    "recipientLightningAddress",
+  ).value;
+  const amount = document.getElementById("paymentAmount").value;
+  const note = document.getElementById("paymentNote").value;
 
   try {
-    const response = await fetch(`${API_BASE}/transactions`, {
+    const response = await fetch(`${API_BASE}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(paymentData),
+      body: JSON.stringify({
+        type,
+        id,
+        name,
+        email,
+        lightningAddress,
+        amount,
+        note,
+      }),
     });
-
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Payment failed");
-
-    // Refresh transactions
-    await loadTransactions();
-    document.getElementById("paymentModal").style.display = "none";
-    alert("Payment submitted successfully!");
+    if (data.success) {
+      alert("Payment sent!");
+      closeNewPaymentModal();
+      loadTransactions();
+    } else {
+      alert("Error: " + (data.message || "Failed to send payment."));
+    }
   } catch (err) {
-    console.error("Payment error:", err);
-    alert(`Error: ${err.message}`);
+    alert("Error sending payment.");
+  }
+}
+
+async function submitPayInvoice(event) {
+  event.preventDefault();
+  const invoice = document.getElementById("invoiceString").value;
+  const note = document.getElementById("invoiceNote").value;
+
+  try {
+    const response = await fetch(`${API_BASE}/pay-invoice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoice, note }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert("Invoice paid!");
+      closePayInvoiceModal();
+      loadTransactions();
+    } else {
+      alert("Error: " + (data.message || "Failed to pay invoice."));
+    }
+  } catch (err) {
+    alert("Error paying invoice.");
   }
 }
 
@@ -246,6 +379,7 @@ async function loadTransactions() {
 
 // Render transactions to the table
 function renderTransactions(transactions) {
+  transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = ""; // Clear existing rows
 
@@ -271,22 +405,6 @@ function formatDate(dateString) {
   };
   return new Date(dateString).toLocaleDateString("en-US", options);
 }
-
-// Lightning Balance
-// async function updateLightningBalance() {
-//   try {
-//     const response = await fetch("/api/lightning/balance");
-//     const { balance } = await response.json();
-
-//     // Update both BTC and USD equivalent
-//     document.getElementById("btcBalance").textContent = `${balance} sats`;
-//     document.getElementById("usdBalance").textContent =
-//       `≈ $${(balance * 0.000035).toFixed(2)}`;
-//   } catch (err) {
-//     console.error("Failed to fetch balance:", err);
-//     document.getElementById("btcBalance").textContent = "Error loading";
-//   }
-// }
 
 // Team Members Functions
 async function loadTeamMembers() {
@@ -510,6 +628,136 @@ async function showRemoveMemberModal() {
   }
 }
 
+function openNewSupplierPaymentModal() {
+  document.getElementById("newSupplierPaymentModal").style.display = "flex";
+  populateSupplierSelect();
+}
+function closeNewSupplierPaymentModal() {
+  document.getElementById("newSupplierPaymentModal").style.display = "none";
+}
+
+function openPaySupplierInvoiceModal() {
+  document.getElementById("paySupplierInvoiceModal").style.display = "flex";
+  document.getElementById("paySupplierInvoiceForm").reset();
+  document.getElementById("invoiceDetails").style.display = "none";
+}
+function closePaySupplierInvoiceModal() {
+  document.getElementById("paySupplierInvoiceModal").style.display = "none";
+}
+
+async function populateSupplierSelect() {
+  const select = document.getElementById("supplierSelect");
+  select.innerHTML = "<option value=''>Loading...</option>";
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`);
+    const data = await response.json();
+    if (data.success) {
+      select.innerHTML = "";
+      data.suppliers.forEach((supplier) => {
+        const option = document.createElement("option");
+        option.value = supplier.id;
+        option.textContent = supplier.name;
+        select.appendChild(option);
+      });
+    } else {
+      select.innerHTML = "<option value=''>No suppliers found</option>";
+    }
+  } catch {
+    select.innerHTML = "<option value=''>Error loading suppliers</option>";
+  }
+}
+
+function openAddSupplierModal() {
+  document.getElementById("addSupplierModal").style.display = "flex";
+  document.getElementById("addSupplierForm").reset();
+}
+function closeAddSupplierModal() {
+  document.getElementById("addSupplierModal").style.display = "none";
+}
+
+function openRemoveSupplierModal() {
+  document.getElementById("removeSupplierModal").style.display = "flex";
+  populateRemoveSupplierDropdown();
+}
+function closeRemoveSupplierModal() {
+  document.getElementById("removeSupplierModal").style.display = "none";
+}
+
+async function submitAddSupplier(event) {
+  event.preventDefault();
+  const name = document.getElementById("supplierName").value;
+  const email = document.getElementById("supplierEmail").value;
+  const contact = document.getElementById("supplierContact").value;
+  const lightningAddress = document.getElementById(
+    "supplierLightningAddress",
+  ).value;
+  const note = document.getElementById("supplierNote").value;
+
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, contact, email, lightningAddress, note }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert("Supplier added!");
+      closeAddSupplierModal();
+      loadSuppliers(); // Refresh table
+    } else {
+      alert("Error: " + (data.message || "Failed to add supplier."));
+    }
+  } catch (err) {
+    alert("Error adding supplier.");
+  }
+}
+
+async function populateRemoveSupplierDropdown() {
+  const select = document.getElementById("removeSupplierSelect");
+  select.innerHTML = "<option value=''>Loading...</option>";
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`);
+    const data = await response.json();
+    if (data.success) {
+      select.innerHTML = "";
+      data.suppliers.forEach((supplier) => {
+        const option = document.createElement("option");
+        option.value = supplier.id;
+        option.textContent = supplier.name;
+        select.appendChild(option);
+      });
+    } else {
+      select.innerHTML = "<option value=''>No suppliers found</option>";
+    }
+  } catch {
+    select.innerHTML = "<option value=''>Error loading suppliers</option>";
+  }
+}
+
+async function submitRemoveSupplier(event) {
+  event.preventDefault();
+  const supplierId = document.getElementById("removeSupplierSelect").value;
+  if (!supplierId) return;
+
+  if (!confirm("Are you sure you want to remove this supplier?")) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+      method: "DELETE",
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert("Supplier removed!");
+      closeRemoveSupplierModal();
+      loadSuppliers(); // Refresh table
+    } else {
+      alert("Error: " + (data.message || "Failed to remove supplier."));
+    }
+  } catch (err) {
+    alert("Error removing supplier.");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   updateCurrentDate();
 
@@ -529,6 +777,15 @@ document.addEventListener("DOMContentLoaded", () => {
           showContent(contentId, event);
         }
       });
+    }
+  });
+
+  // PAY INVOICE button
+  document.addEventListener("DOMContentLoaded", () => {
+    // ...other code...
+    const payInvoiceForm = document.getElementById("payInvoiceForm");
+    if (payInvoiceForm) {
+      payInvoiceForm.addEventListener("submit", submitPayInvoice);
     }
   });
 

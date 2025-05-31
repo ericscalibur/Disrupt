@@ -1,31 +1,55 @@
-{
-  "transactions": [
-    {
-      "id": "txn_1748408098223",
-      "date": "2025-05-28",
-      "name": "James Brown",
-      "email": "jb@company.com",
-      "address": "james@blink.sv",
-      "amount": ".00004",
-      "note": ""
-    },
-    {
-      "id": "txn_1748239551889",
-      "date": "2025-05-26",
-      "name": "Bugs Bunny",
-      "email": "bugs@company.com",
-      "address": "ericscalibur@blink.sv",
-      "amount": ".000025",
-      "note": "no notes"
-    },
-    {
-      "name": "Donald Duck",
-      "email": "tilcboy44@gmail.com",
-      "address": "ericscalibur@blink.sv",
-      "amount": ".00003",
-      "note": "first tx",
-      "id": "txn_1748230071764",
-      "date": "2025-05-26"
-    }
-  ]
-}
+[
+  {
+    "id": "txn_1748665288535",
+    "date": "2025-05-31T04:21:28.535Z",
+    "type": "lightning",
+    "receiver": "Acme Corp",
+    "amount": 3,
+    "note": "its a note!"
+  },
+  {
+    "id": "txn_1748661530006",
+    "date": "2025-05-31",
+    "name": "",
+    "email": "",
+    "address": "",
+    "amount": "",
+    "note": ""
+  },
+  {
+    "id": "txn_1748408098223",
+    "date": "2025-05-28",
+    "name": "James Brown",
+    "email": "jb@company.com",
+    "address": "james@blink.sv",
+    "amount": ".00004",
+    "note": ""
+  },
+  {
+    "id": "txn_1748239551889",
+    "date": "2025-05-26",
+    "name": "Bugs Bunny",
+    "email": "bugs@company.com",
+    "address": "ericscalibur@blink.sv",
+    "amount": ".000025",
+    "note": "no notes"
+  },
+  {
+    "name": "Donald Duck",
+    "email": "tilcboy44@gmail.com",
+    "address": "ericscalibur@blink.sv",
+    "amount": ".00003",
+    "note": "first tx",
+    "id": "txn_1748230071764",
+    "date": "2025-05-26"
+  },
+  {
+    "id": "txn_1748672847706",
+    "date": "2025-05-31T06:27:27.706Z",
+    "type": "lightning_invoice",
+    "receiver": "Invoice Payment",
+    "invoice": "fakeinvoicedootdoot",
+    "amount": "TBD",
+    "note": "derp"
+  }
+]
