@@ -42,11 +42,11 @@
 
         <!-- Dashboard (hidden until login) -->
         <div id="dashboard">
-            <div class="dashboard-header">
-                <div class="company-name">DISRUPT</div>
+            <div class="dashboard-header volcano-mode">
+                <div class="company-name volcano-mode">DISRUPT</div>
             </div>
 
-            <div class="user-info-bar">
+            <div class="user-info-bar volcano-mode">
                 <div id="userGreeting">Welcome, User</div>
                 <div id="currentDate"></div>
             </div>
@@ -56,46 +56,53 @@
             <div class="dashboard-container">
                 <div class="side-nav">
                     <div
-                        class="nav-item active"
+                        class="nav-item active volcano-mode"
                         data-content="welcome"
                         onclick="showContent('welcome')"
                     >
                         🏠 Home
                     </div>
                     <div
-                        class="nav-item"
+                        class="nav-item volcano-mode"
                         data-content="accounting"
                         onclick="showContent('accounting')"
                     >
                         💰 Accounting
                     </div>
                     <div
-                        class="nav-item"
+                        class="nav-item volcano-mode"
                         data-content="team"
                         onclick="showContent('team')"
                     >
                         👥 Team
                     </div>
                     <div
-                        class="nav-item"
+                        class="nav-item volcano-mode"
                         data-content="settings"
                         onclick="showContent('settings', event)"
                     >
                         ⚙️ Settings
                     </div>
                     <div
-                        class="nav-item"
+                        class="nav-item volcano-mode"
                         data-content="suppliers"
                         onclick="showContent('suppliers', event)"
                     >
                         <i class="fa fa-truck"></i> Suppliers
                     </div>
                     <div
-                        class="nav-item"
+                        class="nav-item volcano-mode"
                         data-content="logout()"
                         onclick="logout()"
                     >
                         🚪 Logout
+                    </div>
+                    <div class="nav-item" id="volcanoToggle">
+                        <span id="volcanoToggleText">🌋 Volcano</span>
+                        <label class="switch">
+                            <input type="checkbox" id="volcanoSwitch" />
+                            <span class="slider round"></span>
+                        </label>
                     </div>
                 </div>
 
@@ -111,7 +118,7 @@
                             style="
                                 margin-top: 20px;
                                 padding: 15px;
-                                background-color: #f8f9fa;
+                                /* background-color: #f8f9fa; */
                                 border-radius: 4px;
                             "
                         >
@@ -319,8 +326,33 @@
                                     <input
                                         type="text"
                                         id="invoiceString"
-                                        required
+                                        oninput="onInvoiceInputChange()"
+                                        autocomplete="off"
                                     />
+                                    <div
+                                        id="invoiceDetails"
+                                        style="
+                                            margin-top: 8px;
+                                            font-size: 0.95em;
+                                            color: #555;
+                                        "
+                                    ></div>
+                                    <!-- Amount entry is hidden by default, shown only for amountless invoices -->
+                                    <div
+                                        id="amountEntry"
+                                        style="display: none; margin-top: 10px"
+                                    >
+                                        <label for="userAmount"
+                                            >Enter Amount (sats):</label
+                                        >
+                                        <input
+                                            type="number"
+                                            id="userAmount"
+                                            min="1"
+                                            step="1"
+                                            autocomplete="off"
+                                        />
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label for="invoiceNote"
@@ -330,6 +362,7 @@
                                         type="text"
                                         id="invoiceNote"
                                         maxlength="100"
+                                        autocomplete="off"
                                     />
                                 </div>
                                 <div class="modal-footer">

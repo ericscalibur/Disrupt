@@ -3,6 +3,7 @@ const API_BASE = "http://localhost:3001";
 let currentUser = null;
 let membersToRemove = [];
 let selectedMemberEmail = null;
+let invoiceDecodeTimeout = null;
 let employeesList = [];
 let suppliersList = [];
 
@@ -367,6 +368,7 @@ async function submitPayInvoice(event) {
   event.preventDefault();
   const invoice = document.getElementById("invoiceString").value.trim();
   const note = document.getElementById("invoiceNote").value.trim();
+  const userAmount = document.getElementById("userAmount").value.trim();
 
   // Find and disable the submit button, show spinner text
   const submitBtn = document.querySelector("#payInvoiceModal .submit-btn");
@@ -375,11 +377,19 @@ async function submitPayInvoice(event) {
     submitBtn.textContent = "Paying...";
   }
 
+  // Build the payload
+  const payload = { invoice, note };
+  // If userAmount is visible and filled, add it to the payload
+  const amountEntryDiv = document.getElementById("amountEntry");
+  if (amountEntryDiv && amountEntryDiv.style.display !== "none" && userAmount) {
+    payload.amount = userAmount;
+  }
+
   try {
     const response = await fetch(`${API_BASE}/pay-invoice`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoice, note }),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (data.success) {
@@ -399,6 +409,107 @@ async function submitPayInvoice(event) {
       submitBtn.textContent = "Pay";
     }
   }
+}
+
+function clearInvoiceDetails() {
+  const detailsDiv = document.getElementById("invoiceDetails");
+  if (detailsDiv) detailsDiv.innerHTML = "";
+}
+
+async function decodeInvoiceFromFrontend(invoice) {
+  const detailsDiv = document.getElementById("invoiceDetails");
+  const amountEntryDiv = document.getElementById("amountEntry");
+  const userAmountInput = document.getElementById("userAmount");
+
+  if (!invoice) {
+    detailsDiv.innerHTML = "";
+    if (amountEntryDiv) amountEntryDiv.style.display = "none";
+    if (userAmountInput) userAmountInput.required = false;
+    return;
+  }
+  try {
+    const response = await fetch("http://localhost:3001/decode-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoice }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      const decoded = data.decoded;
+      let html = `<ul style="list-style:none;padding:0;">`;
+
+      // Payment Request
+      if (decoded.paymentRequest) {
+        html += `<li><strong>Payment Request:</strong> <span style="word-break:break-all;font-family:monospace;">${decoded.paymentRequest}</span></li>`;
+      }
+
+      // Expiry
+      if (decoded.expiry) {
+        let expiryHours = Math.floor(decoded.expiry / 3600);
+        let expiryMins = Math.floor((decoded.expiry % 3600) / 60);
+        let expiryStr = `${decoded.expiry} seconds`;
+        if (expiryHours > 0)
+          expiryStr = `${expiryHours} hour(s) ${expiryMins} min(s)`;
+        else if (expiryMins > 0) expiryStr = `${expiryMins} min(s)`;
+        html += `<li><strong>Expires In:</strong> ${expiryStr}</li>`;
+      }
+
+      // Extract from sections
+      let amountSection = null;
+      let descSection = null;
+      let payeeSection = null;
+      if (decoded.sections && decoded.sections.length > 0) {
+        amountSection = decoded.sections.find((s) => s.name === "amount");
+        if (amountSection) {
+          html += `<li><strong>Amount:</strong> ${amountSection.value} sats</li>`;
+        }
+
+        descSection = decoded.sections.find((s) => s.name === "description");
+        if (descSection) {
+          html += `<li><strong>Description:</strong> ${descSection.value}</li>`;
+        }
+
+        payeeSection = decoded.sections.find(
+          (s) => s.name === "payee_node_key",
+        );
+        if (payeeSection) {
+          html += `<li><strong>Destination:</strong> <span style="font-family:monospace;">${payeeSection.value}</span></li>`;
+        }
+      }
+
+      html += `</ul>`;
+      detailsDiv.innerHTML = `<div class="content-card">${html}</div>`;
+
+      // Show or hide the amount entry input
+      if (!amountSection) {
+        if (amountEntryDiv) amountEntryDiv.style.display = "block";
+        if (userAmountInput) userAmountInput.required = true;
+      } else {
+        if (amountEntryDiv) amountEntryDiv.style.display = "none";
+        if (userAmountInput) {
+          userAmountInput.required = false;
+          userAmountInput.value = ""; // Clear any previous value
+        }
+      }
+    } else {
+      detailsDiv.innerHTML = `<span style="color:red;">Invalid or unsupported invoice.</span>`;
+      if (amountEntryDiv) amountEntryDiv.style.display = "none";
+      if (userAmountInput) userAmountInput.required = false;
+    }
+  } catch (err) {
+    detailsDiv.innerHTML = `<span style="color:red;">Error decoding invoice.</span>`;
+    if (amountEntryDiv) amountEntryDiv.style.display = "none";
+    if (userAmountInput) userAmountInput.required = false;
+  }
+}
+
+// Debounce input to avoid too many requests
+function onInvoiceInputChange() {
+  clearTimeout(invoiceDecodeTimeout);
+  invoiceDecodeTimeout = setTimeout(() => {
+    const invoice = document.getElementById("invoiceString").value.trim();
+    decodeInvoiceFromFrontend(invoice);
+  }, 500);
 }
 
 function saveTransaction(txn) {
@@ -825,6 +936,51 @@ async function submitRemoveSupplier(event) {
   }
 }
 
+function toggleVolcanoMode() {
+  const body = document.body;
+  const dashboard = document.getElementById("dashboard");
+  const toggleText = document.getElementById("volcanoToggleText");
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+
+  // Toggle the class
+  const isVolcano = body.classList.toggle("volcano-mode");
+  if (dashboard) dashboard.classList.toggle("volcano-mode");
+
+  // Update toggle text and switch
+  if (isVolcano) {
+    if (toggleText) toggleText.textContent = "🌋 Normal Mode";
+    if (volcanoSwitch) volcanoSwitch.checked = true;
+    localStorage.setItem("volcanoMode", "on");
+  } else {
+    if (toggleText) toggleText.textContent = "🌋 Volcano Mode";
+    if (volcanoSwitch) volcanoSwitch.checked = false;
+    localStorage.setItem("volcanoMode", "off");
+  }
+}
+window.toggleVolcanoMode = toggleVolcanoMode;
+
+function setVolcanoMode(isVolcano) {
+  const body = document.body;
+  const dashboard = document.getElementById("dashboard");
+  const toggleText = document.getElementById("volcanoToggleText");
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+
+  if (isVolcano) {
+    body.classList.add("volcano-mode");
+    if (dashboard) dashboard.classList.add("volcano-mode");
+    if (toggleText) toggleText.textContent = "🌋 Normal";
+    if (volcanoSwitch) volcanoSwitch.checked = true;
+    localStorage.setItem("volcanoMode", "on");
+  } else {
+    body.classList.remove("volcano-mode");
+    if (dashboard) dashboard.classList.remove("volcano-mode");
+    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (volcanoSwitch) volcanoSwitch.checked = false;
+    localStorage.setItem("volcanoMode", "off");
+  }
+}
+
+/////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", () => {
   updateCurrentDate();
 
@@ -847,14 +1003,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // PAY INVOICE button
-  document.addEventListener("DOMContentLoaded", () => {
-    // ...other code...
-    const payInvoiceForm = document.getElementById("payInvoiceForm");
-    if (payInvoiceForm) {
-      payInvoiceForm.addEventListener("submit", submitPayInvoice);
-    }
-  });
+  const payInvoiceForm = document.getElementById("payInvoiceForm");
+  if (payInvoiceForm) {
+    payInvoiceForm.addEventListener("submit", submitPayInvoice);
+  }
 
   // Add Member button
   const addMemberBtn = document.getElementById("addMemberBtn");
@@ -1024,5 +1176,34 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error(err);
       }
     };
+  }
+
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+  // Restore mode from storage
+  setVolcanoMode(localStorage.getItem("volcanoMode") === "on");
+  // Only use the checkbox to trigger mode change
+  if (volcanoSwitch) {
+    volcanoSwitch.addEventListener("change", function () {
+      setVolcanoMode(this.checked);
+    });
+  }
+  // Optional: clicking the text also toggles the switch
+  const toggleText = document.getElementById("volcanoToggleText");
+  if (toggleText && volcanoSwitch) {
+    toggleText.style.cursor = "pointer";
+    toggleText.addEventListener("click", () => {
+      volcanoSwitch.checked = !volcanoSwitch.checked;
+      setVolcanoMode(volcanoSwitch.checked);
+    });
+  }
+
+  if (localStorage.getItem("volcanoMode") === "on") {
+    document.body.classList.add("volcano-mode");
+    const dashboard = document.getElementById("dashboard");
+    if (dashboard) dashboard.classList.add("volcano-mode");
+    const toggleText = document.getElementById("volcanoToggleText");
+    const volcanoSwitch = document.getElementById("volcanoSwitch");
+    if (toggleText) toggleText.textContent = "🌋 Normal";
+    if (volcanoSwitch) volcanoSwitch.checked = true;
   }
 });

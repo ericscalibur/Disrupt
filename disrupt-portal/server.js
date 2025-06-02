@@ -6,6 +6,7 @@ const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const app = express();
 const axios = require("axios");
+const { decode } = require("light-bolt11-decoder");
 app.use(express.json());
 require("dotenv").config();
 
@@ -849,12 +850,10 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
     if (!btcWallet) throw new Error("No BTC wallet found");
     walletId = btcWallet.id;
   } catch (err) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch wallet: " + err.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch wallet: " + err.message,
+    });
   }
 
   // 2. Decode the invoice (optional but gives you amount & description)
@@ -992,6 +991,18 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to write transaction." });
+  }
+});
+
+app.post("/decode-invoice", (req, res) => {
+  const { invoice } = req.body;
+  try {
+    const decoded = decode(invoice);
+    res.json({ success: true, decoded });
+  } catch (err) {
+    res
+      .status(400)
+      .json({ success: false, error: "Invalid or unsupported invoice." });
   }
 });
 
