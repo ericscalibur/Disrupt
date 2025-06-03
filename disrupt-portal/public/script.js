@@ -252,6 +252,25 @@ async function loadRemoveDepartmentSelect() {
   }
 }
 
+async function populateDepartmentSelect() {
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`);
+    if (!response.ok) throw new Error("Failed to fetch departments");
+    const departments = await response.json();
+    const select = document.getElementById("memberDepartment");
+    if (!select) return;
+    select.innerHTML = '<option value="">Select Department</option>';
+    departments.forEach((dep) => {
+      const option = document.createElement("option");
+      option.value = dep;
+      option.textContent = dep;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error("Error populating department select:", err);
+  }
+}
+
 async function loadSuppliers() {
   try {
     const response = await fetch(`${API_BASE}/suppliers`);
@@ -651,6 +670,7 @@ function renderTransactions(transactions) {
   tbody.innerHTML = ""; // Clear existing rows
 
   transactions.forEach((txn) => {
+    console.log("Transaction:", txn);
     const row = document.createElement("tr");
     row.innerHTML = `
                   <td>${formatDate(txn.date)}</td>
@@ -664,15 +684,20 @@ function renderTransactions(transactions) {
 }
 
 // Helper function to format date
-function formatDate(dateString) {
-  const options = {
+function formatDate(date) {
+  if (!date) return "Unknown";
+  // If date is a number and less than 10^12, treat as seconds, convert to ms
+  if (typeof date === "number" && date < 1000000000000) {
+    date = date * 1000;
+  }
+  return new Date(date).toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-  };
-  return new Date(dateString).toLocaleString("en-US", options);
+    hour12: true,
+  });
 }
 
 // Team Members Functions
@@ -1128,8 +1153,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add Member button
   const addMemberBtn = document.getElementById("addMemberBtn");
   if (addMemberBtn) {
-    addMemberBtn.addEventListener("click", () => {
+    addMemberBtn.addEventListener("click", async () => {
+      // Show the modal
       document.getElementById("addMemberModal").style.display = "flex";
+
+      // Populate the department dropdown
+      await populateDepartmentSelect();
     });
   }
 
