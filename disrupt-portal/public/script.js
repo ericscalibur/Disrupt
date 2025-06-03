@@ -103,12 +103,14 @@ async function showContent(contentId, event) {
   // Hide all content sections
   document.getElementById("welcomeContent").style.display = "none";
   document.getElementById("accountingContent").style.display = "none";
-  document.getElementById("teamContent").style.display = "none";
+  document.getElementById("teamPageContent").style.display = "none"; // <-- Use the wrapper!
   document.getElementById("settingsContent").style.display = "none";
   document.getElementById("suppliersContent").style.display = "none";
 
   // Show selected content
-  const contentElement = document.getElementById(contentId + "Content");
+  const contentElement = document.getElementById(
+    (contentId === "team" ? "teamPage" : contentId) + "Content",
+  );
   if (contentElement) {
     contentElement.style.display = "block";
   }
@@ -124,11 +126,12 @@ async function showContent(contentId, event) {
   // Load data based on tab
   try {
     if (contentId === "accounting") {
-      loadAccountingPage(); // Calls both functions
+      loadAccountingPage();
     } else if (contentId === "team") {
       await loadTeamMembers();
+      await loadDepartments(); // <-- Load departments when Team page is shown
     } else if (contentId === "suppliers") {
-      loadSuppliers(); // <-- Add this listeners
+      loadSuppliers();
     }
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
@@ -158,6 +161,94 @@ async function updateLightningBalance() {
     // Hide spinner, show balance amount
     if (spinnerElem) spinnerElem.style.display = "none";
     if (balanceElem) balanceElem.style.visibility = "visible";
+  }
+}
+
+// Load departments and populate the list
+async function loadDepartments() {
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`);
+    if (!response.ok) throw new Error("Failed to fetch departments");
+    const departments = await response.json();
+    const list = document.getElementById("departmentsList");
+    if (!list) return;
+    list.innerHTML = "";
+    departments.forEach((dep) => {
+      const li = document.createElement("li");
+      li.textContent = dep;
+      list.appendChild(li);
+    });
+  } catch (err) {
+    console.error("Error loading departments:", err);
+  }
+}
+
+// Add a new department
+async function addDepartment() {
+  const input = document.getElementById("newDepartment");
+  if (!input) return;
+  const dep = input.value.trim();
+  if (!dep) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ department: dep }),
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error || "Failed to add department");
+      return;
+    }
+    input.value = "";
+    await loadDepartments();
+    await loadRemoveDepartmentSelect();
+  } catch (err) {
+    console.error("Error adding department:", err);
+  }
+}
+
+// Remove a department
+async function removeDepartment() {
+  const select = document.getElementById("removeDepartmentSelect");
+  if (!select) return;
+  const dep = select.value;
+  if (!dep) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ department: dep }),
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error || "Failed to remove department");
+      return;
+    }
+    await loadDepartments();
+    await loadRemoveDepartmentSelect();
+  } catch (err) {
+    console.error("Error removing department:", err);
+  }
+}
+
+// Load departments into the remove select dropdown
+async function loadRemoveDepartmentSelect() {
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`);
+    if (!response.ok) throw new Error("Failed to fetch departments");
+    const departments = await response.json();
+    const select = document.getElementById("removeDepartmentSelect");
+    if (!select) return;
+    select.innerHTML = "";
+    departments.forEach((dep) => {
+      const option = document.createElement("option");
+      option.value = dep;
+      option.textContent = dep;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error("Error loading remove department select:", err);
   }
 }
 
@@ -667,6 +758,7 @@ function renderTeamMembers(users) {
 }
 
 async function addTeamMember() {
+  await loadDepartments();
   const btn = document.getElementById("submitMemberBtn");
   const originalText = btn.textContent;
   btn.disabled = true;
@@ -712,6 +804,7 @@ async function addTeamMember() {
     document.getElementById("successModal").style.display = "flex";
 
     await loadTeamMembers();
+    await loadDepartments();
 
     // Clear form
     [
@@ -1002,6 +1095,30 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   });
+
+  document.getElementById("addDepartmentBtn").onclick = async function () {
+    const dep = prompt("Enter new department name:");
+    if (dep) {
+      await fetch(`${API_BASE}/api/departments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ department: dep }),
+      });
+      await loadDepartments();
+    }
+  };
+
+  document.getElementById("removeDepartmentBtn").onclick = async function () {
+    const dep = prompt("Enter department name to remove:");
+    if (dep) {
+      await fetch(`${API_BASE}/api/departments`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ department: dep }),
+      });
+      await loadDepartments();
+    }
+  };
 
   const payInvoiceForm = document.getElementById("payInvoiceForm");
   if (payInvoiceForm) {

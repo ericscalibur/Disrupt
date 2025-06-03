@@ -171,7 +171,7 @@
                                     class="new-btn"
                                     onclick="openNewPaymentModal()"
                                 >
-                                    +New Payment
+                                    + New Payment
                                 </button>
                                 <button
                                     class="pay-invoice-btn"
@@ -374,38 +374,66 @@
                         </div>
                     </div>
 
-                    <!-- Team Content -->
-                    <div
-                        id="teamContent"
-                        class="content-card"
-                        style="display: none"
-                    >
-                        <div class="team-header">
-                            <h2>Team Members</h2>
-                            <div>
-                                <button class="add-btn" id="addMemberBtn">
-                                    + Add
-                                </button>
-                                <button class="remove-btn" id="removeMemberBtn">
-                                    - Remove
-                                </button>
+                    <!-- Team Page Content (wrapper for both sections) -->
+                    <div id="teamPageContent" style="display: none">
+                        <!-- Team Members Section -->
+                        <div id="teamContent" class="content-card">
+                            <div class="team-header">
+                                <h2>Team Members</h2>
+                                <div>
+                                    <button class="add-btn" id="addMemberBtn">
+                                        + Add
+                                    </button>
+                                    <button
+                                        class="remove-btn"
+                                        id="removeMemberBtn"
+                                    >
+                                        - Remove
+                                    </button>
+                                </div>
                             </div>
+                            <table class="team-table" id="teamTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Role</th>
+                                        <th>Department</th>
+                                        <th>Email</th>
+                                        <th>Date Added</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Team members will be loaded here -->
+                                </tbody>
+                            </table>
                         </div>
 
-                        <table class="team-table" id="teamTable">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Role</th>
-                                    <th>Department</th>
-                                    <th>Email</th>
-                                    <th>Date Added</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Team members will be loaded here -->
-                            </tbody>
-                        </table>
+                        <!-- Departments Section -->
+                        <div
+                            class="content-card departments-section"
+                            style="margin-top: 32px"
+                        >
+                            <div class="departments-header">
+                                <h2>Departments</h2>
+                                <div class="departments-actions">
+                                    <button
+                                        id="addDepartmentBtn"
+                                        class="add-btn"
+                                    >
+                                        + Add
+                                    </button>
+                                    <button
+                                        id="removeDepartmentBtn"
+                                        class="remove-btn"
+                                    >
+                                        - Remove
+                                    </button>
+                                </div>
+                            </div>
+                            <ul id="departmentsList" class="departments-list">
+                                <!-- Department names will be populated here -->
+                            </ul>
+                        </div>
                     </div>
 
                     <!-- Add Member Modal -->
