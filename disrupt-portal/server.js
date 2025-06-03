@@ -16,6 +16,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 const SUPPLIERS_FILE = path.join(DATA_DIR, "suppliers.json");
+const DEPARTMENTS_FILE = path.join(DATA_DIR, "departments.json");
 
 async function getBlinkWallets() {
   const apiKey = process.env.BLINK_API_KEY;
@@ -171,6 +172,77 @@ app.get("/users", async (req, res) => {
         error: err.message,
       });
     }
+  }
+});
+
+// GET: Fetch all departments
+app.get("/api/departments", async (req, res) => {
+  try {
+    const data = await fs.readFile(DEPARTMENTS_FILE, "utf8");
+    res.json(JSON.parse(data));
+  } catch (err) {
+    console.error(err); // Log the error for debugging
+    return res.status(500).json({ error: "Could not read departments." });
+  }
+});
+
+// POST: Add a new department
+app.post("/api/departments", async (req, res) => {
+  try {
+    const { department } = req.body;
+    if (!department) {
+      return res.status(400).json({ error: "Department name is required." });
+    }
+
+    // Read current departments
+    const data = await fs.readFile(DEPARTMENTS_FILE, "utf8");
+    let departments = JSON.parse(data);
+
+    // Check for duplicates
+    if (departments.includes(department)) {
+      return res.status(400).json({ error: "Department already exists." });
+    }
+
+    // Add new department
+    departments.push(department);
+
+    // Save back to file
+    await fs.writeFile(DEPARTMENTS_FILE, JSON.stringify(departments, null, 2));
+
+    res.json({ success: true, departments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not add department." });
+  }
+});
+
+// DELETE: Remove a department
+app.delete("/api/departments", async (req, res) => {
+  try {
+    const { department } = req.body;
+    if (!department) {
+      return res.status(400).json({ error: "Department name is required." });
+    }
+
+    // Read current departments
+    const data = await fs.readFile(DEPARTMENTS_FILE, "utf8");
+    let departments = JSON.parse(data);
+
+    // Check if department exists
+    if (!departments.includes(department)) {
+      return res.status(404).json({ error: "Department not found." });
+    }
+
+    // Remove the department
+    departments = departments.filter((dep) => dep !== department);
+
+    // Save updated list
+    await fs.writeFile(DEPARTMENTS_FILE, JSON.stringify(departments, null, 2));
+
+    res.json({ success: true, departments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not remove department." });
   }
 });
 
