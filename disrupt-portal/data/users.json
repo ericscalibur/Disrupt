@@ -38,5 +38,14 @@
     "password": "1234",
     "dateAdded": "2025-05-30",
     "id": "ef44822563fc8b45c73129c9559434b7b6089271bc744f036e678dc0496324d9"
+  },
+  {
+    "name": "Woody Smallen",
+    "role": "Bookkeeper",
+    "email": "woody@company.com",
+    "department": "Accounting",
+    "address": "woody@lightning.sv",
+    "password": "1234",
+    "dateAdded": "2025-06-05"
   }
 ]

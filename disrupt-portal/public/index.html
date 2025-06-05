@@ -7,7 +7,7 @@
         <link rel="stylesheet" href="style.css" />
         <link
             rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         />
         <script src="script.js"></script>
     </head>
@@ -47,7 +47,7 @@
             </div>
 
             <div class="user-info-bar">
-                <div id="userGreeting">Welcome, User</div>
+                <div id="userGreeting">User</div>
                 <div id="currentDate"></div>
             </div>
 
@@ -78,6 +78,18 @@
                     </div>
                     <div
                         class="nav-item"
+                        id="pendingNav"
+                        onclick="showContent('pending', event)"
+                    >
+                        <i
+                            class="fas fa-hourglass-half"
+                            style="color: steelblue"
+                        ></i
+                        >Pending
+                    </div>
+
+                    <div
+                        class="nav-item"
                         data-content="settings"
                         onclick="showContent('settings', event)"
                     >
@@ -85,10 +97,11 @@
                     </div>
                     <div
                         class="nav-item"
+                        id="suppliersNav"
                         data-content="suppliers"
                         onclick="showContent('suppliers', event)"
                     >
-                        <i class="fa fa-truck"></i> Suppliers
+                        <i class="fa fa-truck"></i>Suppliers
                     </div>
                     <div
                         class="nav-item"
@@ -109,10 +122,8 @@
                 <div class="main-content">
                     <!-- Welcome Content -->
                     <div id="welcomeContent" class="content-card">
-                        <h2>Welcome to Disrupt</h2>
-                        <p id="personalWelcome">
-                            You have successfully logged in.
-                        </p>
+                        <h2 id="welcomeh2">Welcome</h2>
+                        <p>You have successfully logged in.</p>
                         <div
                             class="user-details"
                             style="
@@ -166,24 +177,44 @@
                                     <i class="fa fa-spinner fa-spin"></i>
                                 </span>
                             </div>
-                            <div style="display: flex; gap: 10px">
+                            <div
+                                id="accountingBtnRow"
+                                style="display: flex; gap: 10px"
+                            >
                                 <button
                                     class="new-btn"
+                                    id="newPaymentBtn"
                                     onclick="openNewPaymentModal()"
                                 >
                                     + New Payment
                                 </button>
                                 <button
                                     class="pay-invoice-btn"
+                                    id="payInvoiceBtn"
                                     onclick="openPayInvoiceModal()"
                                 >
                                     Pay Invoice
                                 </button>
+                                <button
+                                    class="new-btn"
+                                    id="draftPaymentBtn"
+                                    style="
+                                        background: #be2828;
+                                        color: white;
+                                        display: none;
+                                    "
+                                    onclick="openDraftPaymentModal()"
+                                >
+                                    Draft Payment
+                                </button>
                             </div>
                         </div>
                         <br />
-                        <h3 class="history-title">Transaction History</h3>
 
+                        <!-- Transaction History (Admin/Manager only) -->
+                        <h3 class="history-title" id="transactionsHistoryTitle">
+                            Transaction History
+                        </h3>
                         <table
                             class="transactions-table"
                             id="transactionsTable"
@@ -192,13 +223,40 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Receiver</th>
-                                    <th>Amount</th>
-                                    <th>ID</th>
                                     <th>Note</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <!-- Transactions will be loaded here -->
+                            </tbody>
+                        </table>
+
+                        <!-- Recent Drafts (Employee/Bookkeeper only) -->
+                        <h3
+                            class="history-title"
+                            id="draftsHistoryTitle"
+                            style="display: none"
+                        >
+                            Recent Drafts
+                        </h3>
+                        <table
+                            class="transactions-table"
+                            id="draftsTable"
+                            style="display: none"
+                        >
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Receiver</th>
+                                    <th>Note</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Drafts will be loaded here -->
                             </tbody>
                         </table>
                     </div>
@@ -244,9 +302,7 @@
                                         id="recipientSelect"
                                         required
                                         onchange="populateRecipientDetails()"
-                                    >
-                                        <!-- options -->
-                                    </select>
+                                    ></select>
                                 </div>
                                 <div class="form-group">
                                     <label>Name</label>
@@ -373,6 +429,121 @@
                             </form>
                         </div>
                     </div>
+                    <div
+                        id="draftPaymentModal"
+                        class="modal"
+                        style="display: none"
+                    >
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>Draft Payment</h2>
+                                <span class="close-btn" id="closeDraftModal"
+                                    >&times;</span
+                                >
+                            </div>
+                            <form id="draftPaymentForm">
+                                <div class="form-group">
+                                    <label for="draftRecipientSelect"
+                                        >Recipient</label
+                                    >
+                                    <select
+                                        id="draftRecipientSelect"
+                                        required
+                                        onchange="populateDraftRecipientDetails()"
+                                    ></select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input
+                                        type="text"
+                                        id="draftRecipientName"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input
+                                        type="text"
+                                        id="draftRecipientEmail"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label>Lightning Address</label>
+                                    <input
+                                        type="text"
+                                        id="draftRecipientLightningAddress"
+                                        readonly
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="draftPaymentAmount"
+                                        >Amount (BTC)</label
+                                    >
+                                    <input
+                                        type="number"
+                                        id="draftPaymentAmount"
+                                        min="0.00000001"
+                                        step="0.00000001"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="draftPaymentNote"
+                                        >Note (optional)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="draftPaymentNote"
+                                        maxlength="100"
+                                    />
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="submit-btn">
+                                        Submit Draft
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Pending Drafts Content -->
+                    <div
+                        id="pendingContent"
+                        class="content-card"
+                        style="display: none"
+                    >
+                        <div class="accounting-header">
+                            <h2>Pending Drafts</h2>
+                        </div>
+                        <div class="pending-header-row">
+                            <div class="pending-count">
+                                Drafts Pending:
+                                <span id="pendingDraftsCount">0</span>
+                            </div>
+                            <button id="togglePendingFilterBtn">
+                                Show All
+                            </button>
+                        </div>
+
+                        <table
+                            class="transactions-table"
+                            id="pendingDraftsTable"
+                        >
+                            <thead>
+                                <tr>
+                                    <th id="th-date">Date</th>
+                                    <th id="th-recipient">Receiver</th>
+                                    <th id="th-note">Note</th>
+                                    <th id="th-amount">Amount</th>
+                                    <th id="th-status">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Pending drafts will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
 
                     <!-- Team Page Content (wrapper for both sections) -->
                     <div id="teamPageContent" style="display: none">
@@ -411,6 +582,7 @@
                         <!-- Departments Section -->
                         <div
                             class="content-card departments-section"
+                            id="departmentsSection"
                             style="margin-top: 32px"
                         >
                             <div class="departments-header">
@@ -440,7 +612,7 @@
                     <div class="modal" id="addMemberModal">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h3>Add New Team Member</h3>
+                                <h3>New Team Member</h3>
                                 <button
                                     class="close-btn"
                                     id="closeMemberModalBtn"
@@ -459,12 +631,15 @@
                             </div>
                             <div class="form-group">
                                 <label for="memberRole">Role:</label>
-                                <input
-                                    type="text"
-                                    id="memberRole"
-                                    placeholder="e.g., Developer, Manager"
-                                    required
-                                />
+                                <select id="memberRole" required>
+                                    <option value="">Select a role</option>
+                                    <option value="Manager">Manager</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="Employee">Employee</option>
+                                    <option value="Bookkeeper">
+                                        Bookkeeper
+                                    </option>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label for="memberDepartment"
@@ -594,6 +769,9 @@
                                     <th>Contact</th>
                                     <th>Email</th>
                                     <th>Lightning Address</th>
+                                    <!-- Add these two columns: -->
+                                    <th>Note</th>
+                                    <th>Created At</th>
                                 </tr>
                             </thead>
                             <tbody>

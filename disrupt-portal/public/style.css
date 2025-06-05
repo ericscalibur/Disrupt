@@ -466,6 +466,79 @@ input:checked + .slider:before {
     transform: translateX(16px);
 }
 
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.approve-btn {
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.decline-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.status-label {
+    padding: 4px 10px;
+    border-radius: 4px;
+    color: white;
+    display: inline-block;
+}
+
+.status-paid {
+    color: #2ecc71; /* Green */
+}
+.status-declined {
+    color: #e74c3c; /* Red */
+}
+.status-pending {
+    color: #f39c12; /* Orange */
+}
+
+.status-paid {
+    color: #2ecc71; /* green */
+}
+
+.status-pending {
+    color: #e74c3c; /* red */
+}
+
+.pending-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+#togglePendingFilterBtn {
+    width: 100px;
+    min-width: 200px;
+    max-width: 200px;
+    padding: 8px 0;
+    font-size: 14px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+}
+
+#togglePendingFilterBtn:hover {
+    background-color: #2980b9;
+}
+
 /* Team Page Styles */
 .team-header {
     display: flex;
@@ -682,4 +755,8 @@ body.volcano-mode,
 
 .volcano-mode .departments-list li {
     color: #f37c19;
+}
+
+.volcano-mode .user-info-bar {
+    color: #7f8c8d;
 }

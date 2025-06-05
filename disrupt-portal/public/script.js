@@ -6,6 +6,11 @@ let selectedMemberEmail = null;
 let invoiceDecodeTimeout = null;
 let employeesList = [];
 let suppliersList = [];
+let pendingDraftsSortColumn = "dateCreated"; // default sort column
+let pendingDraftsSortAsc = true; // default sort order
+let allPendingDrafts = []; // store all drafts for sorting/filtering
+let showOnlyPending = true; // filter state
+let allDrafts = [];
 
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
@@ -58,19 +63,16 @@ function hideLoadingSpinner() {
 function showDashboard() {
   document.getElementById("loginPage").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
-
-  // Update user info
+  document.body.classList.remove("volcano-mode");
   document.getElementById("userGreeting").textContent =
     `Welcome, ${currentUser.name} (${currentUser.role})`;
   document.getElementById("displayEmail").textContent = currentUser.email;
   document.getElementById("displayRole").textContent = currentUser.role;
   document.getElementById("displayDept").textContent = currentUser.department;
-
-  // Personalized welcome message
   const firstName = currentUser.name.split(" ")[0];
-  document.getElementById("personalWelcome").textContent =
-    `${firstName} has successfully logged in.`;
-  // Load initial content
+  document.getElementById("welcomeh2").textContent = `Welcome, ${firstName}!`;
+  updateDepartmentsSection();
+  updateNavigationForRole();
   showContent("welcome");
 }
 
@@ -83,18 +85,233 @@ function logout() {
   document.getElementById("password").value = "";
   document.getElementById("loginPage").style.display = "flex";
   document.getElementById("dashboard").style.display = "none";
+  document.body.classList.remove("volcano-mode");
+  const dashboard = document.getElementById("dashboard");
+  if (dashboard) dashboard.classList.remove("volcano-mode");
+  localStorage.removeItem("volcanoMode");
+  const toggleText = document.getElementById("volcanoToggleText");
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+  if (toggleText) toggleText.textContent = "🌋 Volcano";
+  if (volcanoSwitch) volcanoSwitch.checked = false;
 }
 
 // ===== Main Accounting Loader =====
-async function loadAccountingPage() {
-  showLoadingSpinner();
-
+async function loadDrafts() {
   try {
-    await Promise.all([loadTransactions(), updateLightningBalance()]);
+    const response = await fetch(`${API_BASE}/api/drafts`);
+    const data = await response.json();
+    if (data.success) {
+      // Only show drafts created by this user
+      const userDrafts = (data.drafts || []).filter(
+        (d) => d.createdBy === currentUser.email, // Adjust this property if needed
+      );
+      // Use showActions = false for employee/bookkeeper view
+      renderPendingDraftsTable(userDrafts, false);
+    } else {
+      renderPendingDraftsTable([], false);
+    }
+  } catch (err) {
+    renderPendingDraftsTable([], false);
+    console.error("Error loading drafts:", err);
+  }
+}
+
+function renderPendingDraftsTable(drafts, showActions = true) {
+  const tbody = document.querySelector("#pendingDraftsTable tbody");
+  tbody.innerHTML = "";
+
+  if (!drafts || drafts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    return;
+  }
+
+  drafts.forEach((draft) => {
+    let actionCell = "";
+    let statusText = "";
+    let statusClass = "";
+
+    if (draft.status === "pending") {
+      if (showActions) {
+        actionCell = `
+          <div class="action-buttons">
+            <button class="approve-btn" data-draft-id="${draft.id}">Approve</button>
+            <button class="decline-btn" data-draft-id="${draft.id}">Decline</button>
+          </div>
+        `;
+      } else {
+        actionCell = `<span class="status-label status-pending">Pending</span>`;
+      }
+      statusText = "Pending";
+      statusClass = "status-pending";
+    } else if (draft.status === "paid" || draft.status === "approved") {
+      actionCell = `<span class="status-label status-paid">Paid</span>`;
+      statusText = "Paid";
+      statusClass = "status-paid";
+    } else if (draft.status === "declined") {
+      actionCell = `<span class="status-label status-declined">Declined</span>`;
+      statusText = "Declined";
+      statusClass = "status-declined";
+    } else {
+      actionCell = `<span class="status-label">${draft.status}</span>`;
+      statusText = draft.status;
+      statusClass = "";
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>${draft.note || draft.description || ""}</td>
+      <td class="amount-cell">${draft.amount}</td>
+      <td>${actionCell}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // Attach event listeners only if showing actions
+  if (showActions) {
+    document.querySelectorAll(".approve-btn").forEach((btn) => {
+      btn.addEventListener("click", handleDraftApproval);
+    });
+    document.querySelectorAll(".decline-btn").forEach((btn) => {
+      btn.addEventListener("click", handleDraftDecline);
+    });
+  }
+}
+
+async function loadAccountingPage() {
+  try {
+    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+      // Show transactions, hide drafts
+      document.getElementById("transactionsTable").style.display = "";
+      document.getElementById("transactionsHistoryTitle").style.display = "";
+      document.getElementById("draftsTable").style.display = "none";
+      document.getElementById("draftsHistoryTitle").style.display = "none";
+      await loadTransactions();
+    } else {
+      // Show drafts, hide transactions
+      document.getElementById("transactionsTable").style.display = "none";
+      document.getElementById("transactionsHistoryTitle").style.display =
+        "none";
+      document.getElementById("draftsTable").style.display = "";
+      document.getElementById("draftsHistoryTitle").style.display = "";
+      await loadRecentDrafts();
+    }
+    await updateLightningBalance();
+    updateAccountingActionsVisibility();
   } catch (err) {
     console.log("Failed to load accounting data");
-  } finally {
-    hideLoadingSpinner();
+  }
+}
+
+async function loadRecentDrafts() {
+  try {
+    const response = await fetch(`${API_BASE}/api/drafts`);
+    const data = await response.json();
+    if (data.success) {
+      // Only show drafts created by this user
+      const userDrafts = (data.drafts || []).filter(
+        (d) => d.createdBy === currentUser.email, // adjust this property if needed
+      );
+      renderRecentDraftsTable(userDrafts);
+    } else {
+      renderRecentDraftsTable([]);
+    }
+  } catch (err) {
+    renderRecentDraftsTable([]);
+    console.error("Error loading drafts:", err);
+  }
+}
+
+function renderRecentDraftsTable(drafts) {
+  const tbody = document.querySelector("#draftsTable tbody");
+  tbody.innerHTML = "";
+
+  if (!drafts || drafts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    return;
+  }
+
+  drafts.forEach((draft) => {
+    let statusText = "";
+    let statusClass = "";
+
+    if (draft.status === "paid" || draft.status === "approved") {
+      statusText = "Paid";
+      statusClass = "status-paid";
+    } else if (draft.status === "declined") {
+      statusText = "Declined";
+      statusClass = "status-declined";
+    } else {
+      statusText = "Pending";
+      statusClass = "status-pending";
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>${draft.note || draft.description || ""}</td>
+      <td class="amount-cell">${draft.amount}</td>
+      <td><span class="status-label ${statusClass}">${statusText}</span></td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+async function populateDraftRecipientDropdown() {
+  const select = document.getElementById("draftRecipientSelect");
+  select.innerHTML = '<option value="">Select supplier...</option>';
+
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`);
+    const data = await response.json();
+    const suppliers = data.suppliers || [];
+
+    suppliers.forEach((supplier) => {
+      const option = document.createElement("option");
+      option.value = supplier.email; // or supplier.id if you use IDs
+      option.textContent = supplier.name;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error("Failed to load suppliers:", err);
+    select.innerHTML = '<option value="">Unable to load suppliers</option>';
+  }
+}
+
+// Open the Draft Payment modal
+function openDraftPaymentModal() {
+  const modal = document.getElementById("draftPaymentModal");
+  if (modal) modal.style.display = "flex";
+  populateDraftRecipientDropdown();
+}
+
+async function populateDraftRecipientDetails() {
+  const select = document.getElementById("draftRecipientSelect");
+  const email = select.value;
+  if (!email) {
+    document.getElementById("draftRecipientName").value = "";
+    document.getElementById("draftRecipientEmail").value = "";
+    document.getElementById("draftRecipientLightningAddress").value = "";
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/suppliers`);
+    const data = await response.json();
+    const suppliers = data.suppliers || [];
+    const supplier = suppliers.find((s) => s.email === email);
+
+    if (supplier) {
+      document.getElementById("draftRecipientName").value = supplier.name || "";
+      document.getElementById("draftRecipientEmail").value =
+        supplier.email || "";
+      document.getElementById("draftRecipientLightningAddress").value =
+        supplier.lightningAddress || "";
+    }
+  } catch (err) {
+    console.error("Failed to load supplier details:", err);
   }
 }
 
@@ -103,22 +320,43 @@ async function showContent(contentId, event) {
   // Hide all content sections
   document.getElementById("welcomeContent").style.display = "none";
   document.getElementById("accountingContent").style.display = "none";
-  document.getElementById("teamPageContent").style.display = "none"; // <-- Use the wrapper!
+  document.getElementById("teamPageContent").style.display = "none";
   document.getElementById("settingsContent").style.display = "none";
   document.getElementById("suppliersContent").style.display = "none";
+  const pendingContent = document.getElementById("pendingContent");
+  if (pendingContent) pendingContent.style.display = "none";
 
-  // Show selected content
-  const contentElement = document.getElementById(
-    (contentId === "team" ? "teamPage" : contentId) + "Content",
-  );
-  if (contentElement) {
-    contentElement.style.display = "block";
+  // Restrict pendingContent to Admin/Manager only
+  if (contentId === "pending") {
+    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+      if (pendingContent) pendingContent.style.display = "block";
+      try {
+        await loadPendingDrafts();
+      } catch (err) {
+        console.error(`Error loading pending data:`, err);
+      }
+    } else {
+      // Optionally, show an error or redirect
+      alert("You do not have permission to view this page.");
+      return;
+    }
+  } else {
+    // Show selected content
+    const contentElement = document.getElementById(
+      (contentId === "team" ? "teamPage" : contentId) + "Content",
+    );
+    if (contentElement) {
+      contentElement.style.display = "block";
+    }
+  }
+
+  if (contentId === "welcome") {
+    document.body.classList.remove("volcano-mode");
   }
 
   // Update active nav item
   const navItems = document.querySelectorAll(".nav-item");
   navItems.forEach((item) => item.classList.remove("active"));
-
   if (event && event.currentTarget) {
     event.currentTarget.classList.add("active");
   }
@@ -129,12 +367,176 @@ async function showContent(contentId, event) {
       loadAccountingPage();
     } else if (contentId === "team") {
       await loadTeamMembers();
-      await loadDepartments(); // <-- Load departments when Team page is shown
+      await loadDepartments();
     } else if (contentId === "suppliers") {
       loadSuppliers();
     }
+    // No need to loadPendingDrafts() here, it's handled above for pending
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
+  }
+}
+
+async function loadPendingDrafts() {
+  try {
+    const response = await fetch(`${API_BASE}/api/drafts`);
+    const data = await response.json();
+    if (data.success) {
+      allDrafts = data.drafts || [];
+      renderPendingDraftsTable(allDrafts);
+      document.getElementById("pendingDraftsCount").textContent =
+        allDrafts.filter((d) => d.status === "pending").length;
+    } else {
+      allDrafts = [];
+      renderPendingDraftsTable([]);
+      document.getElementById("pendingDraftsCount").textContent = "0";
+    }
+  } catch (err) {
+    allDrafts = [];
+    renderPendingDraftsTable([]);
+    document.getElementById("pendingDraftsCount").textContent = "0";
+    console.error("Error loading pending drafts:", err);
+  }
+}
+
+function renderPendingDraftsTable(drafts) {
+  const tbody = document.querySelector("#pendingDraftsTable tbody");
+  tbody.innerHTML = "";
+
+  // Filter drafts if needed
+  const displayDrafts = showOnlyPending
+    ? drafts.filter((d) => d.status === "pending")
+    : drafts;
+
+  if (!displayDrafts.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    return;
+  }
+
+  displayDrafts.forEach((draft) => {
+    let actionCell = "";
+    if (draft.status === "pending") {
+      actionCell = `
+        <div class="action-buttons">
+          <button class="approve-btn" data-draft-id="${draft.id}">Approve</button>
+          <button class="decline-btn" data-draft-id="${draft.id}">Decline</button>
+        </div>
+      `;
+    } else if (draft.status === "paid" || draft.status === "approved") {
+      actionCell = `<span class="status-label status-paid">Approved</span>`;
+    } else if (draft.status === "declined") {
+      actionCell = `<span class="status-label status-declined">Declined</span>`;
+    } else {
+      actionCell = `<span class="status-label">${draft.status}</span>`;
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>${draft.note || draft.description || ""}</td>
+      <td class="amount-cell">${draft.amount}</td>
+      <td>${actionCell}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // Attach event listeners for buttons
+  document.querySelectorAll(".approve-btn").forEach((btn) => {
+    btn.addEventListener("click", handleDraftApproval);
+  });
+  document.querySelectorAll(".decline-btn").forEach((btn) => {
+    btn.addEventListener("click", handleDraftDecline);
+  });
+}
+
+async function handleDraftApproval(e) {
+  const draftId = e.target.getAttribute("data-draft-id");
+
+  if (confirm("Are you sure you want to approve this draft payment?")) {
+    try {
+      // First get the draft details
+      const response = await fetch(`${API_BASE}/api/drafts`);
+      const data = await response.json();
+      const draft = data.drafts.find((d) => d.id === draftId);
+
+      if (!draft) {
+        alert("Draft not found!");
+        return;
+      }
+
+      // Process the payment using your existing payment flow
+      const paymentResult = await processPayment(draft);
+
+      if (paymentResult.success) {
+        // Update the draft status
+        const updateResponse = await fetch(`${API_BASE}/api/drafts/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draftId }),
+        });
+
+        const updateResult = await updateResponse.json();
+
+        if (updateResult.success) {
+          alert("Draft approved and payment sent successfully!");
+          loadPendingDrafts(); // Refresh the table
+        } else {
+          alert("Payment sent but draft status update failed.");
+        }
+      } else {
+        alert("Payment failed: " + paymentResult.message);
+      }
+    } catch (err) {
+      alert("Error approving draft: " + err.message);
+    }
+  }
+}
+
+async function handleDraftDecline(e) {
+  const draftId = e.target.getAttribute("data-draft-id");
+
+  if (confirm("Are you sure you want to decline this draft payment?")) {
+    try {
+      const response = await fetch(`${API_BASE}/api/drafts/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert("Draft declined successfully.");
+        loadPendingDrafts(); // Refresh the table
+      } else {
+        alert(
+          "Failed to decline draft: " + (result.message || "Unknown error"),
+        );
+      }
+    } catch (err) {
+      alert("Error declining draft: " + err.message);
+    }
+  }
+}
+
+// Helper function to process the payment
+async function processPayment(draft) {
+  try {
+    // This should use your existing payment logic
+    const response = await fetch(`${API_BASE}/send-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipientLightningAddress: draft.recipientLightningAddress,
+        amount: draft.amount,
+        note: draft.note || draft.description || "",
+      }),
+    });
+
+    return await response.json();
+  } catch (err) {
+    return { success: false, message: err.message };
   }
 }
 
@@ -142,7 +544,6 @@ async function updateLightningBalance() {
   const balanceElem = document.getElementById("balanceAmount");
   const spinnerElem = document.getElementById("balanceSpinner");
   try {
-    // Show spinner, hide balance amount
     if (spinnerElem) spinnerElem.style.display = "inline";
     if (balanceElem) balanceElem.style.visibility = "hidden";
 
@@ -158,7 +559,6 @@ async function updateLightningBalance() {
   } catch (err) {
     balanceElem.textContent = "Error";
   } finally {
-    // Hide spinner, show balance amount
     if (spinnerElem) spinnerElem.style.display = "none";
     if (balanceElem) balanceElem.style.visibility = "visible";
   }
@@ -252,6 +652,29 @@ async function loadRemoveDepartmentSelect() {
   }
 }
 
+async function populateDepartmentsList() {
+  try {
+    const response = await fetch(`${API_BASE}/api/departments`);
+    if (!response.ok) throw new Error("Failed to fetch departments");
+    let departments = await response.json();
+    const deptList = document.getElementById("departmentsList");
+    deptList.innerHTML = "";
+
+    // Role-based filtering
+    if (currentUser.role === "Manager" || currentUser.role === "Employee") {
+      departments = departments.filter((dep) => dep === currentUser.department);
+    }
+
+    departments.forEach((dep) => {
+      const li = document.createElement("li");
+      li.textContent = dep;
+      deptList.appendChild(li);
+    });
+  } catch (err) {
+    console.error("Error populating departments list:", err);
+  }
+}
+
 async function populateDepartmentSelect() {
   try {
     const response = await fetch(`${API_BASE}/api/departments`);
@@ -284,17 +707,20 @@ async function loadSuppliers() {
 }
 
 function renderSuppliers(suppliers) {
+  suppliers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const tbody = document.querySelector("#suppliersTable tbody");
   tbody.innerHTML = "";
   suppliers.forEach((supplier) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-            <td>${supplier.name}</td>
-            <td>${supplier.contact || ""}</td>
-            <td>${supplier.email || ""}</td>
-            <td>${supplier.lightningAddress || ""}</td>
-        `;
-    tbody.appendChild(row);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${supplier.name}</td>
+      <td>${supplier.contact}</td>
+      <td>${supplier.email}</td>
+      <td>${supplier.lightningAddress}</td>
+      <td>${supplier.note || ""}</td>
+      <td>${supplier.createdAt ? new Date(supplier.createdAt).toLocaleString() : ""}</td>
+    `;
+    tbody.appendChild(tr);
   });
 }
 
@@ -553,16 +979,33 @@ async function decodeInvoiceFromFrontend(invoice) {
         html += `<li><strong>Payment Request:</strong> <span style="word-break:break-all;font-family:monospace;">${decoded.paymentRequest}</span></li>`;
       }
 
-      // Expiry
-      if (decoded.expiry) {
-        let expiryHours = Math.floor(decoded.expiry / 3600);
-        let expiryMins = Math.floor((decoded.expiry % 3600) / 60);
-        let expiryStr = `${decoded.expiry} seconds`;
-        if (expiryHours > 0)
-          expiryStr = `${expiryHours} hour(s) ${expiryMins} min(s)`;
-        else if (expiryMins > 0) expiryStr = `${expiryMins} min(s)`;
-        html += `<li><strong>Expires In:</strong> ${expiryStr}</li>`;
+      let expiryStr = "";
+      if (decoded.timestamp && decoded.expiry) {
+        // Both fields exist
+        const invoiceCreatedAt = Number(decoded.timestamp); // seconds since epoch
+        const invoiceExpiresAt = invoiceCreatedAt + Number(decoded.expiry); // expiry timestamp in seconds
+        const now = Math.floor(Date.now() / 1000); // current time in seconds
+        const secondsLeft = invoiceExpiresAt - now;
+
+        if (isNaN(secondsLeft)) {
+          expiryStr = `<span style="color:#e74c3c;">Unknown</span>`;
+        } else if (secondsLeft <= 0) {
+          expiryStr = `<span style="color:#ff1744;font-weight:bold;">Expired!</span>`;
+        } else {
+          const expiryHours = Math.floor(secondsLeft / 3600);
+          const expiryMins = Math.floor((secondsLeft % 3600) / 60);
+          if (expiryHours > 0) {
+            expiryStr = `${expiryHours} hour(s) ${expiryMins} min(s)`;
+          } else if (expiryMins > 0) {
+            expiryStr = `${expiryMins} min(s)`;
+          } else {
+            expiryStr = `${secondsLeft} sec(s)`;
+          }
+        }
+      } else {
+        expiryStr = `<span style="color:#e74c3c;">EXPIRED!</span>`;
       }
+      html += `<li><strong>Expires In:</strong> ${expiryStr}</li>`;
 
       // Extract from sections
       let amountSection = null;
@@ -738,6 +1181,7 @@ async function loadTeamMembers() {
       }
     }
     renderTeamMembers(filteredUsers);
+    updateTeamActionsVisibility();
   } catch (err) {
     console.error("Failed to load team members:", err);
     tbody.innerHTML = `
@@ -780,6 +1224,95 @@ function renderTeamMembers(users) {
     `;
     tbody.appendChild(row);
   });
+}
+
+function updateAccountingActionsVisibility() {
+  const btnRow = document.getElementById("accountingBtnRow"); // add id to your <div>
+  const newPaymentBtn = document.getElementById("newPaymentBtn");
+  const payInvoiceBtn = document.getElementById("payInvoiceBtn");
+  const draftBtn = document.getElementById("draftPaymentBtn");
+
+  if (!newPaymentBtn || !payInvoiceBtn || !draftBtn) return;
+
+  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+    newPaymentBtn.style.display = "inline-block";
+    payInvoiceBtn.style.display = "inline-block";
+    draftBtn.style.display = "none";
+  } else if (currentUser.role === "Employee") {
+    newPaymentBtn.style.display = "none";
+    payInvoiceBtn.style.display = "none";
+    draftBtn.style.display = "inline-block";
+  } else if (currentUser.role === "Bookkeeper") {
+    btnRow.style.display = "none";
+    return;
+  }
+}
+
+function updateNavigationForRole() {
+  const pendingNav = document.getElementById("pendingNav");
+  if (pendingNav) {
+    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+      pendingNav.style.display = "block";
+    } else {
+      pendingNav.style.display = "none";
+    }
+  }
+
+  const suppliersNav = document.getElementById("suppliersNav");
+  if (!suppliersNav) return;
+
+  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+    suppliersNav.style.display = "block";
+  } else {
+    suppliersNav.style.display = "none";
+  }
+}
+
+function updateDepartmentsSection() {
+  const section = document.getElementById("departmentsSection");
+  const addBtn = document.getElementById("addDepartmentBtn");
+  const removeBtn = document.getElementById("removeDepartmentBtn");
+  const deptList = document.getElementById("departmentsList");
+
+  if (!section) return;
+
+  // Hide section for Bookkeeper and Employee
+  if (currentUser.role === "Bookkeeper" || currentUser.role === "Employee") {
+    section.style.display = "none";
+    return;
+  }
+
+  // Show section for Admin and Manager
+  section.style.display = "block";
+
+  if (currentUser.role === "Admin") {
+    // Admin: show all controls and all departments
+    addBtn.style.display = "inline-block";
+    removeBtn.style.display = "inline-block";
+    deptList.style.display = "block";
+    populateDepartmentsList(); // Make sure this fetches and lists all departments
+  } else if (currentUser.role === "Manager") {
+    // Manager: hide add/remove, show only their own department
+    addBtn.style.display = "none";
+    removeBtn.style.display = "none";
+    deptList.innerHTML = `<li>${currentUser.department}</li>`;
+    deptList.style.display = "block";
+  }
+}
+
+function updateTeamActionsVisibility() {
+  const addBtn = document.getElementById("addMemberBtn");
+  const removeBtn = document.getElementById("removeMemberBtn");
+
+  if (!addBtn || !removeBtn) return;
+
+  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+    addBtn.style.display = "inline-block";
+    removeBtn.style.display = "inline-block";
+  } else {
+    addBtn.style.display = "none";
+    removeBtn.style.display = "none";
+  }
 }
 
 async function addTeamMember() {
@@ -948,7 +1481,14 @@ async function populateSupplierSelect() {
     const data = await response.json();
     if (data.success) {
       select.innerHTML = "";
-      data.suppliers.forEach((supplier) => {
+      // Sort suppliers by createdAt descending (most recent first)
+      const sortedSuppliers = data.suppliers.sort((a, b) => {
+        // If createdAt is a string, convert to Date
+        return new Date(b.createdAt) - new Date(a.createdAt);
+        // If createdAt is a UNIX timestamp in seconds, use:
+        // return b.createdAt - a.createdAt;
+      });
+      sortedSuppliers.forEach((supplier) => {
         const option = document.createElement("option");
         option.value = supplier.id;
         option.textContent = supplier.name;
@@ -977,7 +1517,6 @@ function openRemoveSupplierModal() {
 function closeRemoveSupplierModal() {
   document.getElementById("removeSupplierModal").style.display = "none";
 }
-
 async function submitAddSupplier(event) {
   event.preventDefault();
   const name = document.getElementById("supplierName").value;
@@ -988,11 +1527,21 @@ async function submitAddSupplier(event) {
   ).value;
   const note = document.getElementById("supplierNote").value;
 
+  // Add createdAt timestamp
+  const createdAt = new Date().toISOString();
+
   try {
     const response = await fetch(`${API_BASE}/suppliers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, contact, email, lightningAddress, note }),
+      body: JSON.stringify({
+        name,
+        contact,
+        email,
+        lightningAddress,
+        note,
+        createdAt,
+      }),
     });
     const data = await response.json();
     if (data.success) {
@@ -1058,18 +1607,23 @@ function toggleVolcanoMode() {
   const dashboard = document.getElementById("dashboard");
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
-
-  // Toggle the class
+  const isLoggedIn = sessionStorage.getItem("token") === "logged-in";
+  if (!isLoggedIn) {
+    body.classList.remove("volcano-mode");
+    if (dashboard) dashboard.classList.remove("volcano-mode");
+    localStorage.removeItem("volcanoMode");
+    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (volcanoSwitch) volcanoSwitch.checked = false;
+    return;
+  }
   const isVolcano = body.classList.toggle("volcano-mode");
   if (dashboard) dashboard.classList.toggle("volcano-mode");
-
-  // Update toggle text and switch
   if (isVolcano) {
-    if (toggleText) toggleText.textContent = "🌋 Normal Mode";
+    if (toggleText) toggleText.textContent = "🌋 Normal";
     if (volcanoSwitch) volcanoSwitch.checked = true;
     localStorage.setItem("volcanoMode", "on");
   } else {
-    if (toggleText) toggleText.textContent = "🌋 Volcano Mode";
+    if (toggleText) toggleText.textContent = "🌋 Volcano";
     if (volcanoSwitch) volcanoSwitch.checked = false;
     localStorage.setItem("volcanoMode", "off");
   }
@@ -1107,6 +1661,25 @@ document.addEventListener("DOMContentLoaded", () => {
     showDashboard();
   }
 
+  const isLoggedIn = sessionStorage.getItem("token") === "logged-in";
+  const volcanoPref = localStorage.getItem("volcanoMode");
+  const body = document.body;
+  const dashboard = document.getElementById("dashboard");
+  const toggleText = document.getElementById("volcanoToggleText");
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+
+  if (isLoggedIn && volcanoPref === "on") {
+    body.classList.add("volcano-mode");
+    if (dashboard) dashboard.classList.add("volcano-mode");
+    if (toggleText) toggleText.textContent = "🌋 Normal";
+    if (volcanoSwitch) volcanoSwitch.checked = true;
+  } else {
+    body.classList.remove("volcano-mode");
+    if (dashboard) dashboard.classList.remove("volcano-mode");
+    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (volcanoSwitch) volcanoSwitch.checked = false;
+  }
+
   // Setup navigation
   document.querySelectorAll(".nav-item").forEach((item) => {
     // Skip logout button which has its own handler
@@ -1119,6 +1692,84 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   });
+
+  document.addEventListener("change", async (e) => {
+    if (e.target.classList.contains("approve-draft-checkbox")) {
+      const draftId = e.target.getAttribute("data-draft-id");
+      if (e.target.checked && confirm("Approve this draft?")) {
+        try {
+          const response = await fetch(`${API_BASE}/api/drafts/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ draftId }),
+          });
+          const result = await response.json();
+          if (result.success) {
+            alert("Draft approved!");
+            loadDrafts();
+          } else {
+            alert("Approval failed: " + (result.message || "Unknown error"));
+          }
+        } catch (err) {
+          alert("Error approving draft: " + err.message);
+        }
+      } else {
+        e.target.checked = false;
+      }
+    }
+  });
+
+  document.getElementById("th-date").onclick = function () {
+    if (pendingDraftsSortColumn === "dateCreated") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "dateCreated";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+  document.getElementById("th-recipient").onclick = function () {
+    if (pendingDraftsSortColumn === "recipientName") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "recipientName";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+  document.getElementById("th-note").onclick = function () {
+    if (pendingDraftsSortColumn === "note") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "note";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+  document.getElementById("th-amount").onclick = function () {
+    if (pendingDraftsSortColumn === "amount") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "amount";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+  document.getElementById("th-status").onclick = function () {
+    if (pendingDraftsSortColumn === "status") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "status";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+
+  document.getElementById("togglePendingFilterBtn").onclick = function () {
+    showOnlyPending = !showOnlyPending;
+    this.textContent = showOnlyPending ? "Show All" : "Show Only Pending";
+    renderPendingDraftsTable(allDrafts);
+  };
 
   document.getElementById("addDepartmentBtn").onclick = async function () {
     const dep = prompt("Enter new department name:");
@@ -1233,6 +1884,84 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Close the Draft Payment modal
+  document.getElementById("closeDraftModal").addEventListener("click", () => {
+    const modal = document.getElementById("draftPaymentModal");
+    if (modal) modal.style.display = "none";
+  });
+
+  // Close modal when clicking outside the modal content
+  window.addEventListener("click", (event) => {
+    const modal = document.getElementById("draftPaymentModal");
+    if (event.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+
+  document
+    .getElementById("draftPaymentForm")
+    .addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      // Get values from modal fields
+      const recipientEmail = document.getElementById(
+        "draftRecipientSelect",
+      ).value;
+      const recipientName = document.getElementById("draftRecipientName").value;
+      const recipientLightningAddress = document.getElementById(
+        "draftRecipientLightningAddress",
+      ).value;
+      const amount = parseFloat(
+        document.getElementById("draftPaymentAmount").value,
+      );
+      const note = document.getElementById("draftPaymentNote").value;
+
+      // Validation
+      if (
+        !recipientEmail ||
+        !recipientName ||
+        !recipientLightningAddress ||
+        !amount
+      ) {
+        alert("Please fill in all required fields.");
+        return;
+      }
+
+      const draftData = {
+        recipientEmail,
+        recipientName,
+        recipientLightningAddress,
+        amount,
+        note,
+        dateCreated: new Date().toISOString(),
+        createdBy: currentUser.email,
+        status: "pending",
+      };
+
+      try {
+        const response = await fetch(`${API_BASE}/api/drafts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draftData),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert("Draft payment submitted successfully!");
+          document.getElementById("draftPaymentForm").reset();
+          document.getElementById("draftPaymentModal").style.display = "none";
+          // Refresh the Recent Drafts table here:
+          await loadDrafts(); // Or use loadRecentDrafts() if that's your loader
+        } else {
+          alert(
+            "Failed to submit draft: " + (result.message || "Unknown error"),
+          );
+        }
+      } catch (err) {
+        alert("Error submitting draft: " + err.message);
+      }
+    });
+
   // Close modals
   const closeMemberModalBtn = document.getElementById("closeMemberModalBtn");
   if (closeMemberModalBtn) {
@@ -1323,17 +2052,13 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  const volcanoSwitch = document.getElementById("volcanoSwitch");
-  // Restore mode from storage
   setVolcanoMode(localStorage.getItem("volcanoMode") === "on");
-  // Only use the checkbox to trigger mode change
   if (volcanoSwitch) {
     volcanoSwitch.addEventListener("change", function () {
       setVolcanoMode(this.checked);
     });
   }
-  // Optional: clicking the text also toggles the switch
-  const toggleText = document.getElementById("volcanoToggleText");
+
   if (toggleText && volcanoSwitch) {
     toggleText.style.cursor = "pointer";
     toggleText.addEventListener("click", () => {
