@@ -668,9 +668,9 @@ function renderTransactions(transactions) {
   transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = ""; // Clear existing rows
+  const recentTransactions = transactions.slice(0, 15);
 
-  transactions.forEach((txn) => {
-    console.log("Transaction:", txn);
+  recentTransactions.forEach((txn) => {
     const row = document.createElement("tr");
     row.innerHTML = `
                   <td>${formatDate(txn.date)}</td>
@@ -808,7 +808,6 @@ async function addTeamMember() {
     ) {
       throw new Error("Please fill in all required fields");
     }
-    // console.log("Sending:", newMember);
 
     const response = await fetch(`${API_BASE}/users`, {
       method: "POST",
