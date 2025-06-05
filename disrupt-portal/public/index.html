@@ -11,7 +11,7 @@
         />
         <script src="script.js"></script>
     </head>
-    <body>
+    <body class="volcano-mode">
         <!-- Login Page -->
         <div class="login-page" id="loginPage">
             <div class="login-container">
@@ -42,11 +42,11 @@
 
         <!-- Dashboard (hidden until login) -->
         <div id="dashboard">
-            <div class="dashboard-header volcano-mode">
-                <div class="company-name volcano-mode">DISRUPT</div>
+            <div class="dashboard-header">
+                <div class="company-name">DISRUPT</div>
             </div>
 
-            <div class="user-info-bar volcano-mode">
+            <div class="user-info-bar">
                 <div id="userGreeting">Welcome, User</div>
                 <div id="currentDate"></div>
             </div>
@@ -56,42 +56,42 @@
             <div class="dashboard-container">
                 <div class="side-nav">
                     <div
-                        class="nav-item active volcano-mode"
+                        class="nav-item active"
                         data-content="welcome"
                         onclick="showContent('welcome')"
                     >
                         🏠 Home
                     </div>
                     <div
-                        class="nav-item volcano-mode"
+                        class="nav-item"
                         data-content="accounting"
                         onclick="showContent('accounting')"
                     >
                         💰 Accounting
                     </div>
                     <div
-                        class="nav-item volcano-mode"
+                        class="nav-item"
                         data-content="team"
                         onclick="showContent('team')"
                     >
                         👥 Team
                     </div>
                     <div
-                        class="nav-item volcano-mode"
+                        class="nav-item"
                         data-content="settings"
                         onclick="showContent('settings', event)"
                     >
                         ⚙️ Settings
                     </div>
                     <div
-                        class="nav-item volcano-mode"
+                        class="nav-item"
                         data-content="suppliers"
                         onclick="showContent('suppliers', event)"
                     >
                         <i class="fa fa-truck"></i> Suppliers
                     </div>
                     <div
-                        class="nav-item volcano-mode"
+                        class="nav-item"
                         data-content="logout()"
                         onclick="logout()"
                     >
@@ -181,8 +181,8 @@
                                 </button>
                             </div>
                         </div>
-
-                        <h3 class="history-title">History</h3>
+                        <br />
+                        <h3 class="history-title">Transaction History</h3>
 
                         <table
                             class="transactions-table"
