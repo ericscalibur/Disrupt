@@ -6,6 +6,7 @@ const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const app = express();
 const axios = require("axios");
+const crypto = require("crypto");
 const { decode } = require("light-bolt11-decoder");
 app.use(express.json());
 require("dotenv").config();
@@ -17,6 +18,7 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 const SUPPLIERS_FILE = path.join(DATA_DIR, "suppliers.json");
 const DEPARTMENTS_FILE = path.join(DATA_DIR, "departments.json");
+const DRAFTS_FILE = path.join(DATA_DIR, "drafts.json");
 
 async function getBlinkWallets() {
   const apiKey = process.env.BLINK_API_KEY;
@@ -248,12 +250,8 @@ app.delete("/api/departments", async (req, res) => {
 
 // ADD USER
 app.post("/users", async (req, res) => {
-  // console.log("Received body:", req.body);
-
   try {
     const { action, ...rest } = req.body;
-
-    // Read current users
     const data = await fs.readFile(USERS_FILE, "utf8");
     let users = [];
     try {
@@ -267,10 +265,7 @@ app.post("/users", async (req, res) => {
       // Remove user by email
       const { email } = rest; // email is in rest when action is "remove"
       const updatedUsers = users.filter((user) => user.email !== email);
-      await fs.writeFile(
-        USERS_FILE,
-        JSON.stringify({ users: updatedUsers }, null, 2),
-      );
+      await fs.writeFile(USERS_FILE, JSON.stringify(updatedUsers, null, 2));
       return res.json({ success: true });
     } else if (!action) {
       // Add new user (no action means add)
@@ -280,14 +275,22 @@ app.post("/users", async (req, res) => {
           .status(400)
           .json({ success: false, message: "User already exists" });
       }
+      // Generate a unique ID using SHA-256 hash of user core info
+      const { name, email, role, department, lightningAddress } = rest;
+      const id = crypto
+        .createHash("sha256")
+        .update(`${name}|${email}|${role}|${department}|${lightningAddress}`)
+        .digest("hex");
+
       // Add default password and date
       const newUser = {
         ...rest,
         password: "1234", // Default password as per your HTML
         dateAdded: new Date().toISOString().split("T")[0],
+        id, // Add the generated id
       };
       users.push(newUser);
-      await fs.writeFile(USERS_FILE, JSON.stringify({ users }, null, 2));
+      await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
       return res.json({ success: true, user: newUser });
     }
 
@@ -316,14 +319,8 @@ app.post("/users", async (req, res) => {
         console.warn("Invalid JSON in users.json, initializing empty array");
       }
 
-      // Filter out the user to remove
       const updatedUsers = users.filter((user) => user.email !== email);
-
-      // Save back to file
-      await fs.writeFile(
-        USERS_FILE,
-        JSON.stringify({ users: updatedUsers }, null, 2),
-      );
+      await fs.writeFile(USERS_FILE, JSON.stringify(updatedUsers, null, 2));
 
       return res.json({ success: true });
     }
@@ -363,6 +360,193 @@ app.get("/lightning-balance", async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch balance" });
+  }
+});
+
+// DRAFTS
+app.post("/api/drafts", async (req, res) => {
+  try {
+    // Get the new draft data from the request body
+    const newDraft = req.body;
+
+    // Read the existing drafts
+    let drafts = [];
+    try {
+      const data = await fs.readFile(DRAFTS_FILE, "utf8");
+      drafts = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {
+      // If file doesn't exist or is empty, start with an empty array
+      drafts = [];
+    }
+
+    // Add a unique ID to the draft (timestamp + random, or use a hash/uuid)
+    newDraft.id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+    // Add to the drafts array
+    drafts.push(newDraft);
+
+    // Save back to the file
+    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+
+    res.json({ success: true, draft: newDraft });
+  } catch (err) {
+    console.error("Error saving draft:", err);
+    res.status(500).json({ success: false, message: "Failed to save draft." });
+  }
+});
+
+app.get("/api/drafts", async (req, res) => {
+  try {
+    const data = await fs.readFile(DRAFTS_FILE, "utf8");
+    const drafts = data.trim() ? JSON.parse(data) : [];
+    res.json({ success: true, drafts });
+  } catch (err) {
+    res.json({ success: true, drafts: [] });
+  }
+});
+
+app.post("/api/drafts/approve", async (req, res) => {
+  const { draftId } = req.body;
+  try {
+    // Load drafts
+    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
+    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
+
+    // Find and remove the draft
+    const draftIndex = drafts.findIndex((d) => d.id === draftId);
+    if (draftIndex === -1) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Draft not found." });
+    }
+    const [approvedDraft] = drafts.splice(draftIndex, 1);
+
+    // Save updated drafts
+    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+
+    // Add to transactions
+    let transactions = [];
+    try {
+      const txData = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+      transactions = txData.trim() ? JSON.parse(txData) : [];
+    } catch (err) {
+      transactions = [];
+    }
+    // Optionally, add more fields to the transaction
+    transactions.push({
+      ...approvedDraft,
+      approvedAt: new Date().toISOString(),
+      status: "approved",
+    });
+    await fs.writeFile(
+      TRANSACTIONS_FILE,
+      JSON.stringify(transactions, null, 2),
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Approval failed." });
+  }
+});
+
+// Approve draft
+app.post("/api/drafts/approve", async (req, res) => {
+  const { draftId } = req.body;
+
+  try {
+    // Read drafts
+    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
+    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
+
+    // Find the draft
+    const draftIndex = drafts.findIndex((d) => d.id === draftId);
+    if (draftIndex === -1) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Draft not found" });
+    }
+
+    // Update draft status
+    drafts[draftIndex].status = "paid";
+    drafts[draftIndex].approvedAt = new Date().toISOString();
+    drafts[draftIndex].approvedBy = req.body.approverEmail || "admin";
+
+    // Save updated drafts
+    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+
+    // Add to transactions
+    const txData = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+    let transactions = txData.trim() ? JSON.parse(txData) : [];
+
+    transactions.push({
+      ...drafts[draftIndex],
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      date: new Date().toISOString(),
+    });
+
+    await fs.writeFile(
+      TRANSACTIONS_FILE,
+      JSON.stringify(transactions, null, 2),
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error approving draft:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// Decline draft
+app.post("/api/drafts/decline", async (req, res) => {
+  const { draftId } = req.body;
+
+  try {
+    // Read drafts
+    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
+    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
+
+    // Find the draft
+    const draftIndex = drafts.findIndex((d) => d.id === draftId);
+    if (draftIndex === -1) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Draft not found" });
+    }
+
+    // Update draft status
+    drafts[draftIndex].status = "declined";
+    drafts[draftIndex].declinedAt = new Date().toISOString();
+    drafts[draftIndex].declinedBy = req.body.declinerEmail || "admin";
+
+    // Save updated drafts
+    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error declining draft:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// Decline draft endpoint
+app.post("/api/drafts/decline", async (req, res) => {
+  const { draftId } = req.body;
+  try {
+    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
+    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
+    const draftIndex = drafts.findIndex((d) => d.id === draftId);
+    if (draftIndex === -1) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Draft not found" });
+    }
+    drafts[draftIndex].status = "declined";
+    drafts[draftIndex].declinedAt = new Date().toISOString();
+    // Save updated drafts
+    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -700,14 +884,15 @@ app.post("/suppliers", express.json(), async (req, res) => {
       });
     }
 
-    // Add new supplier
+    // Add new supplier with createdAt
     const newSupplier = {
       id: "sup" + Date.now(),
       name,
-      contact, // NEW
+      contact,
       email,
       lightningAddress,
       note: note || "",
+      createdAt: new Date().toISOString(), // <-- Add this line
     };
     suppliers.push(newSupplier);
 
