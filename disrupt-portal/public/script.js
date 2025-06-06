@@ -487,6 +487,8 @@ async function loadPendingDrafts() {
     if (data.success) {
       allDrafts = data.drafts || [];
       allPendingDrafts = allDrafts.filter((d) => d.status === "pending");
+      document.getElementById("pendingDraftsCount").textContent =
+        allPendingDrafts.length;
       renderPendingDraftsTable(
         showOnlyPending ? allPendingDrafts : allDrafts,
         true,
@@ -878,26 +880,38 @@ async function addDepartment() {
 }
 
 // Remove a department
-async function removeDepartment() {
-  const select = document.getElementById("removeDepartmentSelect");
-  if (!select) return;
-  const dep = select.value;
-  if (!dep) return;
+async function removeDepartment(department) {
   try {
     const response = await fetch(`${API_BASE}/api/departments`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ department: dep }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + sessionStorage.getItem("token"),
+      },
+      body: JSON.stringify({ department }),
     });
-    if (!response.ok) {
-      const data = await response.json();
-      alert(data.error || "Failed to remove department");
-      return;
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      // If the response is not JSON, make a fallback error object
+      data = { success: false, message: "Unexpected server response." };
     }
-    await loadDepartments();
-    await loadRemoveDepartmentSelect();
+
+    if (response.ok && data.success) {
+      alert(`Department "${department}" removed successfully!`);
+      // Optionally refresh department list here
+      await populateDepartmentsList?.();
+    } else if (response.status === 404) {
+      // 404 from backend, show the backend message if available
+      alert(data.message || `Department "${department}" does not exist.`);
+    } else {
+      alert(data.message || "Failed to remove department.");
+    }
   } catch (err) {
-    console.error("Error removing department:", err);
+    alert("An error occurred while removing the department.");
+    console.error(err);
   }
 }
 
@@ -1930,13 +1944,30 @@ function setVolcanoMode(isVolcano) {
 }
 
 /////// DOM CONTENT LOADED LISTENER ///////
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   updateCurrentDate();
 
   // Check if we're logged in (for page refresh)
-  if (sessionStorage.getItem("token")) {
-    currentUser = JSON.parse(sessionStorage.getItem("user"));
-    showDashboard();
+  // Restore user session from token (preferred) or user object (legacy)
+  const token = sessionStorage.getItem("token");
+  if (token) {
+    try {
+      // Fetch user profile from backend
+      const response = await fetch(`${API_BASE}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        currentUser = data.user;
+        showDashboard();
+      } else {
+        showContent("login");
+      }
+    } catch (err) {
+      showContent("login");
+    }
+  } else {
+    showContent("login");
   }
 
   const isLoggedIn = sessionStorage.getItem("token") === "logged-in";
@@ -1970,6 +2001,16 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   });
+
+  const removeBtn = document.getElementById("removeDepartmentBtn");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", async () => {
+      const dept = prompt("Enter department name to remove:");
+      if (dept && dept.trim()) {
+        await removeDepartment(dept.trim());
+      }
+    });
+  }
 
   document.addEventListener("change", async (e) => {
     if (e.target.classList.contains("approve-draft-checkbox")) {
@@ -2046,7 +2087,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("togglePendingFilterBtn").onclick = function () {
     showOnlyPending = !showOnlyPending;
     this.textContent = showOnlyPending ? "Show All" : "Show Only Pending";
-    renderPendingDraftsTable(allDrafts);
+    renderPendingDraftsTable(
+      showOnlyPending ? allPendingDrafts : allDrafts,
+      true,
+    );
+    // If you need to re-attach sort handlers:
+    addPendingDraftsTableSortHandlers && addPendingDraftsTableSortHandlers();
   };
 
   document.getElementById("addDepartmentBtn").onclick = async function () {
@@ -2268,14 +2314,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const newPaymentBtn = document.getElementById("newPaymentBtn");
   if (newPaymentBtn) {
     newPaymentBtn.addEventListener("click", () => {
-      document.getElementById("paymentModal").style.display = "flex";
+      document.getElementById("newPaymentModal").style.display = "flex";
     });
   }
 
   const closeModalBtn = document.getElementById("closeModalBtn");
   if (closeModalBtn) {
     closeModalBtn.addEventListener("click", () => {
-      document.getElementById("paymentModal").style.display = "none";
+      document.getElementById("newPaymentModal").style.display = "none";
     });
   }
 
@@ -2285,8 +2331,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.addEventListener("click", (event) => {
-    if (event.target === document.getElementById("paymentModal")) {
-      document.getElementById("paymentModal").style.display = "none";
+    if (event.target === document.getElementById("newPaymentModal")) {
+      document.getElementById("newPaymentModal").style.display = "none";
     }
   });
 
