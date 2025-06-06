@@ -276,7 +276,9 @@ app.delete("/api/departments", async (req, res) => {
 
     // Check if department exists
     if (!departments.includes(department)) {
-      return res.status(404).json({ error: "Department not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Department not found." });
     }
 
     // Remove the department

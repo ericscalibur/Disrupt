@@ -16,5 +16,14 @@
     "lightningAddress": "xu@blink.sv",
     "note": "yummy tea",
     "createdAt": "2025-06-05T06:20:41.026Z"
+  },
+  {
+    "id": "sup1749182344672",
+    "name": "ChickenFeet",
+    "contact": "Earl",
+    "email": "earl@chickenfeet.com",
+    "lightningAddress": "earl@blink.sv",
+    "note": "dont eat the chicken feet",
+    "createdAt": "2025-06-06T03:59:04.672Z"
   }
 ]
