@@ -11,6 +11,9 @@ let pendingDraftsSortAsc = true; // default sort order
 let allPendingDrafts = []; // store all drafts for sorting/filtering
 let showOnlyPending = true; // filter state
 let allDrafts = [];
+let pendingDraftsSort = { column: null, asc: true };
+let employeeDrafts = [];
+let employeeDraftsSort = { column: null, asc: true };
 
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
@@ -35,11 +38,23 @@ async function login() {
 
     const data = await response.json();
 
-    if (data.success) {
-      currentUser = data.user;
-      sessionStorage.setItem("user", JSON.stringify(data.user));
-      sessionStorage.setItem("token", "logged-in");
-      showDashboard();
+    if (data.success && data.token) {
+      // Store only the token
+      sessionStorage.setItem("token", data.token);
+
+      // Optionally, fetch user profile for display
+      const profileResp = await fetch(`${API_BASE}/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      const profile = await profileResp.json();
+
+      if (profile.success) {
+        currentUser = profile.user;
+        showDashboard();
+      } else {
+        errorMessage.textContent = "Failed to load user profile.";
+        errorMessage.style.display = "block";
+      }
     } else {
       errorMessage.style.display = "block";
     }
@@ -96,28 +111,86 @@ function logout() {
 }
 
 // ===== Main Accounting Loader =====
+function sortEmployeeDraftsByColumn(columnIdx) {
+  // Adjust these if your columns are ordered differently
+  const columns = ["dateCreated", "recipientName", "note", "amount", "status"];
+  const column = columns[columnIdx];
+  if (!column) return;
+
+  // Toggle sort direction
+  if (employeeDraftsSort.column === column) {
+    employeeDraftsSort.asc = !employeeDraftsSort.asc;
+  } else {
+    employeeDraftsSort.column = column;
+    employeeDraftsSort.asc = true;
+  }
+
+  employeeDrafts.sort((a, b) => {
+    let aVal = a[column] || "";
+    let bVal = b[column] || "";
+    if (column === "dateCreated") {
+      aVal = new Date(aVal);
+      bVal = new Date(bVal);
+    }
+    if (column === "amount") {
+      aVal = Number(aVal);
+      bVal = Number(bVal);
+    }
+    // For status, sort by status text
+    if (column === "status") {
+      aVal = (a.status || "").toLowerCase();
+      bVal = (b.status || "").toLowerCase();
+    }
+    if (aVal < bVal) return employeeDraftsSort.asc ? -1 : 1;
+    if (aVal > bVal) return employeeDraftsSort.asc ? 1 : -1;
+    return 0;
+  });
+
+  renderPendingDraftsTable(employeeDrafts, false);
+  addEmployeeDraftsTableSortHandlers();
+}
+
+function addEmployeeDraftsTableSortHandlers() {
+  const table = document.getElementById("draftsTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("th");
+  headers.forEach((th, idx) => {
+    th.style.cursor = "pointer";
+    th.onclick = () => sortEmployeeDraftsByColumn(idx);
+  });
+}
+
 async function loadDrafts() {
   try {
     const response = await fetch(`${API_BASE}/api/drafts`);
     const data = await response.json();
     if (data.success) {
-      // Only show drafts created by this user
-      const userDrafts = (data.drafts || []).filter(
-        (d) => d.createdBy === currentUser.email, // Adjust this property if needed
+      // Filter drafts to only those created by this employee/bookkeeper
+      employeeDrafts = (data.drafts || []).filter(
+        (d) => d.createdBy === currentUser.email, // Adjust property if needed
       );
-      // Use showActions = false for employee/bookkeeper view
-      renderPendingDraftsTable(userDrafts, false);
+      renderPendingDraftsTable(employeeDrafts, false); // No action buttons
+      addEmployeeDraftsTableSortHandlers();
     } else {
+      employeeDrafts = [];
       renderPendingDraftsTable([], false);
     }
   } catch (err) {
+    employeeDrafts = [];
     renderPendingDraftsTable([], false);
     console.error("Error loading drafts:", err);
   }
 }
 
 function renderPendingDraftsTable(drafts, showActions = true) {
+  console.log(
+    "Rendering drafts for pendingDraftsTable:",
+    drafts,
+    "showActions:",
+    showActions,
+  );
   const tbody = document.querySelector("#pendingDraftsTable tbody");
+  console.log("Found tbody?", tbody);
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
@@ -167,16 +240,6 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     `;
     tbody.appendChild(row);
   });
-
-  // Attach event listeners only if showing actions
-  if (showActions) {
-    document.querySelectorAll(".approve-btn").forEach((btn) => {
-      btn.addEventListener("click", handleDraftApproval);
-    });
-    document.querySelectorAll(".decline-btn").forEach((btn) => {
-      btn.addEventListener("click", handleDraftDecline);
-    });
-  }
 }
 
 async function loadAccountingPage() {
@@ -188,6 +251,7 @@ async function loadAccountingPage() {
       document.getElementById("draftsTable").style.display = "none";
       document.getElementById("draftsHistoryTitle").style.display = "none";
       await loadTransactions();
+      await loadPendingDrafts();
     } else {
       // Show drafts, hide transactions
       document.getElementById("transactionsTable").style.display = "none";
@@ -195,31 +259,12 @@ async function loadAccountingPage() {
         "none";
       document.getElementById("draftsTable").style.display = "";
       document.getElementById("draftsHistoryTitle").style.display = "";
-      await loadRecentDrafts();
+      await loadDrafts();
     }
     await updateLightningBalance();
     updateAccountingActionsVisibility();
   } catch (err) {
     console.log("Failed to load accounting data");
-  }
-}
-
-async function loadRecentDrafts() {
-  try {
-    const response = await fetch(`${API_BASE}/api/drafts`);
-    const data = await response.json();
-    if (data.success) {
-      // Only show drafts created by this user
-      const userDrafts = (data.drafts || []).filter(
-        (d) => d.createdBy === currentUser.email, // adjust this property if needed
-      );
-      renderRecentDraftsTable(userDrafts);
-    } else {
-      renderRecentDraftsTable([]);
-    }
-  } catch (err) {
-    renderRecentDraftsTable([]);
-    console.error("Error loading drafts:", err);
   }
 }
 
@@ -377,57 +422,197 @@ async function showContent(contentId, event) {
   }
 }
 
+function addPendingDraftsTableSortHandlers() {
+  const table = document.getElementById("pendingDraftsTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("th");
+  headers.forEach((th, idx) => {
+    th.style.cursor = "pointer";
+    th.onclick = () => sortPendingDraftsByColumn(idx);
+  });
+}
+
+function addPendingDraftsTableSortHandlers() {
+  const table = document.getElementById("pendingDraftsTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("th");
+  headers.forEach((th, idx) => {
+    th.style.cursor = "pointer";
+    th.onclick = () => sortPendingDraftsByColumn(idx);
+  });
+}
+
+function sortPendingDraftsByColumn(columnIdx) {
+  // Adjust these if your columns are ordered differently
+  const columns = ["dateCreated", "recipientName", "note", "amount", "status"];
+  const column = columns[columnIdx];
+  if (!column) return;
+
+  // Toggle sort direction
+  if (pendingDraftsSort.column === column) {
+    pendingDraftsSort.asc = !pendingDraftsSort.asc;
+  } else {
+    pendingDraftsSort.column = column;
+    pendingDraftsSort.asc = true;
+  }
+
+  // Choose the correct array to sort
+  const draftsToSort = showOnlyPending ? allPendingDrafts : allDrafts;
+
+  draftsToSort.sort((a, b) => {
+    let aVal = a[column] || "";
+    let bVal = b[column] || "";
+    if (column === "dateCreated") {
+      aVal = new Date(aVal);
+      bVal = new Date(bVal);
+    }
+    if (column === "amount") {
+      aVal = Number(aVal);
+      bVal = Number(bVal);
+    }
+    if (aVal < bVal) return pendingDraftsSort.asc ? -1 : 1;
+    if (aVal > bVal) return pendingDraftsSort.asc ? 1 : -1;
+    return 0;
+  });
+
+  renderPendingDraftsTable(draftsToSort, true);
+  addPendingDraftsTableSortHandlers();
+}
+
 async function loadPendingDrafts() {
   try {
     const response = await fetch(`${API_BASE}/api/drafts`);
     const data = await response.json();
+
     if (data.success) {
       allDrafts = data.drafts || [];
-      renderPendingDraftsTable(allDrafts);
-      document.getElementById("pendingDraftsCount").textContent =
-        allDrafts.filter((d) => d.status === "pending").length;
+      allPendingDrafts = allDrafts.filter((d) => d.status === "pending");
+      renderPendingDraftsTable(
+        showOnlyPending ? allPendingDrafts : allDrafts,
+        true,
+      );
+      addPendingDraftsTableSortHandlers();
     } else {
       allDrafts = [];
-      renderPendingDraftsTable([]);
-      document.getElementById("pendingDraftsCount").textContent = "0";
+      allPendingDrafts = [];
+      renderPendingDraftsTable([], true);
     }
   } catch (err) {
     allDrafts = [];
-    renderPendingDraftsTable([]);
-    document.getElementById("pendingDraftsCount").textContent = "0";
+    allPendingDrafts = [];
+    renderPendingDraftsTable([], true);
     console.error("Error loading pending drafts:", err);
   }
 }
 
-function renderPendingDraftsTable(drafts) {
+async function loadEmployeeDrafts() {
+  try {
+    const response = await fetch(`${API_BASE}/api/drafts`);
+    const data = await response.json();
+
+    if (data.success) {
+      const employeeDrafts = (data.drafts || []).filter(
+        (d) => d.createdBy === currentUser.email,
+      );
+      renderEmployeeDraftsTable(employeeDrafts);
+      addEmployeeDraftsTableSortHandlers &&
+        addEmployeeDraftsTableSortHandlers();
+    } else {
+      renderEmployeeDraftsTable([]);
+    }
+  } catch (err) {
+    renderEmployeeDraftsTable([]);
+    console.error("Error loading employee drafts:", err);
+  }
+}
+
+// Add this after rendering the table
+function addEmployeeDraftsTableSortHandlers() {
+  const table = document.getElementById("draftsTable");
+  if (!table) return;
+  const headers = table.querySelectorAll("th");
+  headers.forEach((th, idx) => {
+    th.style.cursor = "pointer";
+    th.onclick = () => sortEmployeeDraftsByColumn(idx);
+  });
+}
+
+function sortEmployeeDraftsByColumn(columnIdx) {
+  const columns = ["dateCreated", "recipientName", "note", "amount", "status"];
+  const column = columns[columnIdx];
+  if (!column) return;
+
+  // Toggle sort direction
+  if (employeeDraftsSort.column === column) {
+    employeeDraftsSort.asc = !employeeDraftsSort.asc;
+  } else {
+    employeeDraftsSort.column = column;
+    employeeDraftsSort.asc = true;
+  }
+
+  employeeDrafts.sort((a, b) => {
+    let aVal = a[column] || "";
+    let bVal = b[column] || "";
+    if (column === "dateCreated") {
+      aVal = new Date(aVal);
+      bVal = new Date(bVal);
+    }
+    if (column === "amount") {
+      aVal = Number(aVal);
+      bVal = Number(bVal);
+    }
+    if (column === "status") {
+      aVal = (a.status || "").toLowerCase();
+      bVal = (b.status || "").toLowerCase();
+    }
+    if (aVal < bVal) return employeeDraftsSort.asc ? -1 : 1;
+    if (aVal > bVal) return employeeDraftsSort.asc ? 1 : -1;
+    return 0;
+  });
+  renderPendingDraftsTable(employeeDrafts, false);
+  addEmployeeDraftsTableSortHandlers();
+}
+
+// For managers/admins
+function renderPendingDraftsTable(drafts, showActions = true) {
   const tbody = document.querySelector("#pendingDraftsTable tbody");
   tbody.innerHTML = "";
 
-  // Filter drafts if needed
-  const displayDrafts = showOnlyPending
-    ? drafts.filter((d) => d.status === "pending")
-    : drafts;
-
-  if (!displayDrafts.length) {
+  if (!drafts || drafts.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
     return;
   }
 
-  displayDrafts.forEach((draft) => {
+  drafts.forEach((draft) => {
     let actionCell = "";
+    let statusText = "";
+    let statusClass = "";
+
     if (draft.status === "pending") {
-      actionCell = `
-        <div class="action-buttons">
-          <button class="approve-btn" data-draft-id="${draft.id}">Approve</button>
-          <button class="decline-btn" data-draft-id="${draft.id}">Decline</button>
-        </div>
-      `;
+      if (showActions) {
+        actionCell = `
+          <div class="action-buttons">
+            <button class="approve-btn" data-draft-id="${draft.id}">Approve</button>
+            <button class="decline-btn" data-draft-id="${draft.id}">Decline</button>
+          </div>
+        `;
+      } else {
+        actionCell = `<span class="status-label status-pending">Pending</span>`;
+      }
+      statusText = "Pending";
+      statusClass = "status-pending";
     } else if (draft.status === "paid" || draft.status === "approved") {
-      actionCell = `<span class="status-label status-paid">Approved</span>`;
+      actionCell = `<span class="status-label status-paid">Paid</span>`;
+      statusText = "Paid";
+      statusClass = "status-paid";
     } else if (draft.status === "declined") {
       actionCell = `<span class="status-label status-declined">Declined</span>`;
+      statusText = "Declined";
+      statusClass = "status-declined";
     } else {
       actionCell = `<span class="status-label">${draft.status}</span>`;
+      statusText = draft.status;
+      statusClass = "";
     }
 
     const row = document.createElement("tr");
@@ -441,13 +626,97 @@ function renderPendingDraftsTable(drafts) {
     tbody.appendChild(row);
   });
 
-  // Attach event listeners for buttons
+  // Attach event listeners for approve/decline buttons if needed
   document.querySelectorAll(".approve-btn").forEach((btn) => {
     btn.addEventListener("click", handleDraftApproval);
   });
   document.querySelectorAll(".decline-btn").forEach((btn) => {
     btn.addEventListener("click", handleDraftDecline);
   });
+}
+
+// For employees/bookkeepers
+function renderEmployeeDraftsTable(drafts) {
+  const tbody = document.querySelector("#draftsTable tbody");
+  tbody.innerHTML = "";
+
+  if (!drafts || drafts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    return;
+  }
+
+  drafts.forEach((draft) => {
+    let statusText = "";
+    let statusClass = "";
+
+    if (draft.status === "pending") {
+      statusText = "Pending";
+      statusClass = "status-pending";
+    } else if (draft.status === "paid" || draft.status === "approved") {
+      statusText = "Paid";
+      statusClass = "status-paid";
+    } else if (draft.status === "declined") {
+      statusText = "Declined";
+      statusClass = "status-declined";
+    } else {
+      statusText = draft.status;
+      statusClass = "";
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>${draft.note || draft.description || ""}</td>
+      <td class="amount-cell">${draft.amount}</td>
+      <td><span class="status-label ${statusClass}">${statusText}</span></td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function renderEmployeeDraftsTable(drafts) {
+  const tbody = document.querySelector("#draftsTable tbody");
+  tbody.innerHTML = "";
+
+  if (!drafts || drafts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    return;
+  }
+
+  drafts.forEach((draft) => {
+    let statusText = "";
+    let statusClass = "";
+
+    if (draft.status === "pending") {
+      statusText = "Pending";
+      statusClass = "status-pending";
+    } else if (draft.status === "paid" || draft.status === "approved") {
+      statusText = "Paid";
+      statusClass = "status-paid";
+    } else if (draft.status === "declined") {
+      statusText = "Declined";
+      statusClass = "status-declined";
+    } else {
+      statusText = draft.status;
+      statusClass = "";
+    }
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>${draft.note || draft.description || ""}</td>
+      <td class="amount-cell">${draft.amount}</td>
+      <td><span class="status-label ${statusClass}">${statusText}</span></td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // If you have sorting handlers, call them here:
+  if (typeof addEmployeeDraftsTableSortHandlers === "function") {
+    addEmployeeDraftsTableSortHandlers();
+  }
 }
 
 async function handleDraftApproval(e) {
@@ -1602,6 +1871,15 @@ async function submitRemoveSupplier(event) {
   }
 }
 
+function togglePendingFilter() {
+  showOnlyPending = !showOnlyPending;
+  renderPendingDraftsTable(
+    showOnlyPending ? allPendingDrafts : allDrafts,
+    true,
+  );
+  addPendingDraftsTableSortHandlers();
+}
+
 function toggleVolcanoMode() {
   const body = document.body;
   const dashboard = document.getElementById("dashboard");
@@ -1951,7 +2229,7 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("draftPaymentForm").reset();
           document.getElementById("draftPaymentModal").style.display = "none";
           // Refresh the Recent Drafts table here:
-          await loadDrafts(); // Or use loadRecentDrafts() if that's your loader
+          await loadDrafts();
         } else {
           alert(
             "Failed to submit draft: " + (result.message || "Unknown error"),

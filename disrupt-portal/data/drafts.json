@@ -55,7 +55,9 @@
     "note": "KOI",
     "dateCreated": "2025-06-05T11:40:27.046Z",
     "createdBy": "tilcboy44@gmail.com",
-    "status": "pending",
-    "id": "mbjb1oaboez1hyqrg48"
+    "status": "declined",
+    "id": "mbjb1oaboez1hyqrg48",
+    "declinedAt": "2025-06-06T00:23:08.199Z",
+    "declinedBy": "admin"
   }
 ]

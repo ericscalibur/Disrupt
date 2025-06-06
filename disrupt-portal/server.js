@@ -8,6 +8,8 @@ const app = express();
 const axios = require("axios");
 const crypto = require("crypto");
 const { decode } = require("light-bolt11-decoder");
+const JWT_SECRET = process.env.JWT_SECRET || "your-very-secret-key";
+const jwt = require("jsonwebtoken");
 app.use(express.json());
 require("dotenv").config();
 
@@ -117,10 +119,17 @@ app.post("/login", async (req, res) => {
     );
 
     if (user) {
-      const { password, ...userData } = user;
+      // Only include non-sensitive info in the token (id, email)
+      const tokenPayload = {
+        id: user.id,
+        email: user.email,
+      };
+      // Issue JWT token (expires in 1 day)
+      const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "1d" });
+
       res.json({
         success: true,
-        user: userData,
+        token, // Send only the token
         message: "Login successful",
       });
     } else {
@@ -136,6 +145,41 @@ app.post("/login", async (req, res) => {
       message: "Server error during login",
       error: err.message,
     });
+  }
+});
+
+// Middleware to authenticate JWT
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user; // { id, email }
+    next();
+  });
+}
+
+app.get("/me", authenticateToken, async (req, res) => {
+  try {
+    const data = await fs.readFile(USERS_FILE, "utf8");
+    const users = JSON.parse(data);
+    const user = users.find(
+      (u) => u.id === req.user.id || u.email === req.user.email,
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    // Exclude password before sending
+    const { password, ...userData } = user;
+    res.json({ success: true, user: userData });
+  } catch (err) {
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching user profile" });
   }
 });
 
@@ -405,56 +449,12 @@ app.get("/api/drafts", async (req, res) => {
   }
 });
 
-app.post("/api/drafts/approve", async (req, res) => {
+// Example: Secure approve endpoint
+app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
   const { draftId } = req.body;
+
   try {
     // Load drafts
-    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
-    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
-
-    // Find and remove the draft
-    const draftIndex = drafts.findIndex((d) => d.id === draftId);
-    if (draftIndex === -1) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Draft not found." });
-    }
-    const [approvedDraft] = drafts.splice(draftIndex, 1);
-
-    // Save updated drafts
-    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
-
-    // Add to transactions
-    let transactions = [];
-    try {
-      const txData = await fs.readFile(TRANSACTIONS_FILE, "utf8");
-      transactions = txData.trim() ? JSON.parse(txData) : [];
-    } catch (err) {
-      transactions = [];
-    }
-    // Optionally, add more fields to the transaction
-    transactions.push({
-      ...approvedDraft,
-      approvedAt: new Date().toISOString(),
-      status: "approved",
-    });
-    await fs.writeFile(
-      TRANSACTIONS_FILE,
-      JSON.stringify(transactions, null, 2),
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Approval failed." });
-  }
-});
-
-// Approve draft
-app.post("/api/drafts/approve", async (req, res) => {
-  const { draftId } = req.body;
-
-  try {
-    // Read drafts
     const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
     let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
 
@@ -463,13 +463,26 @@ app.post("/api/drafts/approve", async (req, res) => {
     if (draftIndex === -1) {
       return res
         .status(404)
-        .json({ success: false, message: "Draft not found" });
+        .json({ success: false, message: "Draft not found." });
     }
 
-    // Update draft status
-    drafts[draftIndex].status = "paid";
+    // Load users to get the approver's role
+    const usersData = await fs.readFile(USERS_FILE, "utf8");
+    const users = usersData.trim() ? JSON.parse(usersData) : [];
+    const user = users.find(
+      (u) => u.id === req.user.id || u.email === req.user.email,
+    );
+
+    if (!user || (user.role !== "Admin" && user.role !== "Manager")) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Forbidden: not authorized." });
+    }
+
+    // Approve the draft
+    drafts[draftIndex].status = "approved";
     drafts[draftIndex].approvedAt = new Date().toISOString();
-    drafts[draftIndex].approvedBy = req.body.approverEmail || "admin";
+    drafts[draftIndex].approvedBy = user.email;
 
     // Save updated drafts
     await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
@@ -477,13 +490,11 @@ app.post("/api/drafts/approve", async (req, res) => {
     // Add to transactions
     const txData = await fs.readFile(TRANSACTIONS_FILE, "utf8");
     let transactions = txData.trim() ? JSON.parse(txData) : [];
-
     transactions.push({
       ...drafts[draftIndex],
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       date: new Date().toISOString(),
     });
-
     await fs.writeFile(
       TRANSACTIONS_FILE,
       JSON.stringify(transactions, null, 2),

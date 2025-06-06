@@ -503,15 +503,11 @@ input:checked + .slider:before {
     color: #e74c3c; /* Red */
 }
 .status-pending {
-    color: #f39c12; /* Orange */
+    color: #3498db; /* Blue */
 }
 
 .status-paid {
     color: #2ecc71; /* green */
-}
-
-.status-pending {
-    color: #e74c3c; /* red */
 }
 
 .pending-header-row {
