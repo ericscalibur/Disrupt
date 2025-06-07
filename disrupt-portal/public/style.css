@@ -196,6 +196,9 @@ br {
     /* You can add page-level padding or max-width here if desired */
 }
 
+#successMessage {
+    color: white;
+}
 .content-card {
     background: #fff;
     border-radius: 12px;

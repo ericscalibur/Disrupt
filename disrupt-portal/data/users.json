@@ -44,8 +44,28 @@
     "role": "Bookkeeper",
     "email": "woody@company.com",
     "department": "Accounting",
-    "address": "woody@lightning.sv",
+    "lightningAddress": "woody@lightning.sv",
     "password": "1234",
     "dateAdded": "2025-06-05"
+  },
+  {
+    "name": "Jasper",
+    "role": "Employee",
+    "email": "jasper@company.com",
+    "department": "Research",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "password": "1234",
+    "dateAdded": "2025-06-07",
+    "id": "253beff153faa1714628c425657a9060edc8a3bd755c5f79e3c4ddf978a76933"
+  },
+  {
+    "name": "Jennifer",
+    "role": "Employee",
+    "email": "jenny@company.com",
+    "department": "Developement",
+    "address": "bingbong@bongbing.com",
+    "password": "1234",
+    "dateAdded": "2025-06-07",
+    "id": "2a73b5abd3a5996289a02af48b7cbcd5d47061c687e94c40c59a7296aefed6b0"
   }
 ]

@@ -8,8 +8,10 @@ const app = express();
 const axios = require("axios");
 const crypto = require("crypto");
 const { decode } = require("light-bolt11-decoder");
+const bolt11 = require("bolt11");
 const JWT_SECRET = process.env.JWT_SECRET || "your-very-secret-key";
 const jwt = require("jsonwebtoken");
+const lnurlPay = require("lnurl-pay");
 app.use(express.json());
 require("dotenv").config();
 
@@ -951,16 +953,39 @@ app.delete("/suppliers/:id", async (req, res) => {
   }
 });
 
-// PAY SUPPLIER OR EMPLOYEE
+// PAY SUPPLIER OR EMPLOYEE via Lightning Address
 app.post("/pay", express.json(), async (req, res) => {
+  console.log("PAYMENT REQUEST BODY:", req.body);
+
   const { name, lightningAddress, amount, note } = req.body;
   if (!name || !lightningAddress || !amount) {
+    console.log("Missing required fields:", { name, lightningAddress, amount });
     return res
       .status(400)
       .json({ success: false, message: "Missing required fields." });
   }
 
-  // 1. Get BTC wallet ID from Blink
+  // 1. Resolve Lightning Address to invoice
+  let invoice;
+  try {
+    const lnurlResp = await lnurlPay.requestInvoice({
+      lnUrlOrAddress: lightningAddress,
+      tokens: parseInt(amount, 10),
+      comment: note || "",
+    });
+    invoice = lnurlResp.invoice;
+    if (!invoice) {
+      throw new Error("Could not resolve invoice from Lightning Address.");
+    }
+  } catch (err) {
+    console.error("LNURL-pay error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to resolve Lightning Address: " + err.message,
+    });
+  }
+
+  // 2. Get BTC wallet ID from Blink
   let walletId;
   try {
     const apiKey = process.env.BLINK_API_KEY;
@@ -991,37 +1016,34 @@ app.post("/pay", express.json(), async (req, res) => {
     if (!btcWallet) throw new Error("No BTC wallet found");
     walletId = btcWallet.id;
   } catch (err) {
+    console.error("Failed to fetch wallet:", err);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch wallet: " + err.message,
     });
   }
 
-  // 2. Send payment via Blink
+  // 3. Pay the invoice via Blink
   let paymentResult;
   try {
     const apiKey = process.env.BLINK_API_KEY;
     const mutation = `
-      mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
-        lnLightningAddressPaymentSend(input: $input) {
+      mutation payInvoice($input: LnInvoicePaymentInput!) {
+        lnInvoicePaymentSend(input: $input) {
           status
           errors { message }
-          payment {
-            id
-            status
-            paymentHash
-          }
         }
       }
     `;
+
     const variables = {
       input: {
         walletId,
-        lnAddress: lightningAddress,
-        amount: Number(amount),
-        memo: note || "",
+        paymentRequest: invoice,
       },
     };
+
+    console.log("Paying invoice with variables:", variables);
 
     const payResp = await axios.post(
       "https://api.blink.sv/graphql",
@@ -1034,18 +1056,26 @@ app.post("/pay", express.json(), async (req, res) => {
       },
     );
 
-    const result = payResp.data.data.lnLightningAddressPaymentSend;
+    const result = payResp.data.data.lnInvoicePaymentSend;
     if (result.errors && result.errors.length > 0) {
+      console.error("Blink API returned errors:", result.errors);
       return res.json({ success: false, message: result.errors[0].message });
     }
-    paymentResult = result.payment;
+    paymentResult = result;
   } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Payment failed: " + err.message });
+    let blinkError = "";
+    if (err.response && err.response.data) {
+      blinkError = JSON.stringify(err.response.data);
+      console.error("Blink API error response:", err.response.data);
+    }
+    console.error("Payment failed:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Payment failed: " + err.message + " " + blinkError,
+    });
   }
 
-  // 3. Save transaction locally
+  // 4. Save transaction locally
   let transactions = [];
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -1054,18 +1084,20 @@ app.post("/pay", express.json(), async (req, res) => {
     if (err.code !== "ENOENT") throw err;
   }
   const transaction = {
-    id: paymentResult.id,
+    id: paymentResult?.paymentId || Date.now(),
     date: new Date().toISOString(),
     type: "lightning",
-    receiver: name,
-    lightningAddress,
-    amount: Number(amount),
-    currency: "SATS",
+    receiver: receiverName || "Unknown",
+    lightningAddress: lightningAddress || null,
+    invoice: invoice || null,
+    amount: Number(amount) || 0,
+    currency: currency || "SATS",
     note: note || "",
     direction: "SENT",
-    status: paymentResult.status,
-    paymentHash: paymentResult.paymentHash,
+    status: paymentResult?.status || paymentResult?.paymentStatus || "complete",
+    paymentHash: paymentResult?.paymentHash || null,
   };
+
   transactions.unshift(transaction);
   try {
     await fs.writeFile(
@@ -1074,6 +1106,7 @@ app.post("/pay", express.json(), async (req, res) => {
     );
     res.json({ success: true, transaction });
   } catch (err) {
+    console.error("Failed to write transaction:", err);
     res
       .status(500)
       .json({ success: false, message: "Failed to write transaction." });
@@ -1126,54 +1159,7 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
     });
   }
 
-  // 2. Decode the invoice (optional but gives you amount & description)
-  let invoiceDetails = {};
-  try {
-    const apiKey = process.env.BLINK_API_KEY;
-    const decodeQuery = `
-      query decodeInvoice($input: LnInvoiceDecodeInput!) {
-        lnInvoiceDecode(input: $input) {
-          invoice {
-            description
-            amount
-            paymentHash
-            destination
-          }
-          errors {
-            message
-          }
-        }
-      }
-    `;
-    const decodeVariables = {
-      input: {
-        paymentRequest: invoice,
-      },
-    };
-    const decodeResp = await axios.post(
-      "https://api.blink.sv/graphql",
-      { query: decodeQuery, variables: decodeVariables },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-KEY": apiKey,
-        },
-      },
-    );
-    const decodeResult = decodeResp.data.data.lnInvoiceDecode;
-    if (decodeResult.errors && decodeResult.errors.length > 0) {
-      return res.json({
-        success: false,
-        message: "Invalid invoice: " + decodeResult.errors[0].message,
-      });
-    }
-    invoiceDetails = decodeResult.invoice;
-  } catch (err) {
-    // If decoding fails, still try to pay the invoice
-    invoiceDetails = {};
-  }
-
-  // 3. Pay the invoice via Blink
+  // 2. Pay the invoice via Blink
   let paymentResult;
   try {
     const apiKey = process.env.BLINK_API_KEY;
@@ -1182,16 +1168,10 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
         lnInvoicePaymentSend(input: $input) {
           status
           errors { message }
-          payment {
-            id
-            status
-            paymentHash
-            settlementAmount
-            settlementCurrency
-          }
         }
       }
     `;
+
     const variables = {
       input: {
         walletId,
@@ -1212,14 +1192,20 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
     if (result.errors && result.errors.length > 0) {
       return res.json({ success: false, message: result.errors[0].message });
     }
-    paymentResult = result.payment;
+    paymentResult = result;
   } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Payment failed: " + err.message });
+    // Enhanced error logging for Blink API errors
+    let blinkError = "";
+    if (err.response && err.response.data) {
+      blinkError = JSON.stringify(err.response.data);
+    }
+    return res.status(500).json({
+      success: false,
+      message: "Payment failed: " + err.message + " " + blinkError,
+    });
   }
 
-  // 4. Save transaction locally
+  // 3. Save transaction locally
   let transactions = [];
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -1236,17 +1222,18 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
   }
 
   const transaction = {
-    id: paymentResult.id,
+    id: paymentResult?.paymentId || Date.now(),
     date: new Date().toISOString(),
-    type: "lightning_invoice",
-    receiver: invoiceDetails.description || "Invoice Payment",
-    invoice,
-    amount,
-    currency: currency === "BTC" ? "SATS" : currency,
-    note: note || invoiceDetails.description || "",
+    type: "lightning",
+    receiver: receiverName || "Unknown",
+    lightningAddress: lightningAddress || null,
+    invoice: invoice || null,
+    amount: Number(amount) || 0,
+    currency: currency || "SATS",
+    note: note || "",
     direction: "SENT",
-    status: paymentResult.status,
-    paymentHash: paymentResult.paymentHash,
+    status: paymentResult?.status || paymentResult?.paymentStatus || "complete",
+    paymentHash: paymentResult?.paymentHash || null,
   };
 
   transactions.unshift(transaction);
@@ -1266,9 +1253,23 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
 
 app.post("/decode-invoice", (req, res) => {
   const { invoice } = req.body;
+
   try {
-    const decoded = decode(invoice);
-    res.json({ success: true, decoded });
+    const decoded = bolt11.decode(invoice);
+
+    // Calculate expiry
+    const expiryTag = decoded.tags.find((t) => t.tagName === "expire_time");
+    const expirySeconds = expiryTag ? parseInt(expiryTag.data, 10) : 3600;
+    const invoiceTimestamp = decoded.timestamp;
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = invoiceTimestamp + expirySeconds - now;
+
+    res.json({
+      success: true,
+      decoded,
+      expiresIn,
+      isExpired: expiresIn <= 0,
+    });
   } catch (err) {
     res
       .status(400)
