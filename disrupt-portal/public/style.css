@@ -61,7 +61,37 @@ br {
     color: #2c3e50;
 }
 
+.transactions-table td.amount {
+    color: #16a34a;
+}
+.transactions-table td.amount.negative {
+    color: #dc2626;
+}
+
+.transactions-table td.txid {
+    color: #888;
+    font-family: "Fira Mono", "Menlo", "Consolas", monospace;
+    font-size: 0.85em;
+    word-break: break-all;
+}
+
 .transactions-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 1em;
+}
+.transactions-table th,
+.transactions-table td {
+    padding: 0.5em 1em;
+    border-bottom: 1px solid #eee;
+}
+.transactions-table th {
+    background: #f8fafc;
+    color: #222;
+    font-weight: 600;
+}
+
+..transactions-table {
     width: 100%;
     border-collapse: collapse;
     background-color: white;
@@ -69,7 +99,7 @@ br {
     border-radius: 8px;
     overflow: hidden;
     margin-top: 20px;
-    postition: relative;
+    position: relative;
 }
 
 .transactions-table th {

@@ -1023,27 +1023,45 @@ async function loadTransactions() {
 
 // Render transactions to table
 function renderTransactions(transactions) {
+  console.log("renderTransactions called");
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
   transactions.forEach((txn) => {
+    console.log("Txn:", txn);
+    // Defensive date handling
+    let dateDisplay = "";
+    if (txn.date) {
+      const d = new Date(txn.date);
+      dateDisplay = isNaN(d.getTime()) ? "" : d.toLocaleString();
+    }
     const icon = txn.type === "lightning" ? "⚡" : "";
-    const receiver = txn.receiver || "";
-    const address = txn.address || "";
-    const amount = txn.amount || "";
-    const note = txn.note || "";
+    const receiver = txn.receiver || "Unknown";
+    const amount = txn.amount
+      ? `${icon}${txn.amount} ${txn.currency || "SATS"}`
+      : "";
     const id = txn.id || "";
-    const date = txn.date ? txn.date.split("T")[0] : "";
+    const note = txn.note || "";
+    const status = renderStatus(txn.status);
+
     tbody.innerHTML += `
-        <tr>
-          <td>${date}</td>
-          <td>${receiver}</td>
-          <td>${address}</td>
-          <td>${amount}</td>
-          <td>${note}</td>
-          <td>${id}</td>
-        </tr>
-      `;
+      <tr>
+        <td>${dateDisplay}</td>
+        <td>${receiver}</td>
+        <td>${amount}</td>
+        <td>${id}</td>
+        <td>${note}</td>
+        <td>${status}</td>
+      </tr>
+    `;
   });
+}
+
+function renderStatus(status) {
+  if (!status) return "Paid";
+  const s = status.toLowerCase();
+  if (["complete", "success", "paid"].includes(s)) return "Paid";
+  if (["cancelled", "canceled", "failed"].includes(s)) return "Cancelled";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 // Load employees and suppliers from backend
@@ -1410,6 +1428,8 @@ function updateCurrentDate() {
 
 // Load and display transactions
 async function loadTransactions() {
+  console.log("loadTransactions called");
+
   try {
     const response = await fetch(`${API_BASE}/transactions`);
     const data = await response.json();
@@ -1433,14 +1453,22 @@ function renderTransactions(transactions) {
 
   recentTransactions.forEach((txn) => {
     const row = document.createElement("tr");
+
+    // Add lightning icon if it's a lightning transaction (optional)
+    const icon = txn.type === "lightning" ? "⚡" : "";
+
+    // Define amountClass for coloring
+    const amountClass = txn.amount < 0 ? "amount negative" : "amount";
+    const amountValue = `${txn.amount} ${txn.currency || "SATS"}`;
+
     row.innerHTML = `
-        <td>${new Date(txn.date).toLocaleString()}</td>
-        <td>${txn.receiver || "Unknown"}</td>
-        <td>${txn.amount} ${txn.currency || "SATS"}</td>
-        <td>${txn.id || txn.paymentHash || ""}</td>
-        <td>${txn.note || ""}</td>
-        <td>${renderStatus(txn.status, txn.receiver)}</td>
-      `;
+      <td>${new Date(txn.date).toLocaleString()}</td>
+      <td>${txn.receiver || "Unknown"}</td>
+      <td class="${amountClass}">${amountValue}</td>
+      <td class="txid">${txn.id || ""}</td>
+      <td>${txn.note || ""}</td>
+      <td>${renderStatus(txn.status, txn.receiver)}</td>
+    `;
     tbody.appendChild(row);
   });
 }
