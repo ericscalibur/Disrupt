@@ -1149,19 +1149,25 @@ async function submitNewPayment(event) {
   const amount = document.getElementById("paymentAmount").value;
   const note = document.getElementById("paymentNote").value;
 
+  const payload = {
+    type,
+    id,
+    name,
+    email,
+    lightningAddress,
+    amount,
+    note,
+  };
+  const endpoint = `${API_BASE}/pay`;
+
+  // LOGGING: print endpoint, method, and payload
+  console.log("New Payment API CALL:", endpoint, "POST", payload);
+
   try {
-    const response = await fetch(`${API_BASE}/pay`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        id,
-        name,
-        email,
-        lightningAddress,
-        amount,
-        note,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (data.success) {
@@ -1204,8 +1210,13 @@ async function submitPayInvoice(event) {
     payload.amount = userAmount;
   }
 
+  const endpoint = `${API_BASE}/pay-invoice`;
+
+  // LOGGING: print endpoint, method, and payload
+  console.log("Pay Invoice API CALL:", endpoint, "POST", payload);
+
   try {
-    const response = await fetch(`${API_BASE}/pay-invoice`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -1262,44 +1273,68 @@ async function decodeInvoiceFromFrontend(invoice) {
         html += `<li><strong>Payment Request:</strong> <span style="word-break:break-all;font-family:monospace;">${decoded.paymentRequest}</span></li>`;
       }
 
-      let expiryStr = "";
-      if (decoded.timestamp && decoded.expiry) {
-        // Both fields exist
-        const invoiceCreatedAt = Number(decoded.timestamp); // seconds since epoch
-        const invoiceExpiresAt = invoiceCreatedAt + Number(decoded.expiry); // expiry timestamp in seconds
-        const now = Math.floor(Date.now() / 1000); // current time in seconds
-        const secondsLeft = invoiceExpiresAt - now;
+      // --- EXPIRY LOGIC WITH CONSOLE LOGS ---
+      let expirySeconds = 3600;
+      let expiryTag = null;
+      if (decoded.tags && Array.isArray(decoded.tags)) {
+        expiryTag = decoded.tags.find((t) => t.tagName === "expire_time");
+      }
+      if (expiryTag) expirySeconds = Number(expiryTag.data);
 
-        if (isNaN(secondsLeft)) {
-          expiryStr = `<span style="color:#e74c3c;">Unknown</span>`;
-        } else if (secondsLeft <= 0) {
-          expiryStr = `<span style="color:#ff1744;font-weight:bold;">Expired!</span>`;
-        } else {
-          const expiryHours = Math.floor(secondsLeft / 3600);
-          const expiryMins = Math.floor((secondsLeft % 3600) / 60);
-          if (expiryHours > 0) {
-            expiryStr = `${expiryHours} hour(s) ${expiryMins} min(s)`;
-          } else if (expiryMins > 0) {
-            expiryStr = `${expiryMins} min(s)`;
-          } else {
-            expiryStr = `${secondsLeft} sec(s)`;
-          }
-        }
+      const invoiceCreatedAt = Number(decoded.timestamp);
+      const invoiceExpiresAt = invoiceCreatedAt + expirySeconds;
+      const now = Math.floor(Date.now() / 1000);
+      const secondsLeft = invoiceExpiresAt - now;
+
+      // Console logs for debugging
+      console.log("Decoded Invoice:", decoded);
+      console.log("invoiceCreatedAt (timestamp):", invoiceCreatedAt);
+      console.log("expirySeconds:", expirySeconds);
+      console.log("invoiceExpiresAt:", invoiceExpiresAt);
+      console.log("now (current time):", now);
+      console.log("secondsLeft:", secondsLeft);
+
+      let expiryStr = "";
+      if (isNaN(secondsLeft)) {
+        expiryStr = `<span style="color:#e74c3c;">Unknown</span>`;
+      } else if (secondsLeft <= 0) {
+        expiryStr = `<span style="color:#ff1744;font-weight:bold;">Expired!</span>`;
       } else {
-        expiryStr = `<span style="color:#e74c3c;">EXPIRED!</span>`;
+        const expiryHours = Math.floor(secondsLeft / 3600);
+        const expiryMins = Math.floor((secondsLeft % 3600) / 60);
+        if (expiryHours > 0) {
+          expiryStr = `${expiryHours} hour(s) ${expiryMins} min(s)`;
+        } else if (expiryMins > 0) {
+          expiryStr = `${expiryMins} min(s)`;
+        } else {
+          expiryStr = `${secondsLeft} sec(s)`;
+        }
       }
       html += `<li><strong>Expires In:</strong> ${expiryStr}</li>`;
 
-      // Extract from sections
-      let amountSection = null;
+      // --- AMOUNT LOGIC (robust for all decoders) ---
+      let amountSats = null;
+      if (decoded.satoshis) {
+        amountSats = decoded.satoshis;
+      } else if (decoded.amount) {
+        amountSats = Number(decoded.amount) / 1000;
+      } else if (decoded.tags && Array.isArray(decoded.tags)) {
+        const amtTag = decoded.tags.find((t) => t.tagName === "amount");
+        if (amtTag) amountSats = amtTag.data;
+      } else if (decoded.sections && Array.isArray(decoded.sections)) {
+        const amountSection = decoded.sections.find((s) => s.name === "amount");
+        if (amountSection) amountSats = amountSection.value;
+      }
+      console.log("amountSats:", amountSats);
+
+      if (amountSats && Number(amountSats) > 0) {
+        html += `<li><strong>Amount:</strong> ${amountSats} sats</li>`;
+      }
+
+      // Extract from sections for description and payee
       let descSection = null;
       let payeeSection = null;
       if (decoded.sections && decoded.sections.length > 0) {
-        amountSection = decoded.sections.find((s) => s.name === "amount");
-        if (amountSection) {
-          html += `<li><strong>Amount:</strong> ${amountSection.value} sats</li>`;
-        }
-
         descSection = decoded.sections.find((s) => s.name === "description");
         if (descSection) {
           html += `<li><strong>Description:</strong> ${descSection.value}</li>`;
@@ -1317,7 +1352,7 @@ async function decodeInvoiceFromFrontend(invoice) {
       detailsDiv.innerHTML = `<div class="content-card">${html}</div>`;
 
       // Show or hide the amount entry input
-      if (!amountSection) {
+      if (!amountSats || Number(amountSats) <= 0) {
         if (amountEntryDiv) amountEntryDiv.style.display = "block";
         if (userAmountInput) userAmountInput.required = true;
       } else {
@@ -1399,14 +1434,35 @@ function renderTransactions(transactions) {
   recentTransactions.forEach((txn) => {
     const row = document.createElement("tr");
     row.innerHTML = `
-                  <td>${formatDate(txn.date)}</td>
-                  <td>${txn.receiver || txn.name || "N/A"}</td>
-                  <td class="amount-cell">${txn.amount} ${txn.currency}</td>
-                  <td class="txn-id">${txn.id}</td>
-                  <td>${txn.note || ""}</td>
-                `;
+        <td>${new Date(txn.date).toLocaleString()}</td>
+        <td>${txn.receiver || "Unknown"}</td>
+        <td>${txn.amount} ${txn.currency || "SATS"}</td>
+        <td>${txn.id || txn.paymentHash || ""}</td>
+        <td>${txn.note || ""}</td>
+        <td>${renderStatus(txn.status, txn.receiver)}</td>
+      `;
     tbody.appendChild(row);
   });
+}
+
+// Helper function for status display
+function renderStatus(status, receiver) {
+  if (
+    !status ||
+    status === "complete" ||
+    status === "success" ||
+    status === "paid"
+  ) {
+    // If receiver is "Payment canceled" or status contains "cancel", show Cancelled
+    if (receiver && receiver.toLowerCase().includes("canceled"))
+      return "Cancelled";
+    return "Paid";
+  }
+  if (typeof status === "string" && status.toLowerCase().includes("cancel"))
+    return "Cancelled";
+  if (typeof status === "string" && status.toLowerCase().includes("fail"))
+    return "Failed";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 // Helper function to format date
@@ -2118,11 +2174,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       await loadDepartments();
     }
   };
-
-  const payInvoiceForm = document.getElementById("payInvoiceForm");
-  if (payInvoiceForm) {
-    payInvoiceForm.addEventListener("submit", submitPayInvoice);
-  }
 
   // Add Member button
   const addMemberBtn = document.getElementById("addMemberBtn");
