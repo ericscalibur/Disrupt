@@ -565,18 +565,9 @@ app.post("/api/drafts/decline", async (req, res) => {
   }
 });
 
-// Transaction Management
 app.get("/transactions", async (req, res) => {
   try {
-    // 1. Fetch Blink transactions
-    let blinkTxns = [];
-    try {
-      blinkTxns = await getBlinkTransactions();
-    } catch (blinkErr) {
-      console.error("Error fetching Blink transactions:", blinkErr.message);
-    }
-
-    // 2. Read local transactions.json
+    // 1. Read local transactions.json
     let localTxns = [];
     try {
       const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -588,34 +579,21 @@ app.get("/transactions", async (req, res) => {
       if (err.code !== "ENOENT") throw err;
     }
 
-    const mergedTxns = blinkTxns.map((blinkTxn) => {
-      const local = localTxns.find((t) => t.id === blinkTxn.id);
-      // Determine if USD or BTC
-      let amount, currency;
-      if (blinkTxn.settlementCurrency === "BTC") {
-        amount = blinkTxn.settlementAmount; // sats
-        currency = "SATS";
-      } else if (blinkTxn.settlementCurrency === "USD") {
-        amount = (blinkTxn.settlementAmount / 100).toFixed(2); // dollars
-        currency = "USD";
-      } else {
-        amount = blinkTxn.settlementAmount;
-        currency = blinkTxn.settlementCurrency || "";
-      }
-      return {
-        id: blinkTxn.id,
-        date: blinkTxn.createdAt,
-        receiver: local?.recipient_name || blinkTxn.memo || "Unknown",
-        amount,
-        currency,
-        note: blinkTxn.memo || "",
-        type: "lightning",
-      };
-    });
+    // 2. Filter for valid, real transactions
+    const validTxns = localTxns
+      .filter(
+        (txn) =>
+          typeof txn.date === "string" &&
+          !isNaN(new Date(txn.date).getTime()) &&
+          txn.receiver &&
+          txn.receiver !== "Unknown",
+      )
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 20); // Only show the 20 most recent
 
     res.json({
       success: true,
-      transactions: mergedTxns,
+      transactions: validTxns,
     });
   } catch (err) {
     console.error("Error reading transactions:", err);
@@ -953,7 +931,6 @@ app.delete("/suppliers/:id", async (req, res) => {
   }
 });
 
-// PAY SUPPLIER OR EMPLOYEE via Lightning Address
 app.post("/pay", express.json(), async (req, res) => {
   console.log("PAYMENT REQUEST BODY:", req.body);
 
@@ -1023,8 +1000,20 @@ app.post("/pay", express.json(), async (req, res) => {
     });
   }
 
-  // 3. Pay the invoice via Blink
-  let paymentResult;
+  // 3. Decode the invoice for payment_hash
+  let paymentHash;
+  try {
+    const decoded = bolt11.decode(invoice);
+    paymentHash = decoded.tags.find(
+      (tag) => tag.tagName === "payment_hash",
+    )?.data;
+  } catch (err) {
+    console.error("Failed to decode invoice for payment hash:", err);
+    paymentHash = null;
+  }
+
+  // 4. Pay the invoice via Blink
+  let paymentResult = null;
   try {
     const apiKey = process.env.BLINK_API_KEY;
     const mutation = `
@@ -1043,8 +1032,6 @@ app.post("/pay", express.json(), async (req, res) => {
       },
     };
 
-    console.log("Paying invoice with variables:", variables);
-
     const payResp = await axios.post(
       "https://api.blink.sv/graphql",
       { query: mutation, variables },
@@ -1057,6 +1044,7 @@ app.post("/pay", express.json(), async (req, res) => {
     );
 
     const result = payResp.data.data.lnInvoicePaymentSend;
+
     if (result.errors && result.errors.length > 0) {
       console.error("Blink API returned errors:", result.errors);
       return res.json({ success: false, message: result.errors[0].message });
@@ -1075,7 +1063,7 @@ app.post("/pay", express.json(), async (req, res) => {
     });
   }
 
-  // 4. Save transaction locally
+  // 5. Save transaction locally
   let transactions = [];
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -1083,19 +1071,20 @@ app.post("/pay", express.json(), async (req, res) => {
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
+
   const transaction = {
-    id: paymentResult?.paymentId || Date.now(),
+    id: paymentHash || Date.now(),
     date: new Date().toISOString(),
     type: "lightning",
-    receiver: receiverName || "Unknown",
+    receiver: name || "Unknown",
     lightningAddress: lightningAddress || null,
     invoice: invoice || null,
     amount: Number(amount) || 0,
-    currency: currency || "SATS",
+    currency: "SATS",
     note: note || "",
     direction: "SENT",
-    status: paymentResult?.status || paymentResult?.paymentStatus || "complete",
-    paymentHash: paymentResult?.paymentHash || null,
+    status: paymentResult?.status || "complete",
+    paymentHash: paymentHash,
   };
 
   transactions.unshift(transaction);
@@ -1225,7 +1214,7 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
     id: paymentResult?.paymentId || Date.now(),
     date: new Date().toISOString(),
     type: "lightning",
-    receiver: receiverName || "Unknown",
+    receiver: name || "Unknown",
     lightningAddress: lightningAddress || null,
     invoice: invoice || null,
     amount: Number(amount) || 0,
