@@ -155,40 +155,6 @@ function sortEmployeeDraftsByColumn(columnIdx) {
   addEmployeeDraftsTableSortHandlers();
 }
 
-function addEmployeeDraftsTableSortHandlers() {
-  const table = document.getElementById("draftsTable");
-  if (!table) return;
-  const headers = table.querySelectorAll("th");
-  headers.forEach((th, idx) => {
-    th.style.cursor = "pointer";
-    th.onclick = () => sortEmployeeDraftsByColumn(idx);
-  });
-}
-
-async function loadDrafts() {
-  try {
-    const token = sessionStorage.getItem("token");
-    const response = await fetch(`${API_BASE}/api/drafts`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      // Render drafts table or whatever you need
-      renderPendingDraftsTable(data.drafts);
-    } else {
-      // Handle error, e.g. show empty table
-      renderPendingDraftsTable([]);
-    }
-  } catch (err) {
-    renderPendingDraftsTable([]);
-    console.error("Error loading drafts:", err);
-  }
-}
-
 function renderPendingDraftsTable(drafts, showActions = true) {
   console.log(
     "Rendering drafts for pendingDraftsTable:",
@@ -257,30 +223,78 @@ function renderPendingDraftsTable(drafts, showActions = true) {
   });
 }
 
+function showSettingsPage() {
+  // Hide all other content sections (optional if handled by showContent)
+  document.querySelectorAll(".content-section").forEach((section) => {
+    section.style.display = "none";
+  });
+
+  // Show the settings container
+  const settingsDiv = document.getElementById("settingsContent");
+  if (!settingsDiv) {
+    console.error("Settings container not found!");
+    return;
+  }
+  settingsDiv.style.display = "";
+
+  // Show Forgot Password button only for Employee and Bookkeeper roles
+  const forgotBtn = document.getElementById("forgotPasswordBtn");
+  if (forgotBtn) {
+    if (currentUser.role === "Employee" || currentUser.role === "Bookkeeper") {
+      forgotBtn.style.display = "";
+    } else {
+      forgotBtn.style.display = "none";
+    }
+  }
+
+  // Clear any previous messages
+  const msgDiv = document.getElementById("forgotPasswordMessage");
+  if (msgDiv) msgDiv.textContent = "";
+}
+
 async function loadAccountingPage() {
+  console.log("Starting load Accounting Page...");
   try {
+    const transactionsTable = document.getElementById("transactionsTable");
+    const transactionsTitle = document.getElementById(
+      "transactionsHistoryTitle",
+    );
+    const draftsTable = document.getElementById("draftsTable");
+    const draftsTitle = document.getElementById("draftsHistoryTitle");
+
+    if (
+      !transactionsTable ||
+      !transactionsTitle ||
+      !draftsTable ||
+      !draftsTitle
+    ) {
+      console.error("One or more accounting page elements are missing");
+      return;
+    }
+
     if (currentUser.role === "Admin" || currentUser.role === "Manager") {
       // Show transactions, hide drafts
-      document.getElementById("transactionsTable").style.display = "";
-      document.getElementById("transactionsHistoryTitle").style.display = "";
-      document.getElementById("draftsTable").style.display = "none";
-      document.getElementById("draftsHistoryTitle").style.display = "none";
+      transactionsTable.style.display = "";
+      transactionsTitle.style.display = "";
+      draftsTable.style.display = "none";
+      draftsTitle.style.display = "none";
+
       await loadTransactions();
       await loadPendingDrafts();
     } else {
       // Show drafts, hide transactions
-      document.getElementById("transactionsTable").style.display = "none";
-      document.getElementById("transactionsHistoryTitle").style.display =
-        "none";
-      document.getElementById("draftsTable").style.display = "";
-      document.getElementById("draftsHistoryTitle").style.display = "";
-      await loadDrafts();
+      transactionsTable.style.display = "none";
+      transactionsTitle.style.display = "none";
+      draftsTable.style.display = "";
+      draftsTitle.style.display = "";
+
       await loadEmployeeDrafts();
     }
+
     await updateLightningBalance();
     updateAccountingActionsVisibility();
   } catch (err) {
-    console.log("Failed to load accounting data");
+    console.error("Failed to load accounting data", err);
   }
 }
 
@@ -376,41 +390,47 @@ async function populateDraftRecipientDetails() {
   }
 }
 
-// Show content function
 async function showContent(contentId, event) {
+  console.log(`showContent called with contentId: ${contentId}`);
+
+  // List of all content container IDs
+  const contentIds = [
+    "welcomeContent",
+    "accountingContent",
+    "teamPageContent",
+    "settingsContent",
+    "suppliersContent",
+    "pendingContent",
+  ];
+
   // Hide all content sections
-  document.getElementById("welcomeContent").style.display = "none";
-  document.getElementById("accountingContent").style.display = "none";
-  document.getElementById("teamPageContent").style.display = "none";
-  document.getElementById("settingsContent").style.display = "none";
-  document.getElementById("suppliersContent").style.display = "none";
-  const pendingContent = document.getElementById("pendingContent");
-  if (pendingContent) pendingContent.style.display = "none";
+  contentIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
 
   // Restrict pendingContent to Admin/Manager only
   if (contentId === "pending") {
-    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
-      if (pendingContent) pendingContent.style.display = "block";
-      try {
-        await loadPendingDrafts();
-      } catch (err) {
-        console.error(`Error loading pending data:`, err);
-      }
-    } else {
-      // Optionally, show an error or redirect
+    if (currentUser.role !== "Admin" && currentUser.role !== "Manager") {
       alert("You do not have permission to view this page.");
       return;
     }
-  } else {
-    // Show selected content
-    const contentElement = document.getElementById(
-      (contentId === "team" ? "teamPage" : contentId) + "Content",
-    );
-    if (contentElement) {
-      contentElement.style.display = "block";
-    }
+    const pendingContent = document.getElementById("pendingContent");
+    if (pendingContent) pendingContent.style.display = "block";
   }
 
+  // Show selected content container
+  const containerId =
+    (contentId === "team" ? "teamPage" : contentId) + "Content";
+  const contentElement = document.getElementById(containerId);
+  if (contentElement) {
+    contentElement.style.display = "block";
+    console.log(`Displayed container: ${containerId}`);
+  } else {
+    console.warn(`Content container not found for ID: ${containerId}`);
+  }
+
+  // Special case for welcome page styling
   if (contentId === "welcome") {
     document.body.classList.remove("volcano-mode");
   }
@@ -422,17 +442,31 @@ async function showContent(contentId, event) {
     event.currentTarget.classList.add("active");
   }
 
-  // Load data based on tab
+  // Load data based on the selected tab
   try {
-    if (contentId === "accounting") {
-      loadAccountingPage();
-    } else if (contentId === "team") {
-      await loadTeamMembers();
-      await loadDepartments();
-    } else if (contentId === "suppliers") {
-      loadSuppliers();
+    switch (contentId) {
+      case "accounting":
+        await loadAccountingPage();
+        break;
+      case "team":
+        await loadTeamMembers();
+        await loadDepartments();
+        break;
+      case "pending":
+        await loadPendingDrafts();
+        break;
+      case "settings":
+        await showSettingsPage();
+        break;
+      case "suppliers":
+        await loadSuppliers();
+        break;
+      case "welcome":
+        // No data to load for welcome page
+        break;
+      default:
+        console.warn(`No data loader defined for contentId: ${contentId}`);
     }
-    // No need to loadPendingDrafts() here, it's handled above for pending
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
   }
@@ -496,12 +530,14 @@ function sortPendingDraftsByColumn(columnIdx) {
 }
 
 async function loadPendingDrafts() {
+  console.log("Starting to load Pending Drafts...");
   try {
     const token = sessionStorage.getItem("token");
     const response = await fetch(`${API_BASE}/api/drafts`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
+    console.log("Drafts data:", data);
 
     if (data.success) {
       allDrafts = data.drafts || [];
@@ -513,10 +549,12 @@ async function loadPendingDrafts() {
         true,
       );
       addPendingDraftsTableSortHandlers();
+      console.log("Finishing to load Pending Drafts...");
     } else {
       allDrafts = [];
       allPendingDrafts = [];
       renderPendingDraftsTable([], true);
+      console.warn("Failed to load drafts:", data.message);
     }
   } catch (err) {
     allDrafts = [];
@@ -527,10 +565,10 @@ async function loadPendingDrafts() {
 }
 
 async function loadEmployeeDrafts() {
-  console.log("Loading employee drafts...");
+  console.log("Starting to load Employee Drafts...");
   if (!currentUser || !currentUser.email) {
     console.error("No current user available");
-    renderPendingDraftsTable([]);
+    renderEmployeeDraftsTable([]);
     return;
   }
 
@@ -542,6 +580,11 @@ async function loadEmployeeDrafts() {
         "Content-Type": "application/json",
       },
     });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -549,19 +592,22 @@ async function loadEmployeeDrafts() {
         (d) => d.createdBy.toLowerCase() === currentUser.email.toLowerCase(),
       );
 
-      // Log drafts here after filtering and before rendering
       console.log("Drafts to render:", drafts);
       console.log("Current user email:", currentUser.email);
       drafts.forEach((d) => console.log("Draft createdBy:", d.createdBy));
 
-      renderPendingDraftsTable(drafts);
-      addEmployeeDraftsTableSortHandlers &&
+      renderEmployeeDraftsTable(drafts);
+      console.log("Finishing to load Employee Drafts...");
+
+      if (typeof addEmployeeDraftsTableSortHandlers === "function") {
         addEmployeeDraftsTableSortHandlers();
+      }
     } else {
-      renderPendingDraftsTable([]);
+      renderEmployeeDraftsTable([]);
+      console.warn("Failed to load employee drafts:", data.message);
     }
   } catch (err) {
-    renderPendingDraftsTable([]);
+    renderEmployeeDraftsTable([]);
     console.error("Error loading employee drafts:", err);
   }
 }
@@ -582,7 +628,6 @@ function sortEmployeeDraftsByColumn(columnIdx) {
   const column = columns[columnIdx];
   if (!column) return;
 
-  // Toggle sort direction
   if (employeeDraftsSort.column === column) {
     employeeDraftsSort.asc = !employeeDraftsSort.asc;
   } else {
@@ -593,23 +638,27 @@ function sortEmployeeDraftsByColumn(columnIdx) {
   employeeDrafts.sort((a, b) => {
     let aVal = a[column] || "";
     let bVal = b[column] || "";
+
     if (column === "dateCreated") {
       aVal = new Date(aVal);
       bVal = new Date(bVal);
-    }
-    if (column === "amount") {
+    } else if (column === "amount") {
       aVal = Number(aVal);
       bVal = Number(bVal);
+    } else if (column === "status") {
+      aVal = aVal.toString().toLowerCase();
+      bVal = bVal.toString().toLowerCase();
+    } else {
+      aVal = aVal.toString().toLowerCase();
+      bVal = bVal.toString().toLowerCase();
     }
-    if (column === "status") {
-      aVal = (a.status || "").toLowerCase();
-      bVal = (b.status || "").toLowerCase();
-    }
+
     if (aVal < bVal) return employeeDraftsSort.asc ? -1 : 1;
     if (aVal > bVal) return employeeDraftsSort.asc ? 1 : -1;
     return 0;
   });
-  renderPendingDraftsTable(employeeDrafts, false);
+
+  renderEmployeeDraftsTable(employeeDrafts);
   addEmployeeDraftsTableSortHandlers();
 }
 
@@ -677,13 +726,16 @@ function renderPendingDraftsTable(drafts, showActions = true) {
 
 function renderEmployeeDraftsTable(drafts) {
   console.log("Rendering drafts in Recent Drafts table:", drafts);
-  const tbody = document.querySelector("#pendingDraftsTable tbody");
+  const tbody = document.querySelector("#draftsTable tbody");
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
     return;
   }
+
+  // Sort drafts by dateCreated descending (most recent first)
+  drafts.sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated));
 
   drafts.forEach((draft) => {
     let statusText = "";
@@ -699,16 +751,26 @@ function renderEmployeeDraftsTable(drafts) {
       statusText = "Declined";
       statusClass = "status-declined";
     } else {
-      statusText = draft.status;
+      statusText = draft.status || "";
       statusClass = "";
     }
 
+    const date = draft.dateCreated ? new Date(draft.dateCreated) : null;
+    const formattedDate = date ? date.toLocaleString() : "N/A";
+
+    const formattedAmount = draft.amount
+      ? Number(draft.amount).toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+        })
+      : "";
+
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${formattedDate}</td>
       <td>${draft.recipientName || draft.payee || ""}</td>
       <td>${draft.note || draft.description || ""}</td>
-      <td class="amount-cell">${draft.amount}</td>
+      <td class="amount-cell">${formattedAmount}</td>
       <td><span class="status-label ${statusClass}">${statusText}</span></td>
     `;
     tbody.appendChild(row);
@@ -731,7 +793,7 @@ async function handleDraftApproval(e) {
       const result = await response.json();
       if (result.success) {
         alert("Draft approved!");
-        loadPendingDrafts(); // or loadDrafts()
+        loadPendingDrafts();
       } else {
         alert("Approval failed: " + (result.message || "Unknown error"));
       }
@@ -757,7 +819,7 @@ async function handleDraftDecline(e) {
       const result = await response.json();
       if (result.success) {
         alert("Draft declined successfully.");
-        loadPendingDrafts(); // or loadDrafts()
+        loadPendingDrafts();
       } else {
         alert(
           "Failed to decline draft: " + (result.message || "Unknown error"),
@@ -1009,30 +1071,41 @@ function renderSuppliers(suppliers) {
 // Load transactions
 async function loadTransactions() {
   try {
-    const response = await fetch(`${API_BASE}/transactions`);
+    const token = sessionStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/api/transactions`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
     const data = await response.json();
 
     if (data.success) {
+      console.log("Transactions to render:", data.transactions);
       renderTransactions(data.transactions);
+    } else {
+      renderTransactions([]);
     }
   } catch (err) {
     console.error("Error loading transactions:", err);
+    renderTransactions([]);
   }
 }
 
-// Render transactions to table
 function renderTransactions(transactions) {
   console.log("renderTransactions called");
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
+
   transactions.forEach((txn) => {
     console.log("Txn:", txn);
-    // Defensive date handling
+
     let dateDisplay = "";
     if (txn.date) {
       const d = new Date(txn.date);
       dateDisplay = isNaN(d.getTime()) ? "" : d.toLocaleString();
     }
+
     const icon = txn.type === "lightning" ? "⚡" : "";
     const receiver = txn.receiver || "Unknown";
     const amount = txn.amount
@@ -1042,16 +1115,17 @@ function renderTransactions(transactions) {
     const note = txn.note || "";
     const status = renderStatus(txn.status);
 
-    tbody.innerHTML += `
-      <tr>
-        <td>${dateDisplay}</td>
-        <td>${receiver}</td>
-        <td>${amount}</td>
-        <td>${id}</td>
-        <td>${note}</td>
-        <td>${status}</td>
-      </tr>
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${dateDisplay}</td>
+      <td>${receiver}</td>
+      <td>${amount}</td>
+      <td>${id}</td>
+      <td>${note}</td>
+      <td>${status}</td>
     `;
+
+    tbody.appendChild(row);
   });
 }
 
@@ -1507,8 +1581,8 @@ function formatDate(date) {
   });
 }
 
-// Team Members Functions
 async function loadTeamMembers() {
+  console.log("Starting load Team Members...");
   const tbody = document.querySelector("#teamTable tbody");
   if (!tbody) return;
 
@@ -1531,21 +1605,24 @@ async function loadTeamMembers() {
     }
 
     // --- Filtering logic based on currentUser role ---
-    let filteredUsers = data.users;
-    if (currentUser) {
-      if (currentUser.role === "Admin") {
-        // CEO sees all
-      } else if (
-        currentUser.role === "Manager" ||
-        currentUser.role === "Employee"
-      ) {
-        filteredUsers = data.users.filter(
-          (user) => user.department === currentUser.department,
-        );
-      }
+    let filteredUsers = [];
+    if (!currentUser) {
+      console.warn("No currentUser found, no team members will be shown.");
+    } else if (currentUser.role === "Admin") {
+      filteredUsers = data.users;
+    } else if (
+      ["Manager", "Employee", "Bookkeeper"].includes(currentUser.role)
+    ) {
+      filteredUsers = data.users.filter(
+        (user) =>
+          user.department?.toLowerCase() ===
+          currentUser.department?.toLowerCase(),
+      );
     }
+
     renderTeamMembers(filteredUsers);
     updateTeamActionsVisibility();
+    console.log("Finished loading Team Members");
   } catch (err) {
     console.error("Failed to load team members:", err);
     tbody.innerHTML = `
@@ -1556,19 +1633,30 @@ async function loadTeamMembers() {
         </td>
       </tr>
     `;
+
     const retryButton = document.createElement("button");
     retryButton.textContent = "Retry";
     retryButton.className = "retry-btn";
-    retryButton.onclick = loadTeamMembers;
+    retryButton.onclick = async () => {
+      retryButton.remove();
+      tbody.innerHTML =
+        '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
+      await loadTeamMembers();
+    };
     tbody.querySelector("td").appendChild(retryButton);
   }
 }
 
 function renderTeamMembers(users) {
+  console.log("Rendering team members:", users);
   const tbody = document.querySelector("#teamTable tbody");
+  if (!tbody) {
+    console.error("tbody element not found in renderTeamMembers");
+    return;
+  }
   tbody.innerHTML = "";
 
-  if (users.length === 0) {
+  if (!users || users.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="5" class="loading-message">No team members found for your department.</td>
@@ -1578,13 +1666,17 @@ function renderTeamMembers(users) {
   }
 
   users.forEach((user) => {
+    const dateAddedFormatted = user.dateAdded
+      ? new Date(user.dateAdded).toLocaleDateString()
+      : "N/A";
+
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${user.name}</td>
-      <td>${user.role}</td>
-      <td>${user.department}</td>
-      <td>${user.email}</td>
-      <td>${user.dateAdded || "N/A"}</td>
+      <td>${user.name || "N/A"}</td>
+      <td>${user.role || "N/A"}</td>
+      <td>${user.department || "N/A"}</td>
+      <td>${user.email || "N/A"}</td>
+      <td>${dateAddedFormatted}</td>
     `;
     tbody.appendChild(row);
   });
@@ -1598,16 +1690,28 @@ function updateAccountingActionsVisibility() {
 
   if (!newPaymentBtn || !payInvoiceBtn || !draftBtn) return;
 
+  if (!currentUser || !currentUser.role) {
+    console.warn("currentUser or currentUser.role is not available.");
+    return;
+  }
+
+  const setVisibility = (element, show) => {
+    element.classList.toggle("d-block", show);
+    element.classList.toggle("d-none", !show);
+  };
+
   if (currentUser.role === "Admin" || currentUser.role === "Manager") {
-    newPaymentBtn.style.display = "inline-block";
-    payInvoiceBtn.style.display = "inline-block";
-    draftBtn.style.display = "none";
+    setVisibility(newPaymentBtn, true);
+    setVisibility(payInvoiceBtn, true);
+    setVisibility(draftBtn, false);
   } else if (currentUser.role === "Employee") {
-    newPaymentBtn.style.display = "none";
-    payInvoiceBtn.style.display = "none";
-    draftBtn.style.display = "inline-block";
+    setVisibility(newPaymentBtn, false);
+    setVisibility(payInvoiceBtn, false);
+    setVisibility(draftBtn, true);
   } else if (currentUser.role === "Bookkeeper") {
-    btnRow.style.display = "none";
+    if (btnRow) {
+      btnRow.style.display = "none";
+    }
     return;
   }
 }
@@ -1677,6 +1781,20 @@ function updateTeamActionsVisibility() {
     addBtn.style.display = "none";
     removeBtn.style.display = "none";
   }
+}
+
+async function showTeamPage() {
+  // 1. Show the Team page container
+  document.querySelectorAll(".content-section").forEach((section) => {
+    section.style.display = "none"; // Hide other sections
+  });
+  document.getElementById("teamPageContent").style.display = ""; // Show Team page
+
+  // 2. Load and render team members
+  await loadTeamMembers();
+
+  // 3. Update button visibility
+  updateTeamActionsVisibility();
 }
 
 async function addTeamMember() {
@@ -2036,6 +2154,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const balanceElem = document.getElementById("balanceAmount");
 
   updateCurrentDate();
+
+  if (currentUser) {
+    loadAccountingPage();
+  }
 
   // Check if we're logged in (for page refresh)
   // Restore user session from token (preferred) or user object (legacy)
