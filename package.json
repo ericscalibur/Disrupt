@@ -21,6 +21,8 @@
     "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.2",
     "light-bolt11-decoder": "^3.2.0",
+    "lnurl-pay": "^4.0.0",
+    "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.3",
     "path": "^0.12.7",
     "path-to-regexp": "^6.2.1"

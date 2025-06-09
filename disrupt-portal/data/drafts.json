@@ -59,5 +59,70 @@
     "id": "mbjb1oaboez1hyqrg48",
     "declinedAt": "2025-06-06T00:23:08.199Z",
     "declinedBy": "admin"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 490,
+    "note": "here's a note for you",
+    "dateCreated": "2025-06-09T03:34:36.097Z",
+    "createdBy": "tilcboy44@gmail.com",
+    "status": "approved",
+    "id": "mbojg9xhp9tmjv14kyi",
+    "approvedAt": "2025-06-09T05:34:29.116Z",
+    "approvedBy": "ericscalibur@protonmail.com"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 420,
+    "note": "chill bro",
+    "dateCreated": "2025-06-09T05:49:36.286Z",
+    "createdBy": "tilcboy44@gmail.com",
+    "status": "approved",
+    "id": "mboo9w2w15gaudkhb51h",
+    "approvedAt": "2025-06-09T05:50:31.957Z",
+    "approvedBy": "ericscalibur@protonmail.com"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 421,
+    "note": "hey hey",
+    "dateCreated": "2025-06-09T05:59:04.597Z",
+    "createdBy": "tilcboy44@gmail.com",
+    "status": "approved",
+    "id": "mboom2l9iwczjwnknbf",
+    "approvedAt": "2025-06-09T05:59:21.768Z",
+    "approvedBy": "ericscalibur@protonmail.com"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 423,
+    "note": "buddy",
+    "dateCreated": "2025-06-09T06:08:25.517Z",
+    "createdBy": "tilcboy44@gmail.com",
+    "status": "approved",
+    "id": "mbooy3ehmlv5779bmo",
+    "approvedAt": "2025-06-09T06:08:50.063Z",
+    "approvedBy": "ericscalibur@protonmail.com"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 455,
+    "note": "joy",
+    "dateCreated": "2025-06-09T06:35:29.721Z",
+    "createdBy": "tilcboy44@gmail.com",
+    "status": "approved",
+    "id": "mbopwwn4mql0hd7uhr",
+    "approvedAt": "2025-06-09T06:35:52.096Z",
+    "approvedBy": "ericscalibur@protonmail.com"
   }
 ]

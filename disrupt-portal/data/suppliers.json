@@ -25,5 +25,14 @@
     "lightningAddress": "earl@blink.sv",
     "note": "dont eat the chicken feet",
     "createdAt": "2025-06-06T03:59:04.672Z"
+  },
+  {
+    "id": "sup1749440017541",
+    "name": "420Shop",
+    "contact": "Al",
+    "email": "al@420shop.com",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "note": "here's a note for you",
+    "createdAt": "2025-06-09T03:33:37.541Z"
   }
 ]
