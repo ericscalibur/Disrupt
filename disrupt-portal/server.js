@@ -12,8 +12,13 @@ const bolt11 = require("bolt11");
 const JWT_SECRET = process.env.JWT_SECRET || "your-very-secret-key";
 const jwt = require("jsonwebtoken");
 const lnurlPay = require("lnurl-pay");
+app.use(cors({ origin: "http://localhost:5500" })); // allows cross-origin requests
 app.use(express.json());
 require("dotenv").config();
+
+const fetch = require("node-fetch");
+const BLINK_API_KEY = process.env.BLINK_API_KEY;
+const BLINK_WALLET_ID = process.env.BLINK_WALLET_ID;
 
 // Path configuration
 const PORT = process.env.PORT || 3001;
@@ -25,7 +30,7 @@ const DEPARTMENTS_FILE = path.join(DATA_DIR, "departments.json");
 const DRAFTS_FILE = path.join(DATA_DIR, "drafts.json");
 
 async function getBlinkWallets() {
-  const apiKey = process.env.BLINK_API_KEY;
+  const apiKey = BLINK_API_KEY;
   const query = `
     query {
       me {
@@ -54,7 +59,7 @@ async function getBlinkWallets() {
 }
 
 async function getBlinkTransactions() {
-  const apiKey = process.env.BLINK_API_KEY;
+  const apiKey = BLINK_API_KEY;
   const query = `
     query {
       me {
@@ -223,7 +228,7 @@ app.get("/users", async (req, res) => {
   }
 });
 
-// GET: Fetch all departments
+// GET: all departments
 app.get("/api/departments", async (req, res) => {
   try {
     const data = await fs.readFile(DEPARTMENTS_FILE, "utf8");
@@ -412,30 +417,24 @@ app.get("/lightning-balance", async (req, res) => {
 });
 
 // DRAFTS
-app.post("/api/drafts", async (req, res) => {
+app.post("/api/drafts", authenticateToken, async (req, res) => {
   try {
-    // Get the new draft data from the request body
     const newDraft = req.body;
+    newDraft.id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    newDraft.createdBy = req.user.email;
+    newDraft.dateCreated = new Date().toISOString();
+    newDraft.status = "pending";
 
-    // Read the existing drafts
     let drafts = [];
     try {
       const data = await fs.readFile(DRAFTS_FILE, "utf8");
       drafts = data.trim() ? JSON.parse(data) : [];
     } catch (err) {
-      // If file doesn't exist or is empty, start with an empty array
       drafts = [];
     }
 
-    // Add a unique ID to the draft (timestamp + random, or use a hash/uuid)
-    newDraft.id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-
-    // Add to the drafts array
     drafts.push(newDraft);
-
-    // Save back to the file
     await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
-
     res.json({ success: true, draft: newDraft });
   } catch (err) {
     console.error("Error saving draft:", err);
@@ -443,26 +442,26 @@ app.post("/api/drafts", async (req, res) => {
   }
 });
 
-app.get("/api/drafts", async (req, res) => {
+app.get("/api/drafts", authenticateToken, async (req, res) => {
   try {
     const data = await fs.readFile(DRAFTS_FILE, "utf8");
     const drafts = data.trim() ? JSON.parse(data) : [];
     res.json({ success: true, drafts });
   } catch (err) {
-    res.json({ success: true, drafts: [] });
+    console.error("Error reading drafts:", err);
+    res.status(500).json({ success: false, drafts: [] });
   }
 });
 
-// Example: Secure approve endpoint
 app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
   const { draftId } = req.body;
 
   try {
-    // Load drafts
+    // 1. Load drafts
     const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
     let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
 
-    // Find the draft
+    // 2. Find the draft
     const draftIndex = drafts.findIndex((d) => d.id === draftId);
     if (draftIndex === -1) {
       return res
@@ -470,48 +469,186 @@ app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
         .json({ success: false, message: "Draft not found." });
     }
 
-    // Load users to get the approver's role
+    // 3. Load users, check role
     const usersData = await fs.readFile(USERS_FILE, "utf8");
     const users = usersData.trim() ? JSON.parse(usersData) : [];
     const user = users.find(
       (u) => u.id === req.user.id || u.email === req.user.email,
     );
-
     if (!user || (user.role !== "Admin" && user.role !== "Manager")) {
       return res
         .status(403)
         .json({ success: false, message: "Forbidden: not authorized." });
     }
 
-    // Approve the draft
-    drafts[draftIndex].status = "approved";
-    drafts[draftIndex].approvedAt = new Date().toISOString();
-    drafts[draftIndex].approvedBy = user.email;
+    // 4. Get recipient, amount, memo
+    const draft = drafts[draftIndex];
+    const lightningAddress = draft.recipientLightningAddress || draft.lnAddress;
+    const amount = Number(draft.amountSats || draft.amount);
+    const note = draft.note || draft.memo || "Disrupt Portal Payment";
 
-    // Save updated drafts
+    if (!lightningAddress || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Draft is missing a Lightning Address or amount.",
+      });
+    }
+
+    // 5. Resolve Lightning Address to invoice
+    let invoice;
+    try {
+      const lnurlResp = await lnurlPay.requestInvoice({
+        lnUrlOrAddress: lightningAddress,
+        tokens: amount,
+        comment: note,
+      });
+      invoice = lnurlResp.invoice;
+      if (!invoice)
+        throw new Error("Could not resolve invoice from Lightning Address.");
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to resolve Lightning Address: " + err.message,
+      });
+    }
+
+    // 6. Get BTC wallet ID from Blink (GraphQL)
+    let walletId;
+    try {
+      const apiKey = process.env.BLINK_API_KEY;
+      const walletQuery = `
+        query {
+          me {
+            defaultAccount {
+              wallets {
+                id
+                walletCurrency
+              }
+            }
+          }
+        }
+      `;
+      const walletResp = await axios.post(
+        "https://api.blink.sv/graphql",
+        { query: walletQuery },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-KEY": apiKey,
+          },
+        },
+      );
+      const wallets = walletResp.data.data.me.defaultAccount.wallets;
+      const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+      if (!btcWallet) throw new Error("No BTC wallet found");
+      walletId = btcWallet.id;
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch wallet: " + err.message,
+      });
+    }
+
+    // 7. Decode the invoice for payment_hash
+    let paymentHash;
+    try {
+      const decoded = bolt11.decode(invoice);
+      paymentHash = decoded.tags.find(
+        (tag) => tag.tagName === "payment_hash",
+      )?.data;
+    } catch (err) {
+      paymentHash = null;
+    }
+
+    // 8. Pay the invoice via Blink (GraphQL)
+    let paymentResult = null;
+    try {
+      const apiKey = process.env.BLINK_API_KEY;
+      const mutation = `
+        mutation payInvoice($input: LnInvoicePaymentInput!) {
+          lnInvoicePaymentSend(input: $input) {
+            status
+            errors { message }
+          }
+        }
+      `;
+      const variables = {
+        input: {
+          walletId,
+          paymentRequest: invoice,
+        },
+      };
+      const payResp = await axios.post(
+        "https://api.blink.sv/graphql",
+        { query: mutation, variables },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-KEY": apiKey,
+          },
+        },
+      );
+      const result = payResp.data.data.lnInvoicePaymentSend;
+      if (result.errors && result.errors.length > 0) {
+        return res.json({ success: false, message: result.errors[0].message });
+      }
+      paymentResult = result;
+    } catch (err) {
+      let blinkError = "";
+      if (err.response && err.response.data) {
+        blinkError = JSON.stringify(err.response.data);
+      }
+      return res.status(500).json({
+        success: false,
+        message: "Payment failed: " + err.message + " " + blinkError,
+      });
+    }
+
+    // 9. Approve the draft
+    draft.status = "approved";
+    draft.approvedAt = new Date().toISOString();
+    draft.approvedBy = user.email;
+
+    // 10. Save updated drafts
     await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
 
-    // Add to transactions
-    const txData = await fs.readFile(TRANSACTIONS_FILE, "utf8");
-    let transactions = txData.trim() ? JSON.parse(txData) : [];
-    transactions.push({
-      ...drafts[draftIndex],
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    // 11. Add to transactions
+    let transactions = [];
+    try {
+      const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+      transactions = data.trim() ? JSON.parse(data) : [];
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    const transaction = {
+      id: paymentHash || Date.now(),
       date: new Date().toISOString(),
-    });
+      type: "lightning",
+      receiver: draft.name || "Unknown",
+      lightningAddress: lightningAddress || null,
+      invoice: invoice || null,
+      amount: Number(amount) || 0,
+      currency: "SATS",
+      note: note || "",
+      direction: "SENT",
+      status: paymentResult?.status || "complete",
+      paymentHash: paymentHash,
+    };
+    transactions.unshift(transaction);
     await fs.writeFile(
       TRANSACTIONS_FILE,
       JSON.stringify(transactions, null, 2),
     );
 
-    res.json({ success: true });
+    res.json({ success: true, transaction });
   } catch (err) {
     console.error("Error approving draft:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 });
 
-// Decline draft
 app.post("/api/drafts/decline", async (req, res) => {
   const { draftId } = req.body;
 
@@ -539,28 +676,6 @@ app.post("/api/drafts/decline", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Error declining draft:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-// Decline draft endpoint
-app.post("/api/drafts/decline", async (req, res) => {
-  const { draftId } = req.body;
-  try {
-    const draftsData = await fs.readFile(DRAFTS_FILE, "utf8");
-    let drafts = draftsData.trim() ? JSON.parse(draftsData) : [];
-    const draftIndex = drafts.findIndex((d) => d.id === draftId);
-    if (draftIndex === -1) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Draft not found" });
-    }
-    drafts[draftIndex].status = "declined";
-    drafts[draftIndex].declinedAt = new Date().toISOString();
-    // Save updated drafts
-    await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
-    res.json({ success: true });
-  } catch (err) {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -607,7 +722,7 @@ app.get("/transactions", async (req, res) => {
 
 app.post("/new-transaction", async (req, res) => {
   const { recipient, amountSats, memo } = req.body;
-  const apiKey = process.env.BLINK_API_KEY;
+  const apiKey = BLINK_API_KEY;
 
   // Get your BTC wallet ID from Blink
   let wallets;
@@ -689,6 +804,33 @@ app.post("/new-transaction", async (req, res) => {
     res.json({ success: true, payment: result.payment });
   } catch (err) {
     res.json({ success: false, message: err.message });
+  }
+});
+
+// GET EXCHANGE RATE
+app.get("/btc-usd-rate", async (req, res) => {
+  const url = "https://api.blink.sv/graphql";
+  const query = { query: "query { btcPrice { base offset } }" };
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(query),
+    });
+    const result = await response.json();
+    if (
+      result.data &&
+      result.data.btcPrice &&
+      typeof result.data.btcPrice.base === "number" &&
+      typeof result.data.btcPrice.offset === "number"
+    ) {
+      const { base, offset } = result.data.btcPrice;
+      const rate = base / Math.pow(10, offset);
+      return res.json({ success: true, rate });
+    }
+    res.json({ success: false, rate: null });
+  } catch (err) {
+    res.json({ success: false, rate: null, error: err.message });
   }
 });
 
@@ -965,7 +1107,7 @@ app.post("/pay", express.json(), async (req, res) => {
   // 2. Get BTC wallet ID from Blink
   let walletId;
   try {
-    const apiKey = process.env.BLINK_API_KEY;
+    const apiKey = BLINK_API_KEY;
     const walletQuery = `
       query {
         me {
@@ -1015,7 +1157,7 @@ app.post("/pay", express.json(), async (req, res) => {
   // 4. Pay the invoice via Blink
   let paymentResult = null;
   try {
-    const apiKey = process.env.BLINK_API_KEY;
+    const apiKey = BLINK_API_KEY;
     const mutation = `
       mutation payInvoice($input: LnInvoicePaymentInput!) {
         lnInvoicePaymentSend(input: $input) {
@@ -1114,7 +1256,7 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
   // 1. Get BTC wallet ID from Blink
   let walletId;
   try {
-    const apiKey = process.env.BLINK_API_KEY;
+    const apiKey = BLINK_API_KEY;
     const walletQuery = `
       query {
         me {
@@ -1151,7 +1293,7 @@ app.post("/pay-invoice", express.json(), async (req, res) => {
   // 2. Pay the invoice via Blink
   let paymentResult;
   try {
-    const apiKey = process.env.BLINK_API_KEY;
+    const apiKey = BLINK_API_KEY;
     const mutation = `
       mutation payInvoice($input: LnInvoicePaymentInput!) {
         lnInvoicePaymentSend(input: $input) {

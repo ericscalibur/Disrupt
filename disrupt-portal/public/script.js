@@ -1,4 +1,3 @@
-// API base URL
 const API_BASE = "http://localhost:3001";
 let currentUser = null;
 let membersToRemove = [];
@@ -14,6 +13,11 @@ let allDrafts = [];
 let pendingDraftsSort = { column: null, asc: true };
 let employeeDrafts = [];
 let employeeDraftsSort = { column: null, asc: true };
+let currentBalanceBTC = 0.0;
+let currentBalanceSATS = 0;
+let btcToUsdRate = 70000; // fallback value
+const balanceDisplayModes = ["BTC", "SATS", "USD"];
+let currentBalanceMode = 0;
 
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
@@ -51,6 +55,7 @@ async function login() {
       if (profile.success) {
         currentUser = profile.user;
         showDashboard();
+        loadEmployeeDrafts();
       } else {
         errorMessage.textContent = "Failed to load user profile.";
         errorMessage.style.display = "block";
@@ -162,22 +167,24 @@ function addEmployeeDraftsTableSortHandlers() {
 
 async function loadDrafts() {
   try {
-    const response = await fetch(`${API_BASE}/api/drafts`);
+    const token = sessionStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/api/drafts`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
     const data = await response.json();
+
     if (data.success) {
-      // Filter drafts to only those created by this employee/bookkeeper
-      employeeDrafts = (data.drafts || []).filter(
-        (d) => d.createdBy === currentUser.email, // Adjust property if needed
-      );
-      renderPendingDraftsTable(employeeDrafts, false); // No action buttons
-      addEmployeeDraftsTableSortHandlers();
+      // Render drafts table or whatever you need
+      renderPendingDraftsTable(data.drafts);
     } else {
-      employeeDrafts = [];
-      renderPendingDraftsTable([], false);
+      // Handle error, e.g. show empty table
+      renderPendingDraftsTable([]);
     }
   } catch (err) {
-    employeeDrafts = [];
-    renderPendingDraftsTable([], false);
+    renderPendingDraftsTable([]);
     console.error("Error loading drafts:", err);
   }
 }
@@ -240,6 +247,14 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     `;
     tbody.appendChild(row);
   });
+
+  // Attach event listeners to buttons AFTER rendering
+  tbody.querySelectorAll(".approve-btn").forEach((btn) => {
+    btn.addEventListener("click", handleDraftApproval);
+  });
+  tbody.querySelectorAll(".decline-btn").forEach((btn) => {
+    btn.addEventListener("click", handleDraftDecline);
+  });
 }
 
 async function loadAccountingPage() {
@@ -260,6 +275,7 @@ async function loadAccountingPage() {
       document.getElementById("draftsTable").style.display = "";
       document.getElementById("draftsHistoryTitle").style.display = "";
       await loadDrafts();
+      await loadEmployeeDrafts();
     }
     await updateLightningBalance();
     updateAccountingActionsVisibility();
@@ -268,8 +284,8 @@ async function loadAccountingPage() {
   }
 }
 
-function renderRecentDraftsTable(drafts) {
-  const tbody = document.querySelector("#draftsTable tbody");
+function renderPendingDraftsTable(drafts) {
+  const tbody = document.querySelector("#pendingDraftsTable tbody");
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
@@ -481,7 +497,10 @@ function sortPendingDraftsByColumn(columnIdx) {
 
 async function loadPendingDrafts() {
   try {
-    const response = await fetch(`${API_BASE}/api/drafts`);
+    const token = sessionStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/api/drafts`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const data = await response.json();
 
     if (data.success) {
@@ -508,22 +527,41 @@ async function loadPendingDrafts() {
 }
 
 async function loadEmployeeDrafts() {
+  console.log("Loading employee drafts...");
+  if (!currentUser || !currentUser.email) {
+    console.error("No current user available");
+    renderPendingDraftsTable([]);
+    return;
+  }
+
   try {
-    const response = await fetch(`${API_BASE}/api/drafts`);
+    const token = sessionStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/api/drafts`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
     const data = await response.json();
 
     if (data.success) {
-      const employeeDrafts = (data.drafts || []).filter(
-        (d) => d.createdBy === currentUser.email,
+      const drafts = (data.drafts || []).filter(
+        (d) => d.createdBy.toLowerCase() === currentUser.email.toLowerCase(),
       );
-      renderEmployeeDraftsTable(employeeDrafts);
+
+      // Log drafts here after filtering and before rendering
+      console.log("Drafts to render:", drafts);
+      console.log("Current user email:", currentUser.email);
+      drafts.forEach((d) => console.log("Draft createdBy:", d.createdBy));
+
+      renderPendingDraftsTable(drafts);
       addEmployeeDraftsTableSortHandlers &&
         addEmployeeDraftsTableSortHandlers();
     } else {
-      renderEmployeeDraftsTable([]);
+      renderPendingDraftsTable([]);
     }
   } catch (err) {
-    renderEmployeeDraftsTable([]);
+    renderPendingDraftsTable([]);
     console.error("Error loading employee drafts:", err);
   }
 }
@@ -637,9 +675,9 @@ function renderPendingDraftsTable(drafts, showActions = true) {
   });
 }
 
-// For employees/bookkeepers
 function renderEmployeeDraftsTable(drafts) {
-  const tbody = document.querySelector("#draftsTable tbody");
+  console.log("Rendering drafts in Recent Drafts table:", drafts);
+  const tbody = document.querySelector("#pendingDraftsTable tbody");
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
@@ -675,88 +713,27 @@ function renderEmployeeDraftsTable(drafts) {
     `;
     tbody.appendChild(row);
   });
-}
-
-function renderEmployeeDraftsTable(drafts) {
-  const tbody = document.querySelector("#draftsTable tbody");
-  tbody.innerHTML = "";
-
-  if (!drafts || drafts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
-    return;
-  }
-
-  drafts.forEach((draft) => {
-    let statusText = "";
-    let statusClass = "";
-
-    if (draft.status === "pending") {
-      statusText = "Pending";
-      statusClass = "status-pending";
-    } else if (draft.status === "paid" || draft.status === "approved") {
-      statusText = "Paid";
-      statusClass = "status-paid";
-    } else if (draft.status === "declined") {
-      statusText = "Declined";
-      statusClass = "status-declined";
-    } else {
-      statusText = draft.status;
-      statusClass = "";
-    }
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
-      <td>${draft.recipientName || draft.payee || ""}</td>
-      <td>${draft.note || draft.description || ""}</td>
-      <td class="amount-cell">${draft.amount}</td>
-      <td><span class="status-label ${statusClass}">${statusText}</span></td>
-    `;
-    tbody.appendChild(row);
-  });
-
-  // If you have sorting handlers, call them here:
-  if (typeof addEmployeeDraftsTableSortHandlers === "function") {
-    addEmployeeDraftsTableSortHandlers();
-  }
 }
 
 async function handleDraftApproval(e) {
   const draftId = e.target.getAttribute("data-draft-id");
-
-  if (confirm("Are you sure you want to approve this draft payment?")) {
+  if (confirm("Approve this draft?")) {
     try {
-      // First get the draft details
-      const response = await fetch(`${API_BASE}/api/drafts`);
-      const data = await response.json();
-      const draft = data.drafts.find((d) => d.id === draftId);
-
-      if (!draft) {
-        alert("Draft not found!");
-        return;
-      }
-
-      // Process the payment using your existing payment flow
-      const paymentResult = await processPayment(draft);
-
-      if (paymentResult.success) {
-        // Update the draft status
-        const updateResponse = await fetch(`${API_BASE}/api/drafts/approve`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ draftId }),
-        });
-
-        const updateResult = await updateResponse.json();
-
-        if (updateResult.success) {
-          alert("Draft approved and payment sent successfully!");
-          loadPendingDrafts(); // Refresh the table
-        } else {
-          alert("Payment sent but draft status update failed.");
-        }
+      const token = sessionStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/api/drafts/approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ draftId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        alert("Draft approved!");
+        loadPendingDrafts(); // or loadDrafts()
       } else {
-        alert("Payment failed: " + paymentResult.message);
+        alert("Approval failed: " + (result.message || "Unknown error"));
       }
     } catch (err) {
       alert("Error approving draft: " + err.message);
@@ -766,20 +743,21 @@ async function handleDraftApproval(e) {
 
 async function handleDraftDecline(e) {
   const draftId = e.target.getAttribute("data-draft-id");
-
   if (confirm("Are you sure you want to decline this draft payment?")) {
     try {
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${API_BASE}/api/drafts/decline`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ draftId }),
       });
-
       const result = await response.json();
-
       if (result.success) {
         alert("Draft declined successfully.");
-        loadPendingDrafts(); // Refresh the table
+        loadPendingDrafts(); // or loadDrafts()
       } else {
         alert(
           "Failed to decline draft: " + (result.message || "Unknown error"),
@@ -791,24 +769,21 @@ async function handleDraftDecline(e) {
   }
 }
 
-// Helper function to process the payment
-async function processPayment(draft) {
-  try {
-    // This should use your existing payment logic
-    const response = await fetch(`${API_BASE}/send-payment`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        recipientLightningAddress: draft.recipientLightningAddress,
-        amount: draft.amount,
-        note: draft.note || draft.description || "",
-      }),
-    });
-
-    return await response.json();
-  } catch (err) {
-    return { success: false, message: err.message };
+function updateBalanceDisplay() {
+  const balanceElem = document.getElementById("balanceAmount");
+  let displayValue;
+  switch (balanceDisplayModes[currentBalanceMode]) {
+    case "BTC":
+      displayValue = `${currentBalanceBTC.toFixed(8)} BTC`;
+      break;
+    case "SATS":
+      displayValue = `${currentBalanceSATS.toLocaleString()} SATS`;
+      break;
+    case "USD":
+      displayValue = `$${(currentBalanceBTC * btcToUsdRate).toFixed(2)} USD`;
+      break;
   }
+  balanceElem.textContent = displayValue;
 }
 
 async function updateLightningBalance() {
@@ -818,21 +793,45 @@ async function updateLightningBalance() {
     if (spinnerElem) spinnerElem.style.display = "inline";
     if (balanceElem) balanceElem.style.visibility = "hidden";
 
-    const response = await fetch(`${API_BASE}/lightning-balance`);
-    const data = await response.json();
+    // Fetch both balance and USD rate in parallel
+    const [balanceResp, usdRate] = await Promise.all([
+      fetch(`${API_BASE}/lightning-balance`),
+      fetchBtcUsdRate(),
+    ]);
+    const data = await balanceResp.json();
+
     if (data.success) {
-      const sats = data.balanceSats;
-      const btc = (sats / 100_000_000).toFixed(8);
-      balanceElem.textContent = `${btc} BTC`;
+      currentBalanceSATS = Number(data.balanceSats) || 0;
+      currentBalanceBTC = currentBalanceSATS / 100_000_000;
+      btcToUsdRate = usdRate;
+      currentBalanceMode = 0; // Always start with BTC
+      updateBalanceDisplay();
     } else {
       balanceElem.textContent = "Error";
     }
   } catch (err) {
     balanceElem.textContent = "Error";
+    console.error("Error updating lightning balance:", err);
   } finally {
     if (spinnerElem) spinnerElem.style.display = "none";
     if (balanceElem) balanceElem.style.visibility = "visible";
   }
+}
+
+// GET EXCHANGE RATE
+async function fetchBtcUsdRate() {
+  try {
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+    );
+    const data = await response.json();
+    if (data.bitcoin && data.bitcoin.usd) {
+      return data.bitcoin.usd;
+    }
+  } catch (err) {
+    console.error("Failed to fetch BTC/USD rate from CoinGecko:", err);
+  }
+  return 100000; // fallback
 }
 
 // Load departments and populate the list
@@ -1428,8 +1427,6 @@ function updateCurrentDate() {
 
 // Load and display transactions
 async function loadTransactions() {
-  console.log("loadTransactions called");
-
   try {
     const response = await fetch(`${API_BASE}/transactions`);
     const data = await response.json();
@@ -1983,7 +1980,7 @@ function toggleVolcanoMode() {
   const dashboard = document.getElementById("dashboard");
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
-  const isLoggedIn = sessionStorage.getItem("token") === "logged-in";
+  const isLoggedIn = !!sessionStorage.getItem("token");
   if (!isLoggedIn) {
     body.classList.remove("volcano-mode");
     if (dashboard) dashboard.classList.remove("volcano-mode");
@@ -2029,11 +2026,19 @@ function setVolcanoMode(isVolcano) {
 
 /////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", async () => {
+  const token = sessionStorage.getItem("token");
+  const isLoggedIn = token && token.split(".").length === 3;
+  const volcanoPref = localStorage.getItem("volcanoMode");
+  const body = document.body;
+  const dashboard = document.getElementById("dashboard");
+  const toggleText = document.getElementById("volcanoToggleText");
+  const volcanoSwitch = document.getElementById("volcanoSwitch");
+  const balanceElem = document.getElementById("balanceAmount");
+
   updateCurrentDate();
 
   // Check if we're logged in (for page refresh)
   // Restore user session from token (preferred) or user object (legacy)
-  const token = sessionStorage.getItem("token");
   if (token) {
     try {
       // Fetch user profile from backend
@@ -2053,13 +2058,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     showContent("login");
   }
-
-  const isLoggedIn = sessionStorage.getItem("token") === "logged-in";
-  const volcanoPref = localStorage.getItem("volcanoMode");
-  const body = document.body;
-  const dashboard = document.getElementById("dashboard");
-  const toggleText = document.getElementById("volcanoToggleText");
-  const volcanoSwitch = document.getElementById("volcanoSwitch");
 
   if (isLoggedIn && volcanoPref === "on") {
     body.classList.add("volcano-mode");
@@ -2096,31 +2094,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  document.addEventListener("change", async (e) => {
-    if (e.target.classList.contains("approve-draft-checkbox")) {
-      const draftId = e.target.getAttribute("data-draft-id");
-      if (e.target.checked && confirm("Approve this draft?")) {
-        try {
-          const response = await fetch(`${API_BASE}/api/drafts/approve`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ draftId }),
-          });
-          const result = await response.json();
-          if (result.success) {
-            alert("Draft approved!");
-            loadDrafts();
-          } else {
-            alert("Approval failed: " + (result.message || "Unknown error"));
-          }
-        } catch (err) {
-          alert("Error approving draft: " + err.message);
-        }
-      } else {
-        e.target.checked = false;
-      }
-    }
-  });
+  if (balanceElem) {
+    balanceElem.addEventListener("click", () => {
+      currentBalanceMode =
+        (currentBalanceMode + 1) % balanceDisplayModes.length;
+      updateBalanceDisplay();
+    });
+  }
 
   document.getElementById("th-date").onclick = function () {
     if (pendingDraftsSortColumn === "dateCreated") {
@@ -2336,15 +2316,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         recipientLightningAddress,
         amount,
         note,
-        dateCreated: new Date().toISOString(),
-        createdBy: currentUser.email,
-        status: "pending",
       };
 
       try {
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${API_BASE}/api/drafts`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(draftData),
         });
 
@@ -2353,8 +2334,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           alert("Draft payment submitted successfully!");
           document.getElementById("draftPaymentForm").reset();
           document.getElementById("draftPaymentModal").style.display = "none";
-          // Refresh the Recent Drafts table here:
-          await loadDrafts();
+          await loadEmployeeDrafts();
         } else {
           alert(
             "Failed to submit draft: " + (result.message || "Unknown error"),

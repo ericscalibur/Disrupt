@@ -17,6 +17,16 @@ body {
     color: #2c3e50;
 }
 
+#balanceAmount {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+#balanceAmount:hover {
+    color: #16a34a;
+}
+
 .btc-amount {
     font-weight: bold;
     color: #f7931a; /* Bitcoin orange */
@@ -91,7 +101,7 @@ br {
     font-weight: 600;
 }
 
-..transactions-table {
+.transactions-table {
     width: 100%;
     border-collapse: collapse;
     background-color: white;
