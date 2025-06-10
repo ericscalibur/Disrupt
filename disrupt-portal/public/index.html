@@ -72,13 +72,6 @@
                     </div>
                     <div
                         class="nav-item"
-                        data-content="team"
-                        onclick="showContent('team')"
-                    >
-                        👥 Team
-                    </div>
-                    <div
-                        class="nav-item"
                         id="pendingNav"
                         onclick="showContent('pending', event)"
                     >
@@ -87,6 +80,13 @@
                             style="color: steelblue"
                         ></i
                         >Pending
+                    </div>
+                    <div
+                        class="nav-item"
+                        data-content="team"
+                        onclick="showContent('team')"
+                    >
+                        👥 Team
                     </div>
                     <div
                         class="nav-item"
@@ -211,44 +211,74 @@
                         </div>
                         <br />
                         <!-- Recent Drafts (Admin/Manager only) -->
-                        <h3 class="history-title" id="draftsHistoryTitle" style="display: none">
-                          Recent Drafts
+                        <h3
+                            class="history-title"
+                            id="draftsHistoryTitle"
+                            style="display: none"
+                        >
+                            Recent Drafts
                         </h3>
-                        <table class="transactions-table" id="draftsTable" style="display: none">
-                          <thead>
-                            <tr>
-                              <th>Date</th>
-                              <th>Receiver</th>
-                              <th>Note</th>
-                              <th>Amount</th>
-                              <th>Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <!-- Drafts will be loaded here -->
-                          </tbody>
+                        <table
+                            class="transactions-table"
+                            id="draftsTable"
+                            style="display: none"
+                        >
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Receiver</th>
+                                    <th>Note</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Drafts will be loaded here -->
+                            </tbody>
                         </table>
 
                         <!-- Transaction History (Employee/Bookkeeper only) -->
                         <h3 class="history-title" id="transactionsHistoryTitle">
-                          Transaction History
+                            Transaction History
                         </h3>
-                        <table class="transactions-table" id="transactionsTable">
-                          <thead>
-                            <tr>
-                              <th>Date</th>
-                              <th>Receiver</th>
-                              <th>Amount</th>
-                              <th>Transaction ID</th>
-                              <th>Note</th>
-                              <th>Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <!-- Transactions will be loaded here -->
-                          </tbody>
+                        <table
+                            class="transactions-table"
+                            id="transactionsTable"
+                        >
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Receiver</th>
+                                    <th>Amount</th>
+                                    <th>Transaction ID</th>
+                                    <th>Note</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Transactions will be loaded here -->
+                            </tbody>
                         </table>
-
+                    </div>
+                    <!-- Transaction Details Modal -->
+                    <div id="transactionModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2 class="modal-title">Transaction Details</h2>
+                                <button
+                                    id="closeTransactionModal"
+                                    class="close-btn"
+                                    aria-label="Close modal"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <pre
+                                id="transactionDetails"
+                                style="white-space: pre-wrap; color: ghostwhite"
+                            ></pre>
+                        </div>
+                    </div>
                     <!-- New Payment Modal -->
                     <div id="newPaymentModal" class="modal">
                         <div class="modal-content">
@@ -873,6 +903,15 @@
                             </form>
                         </div>
                     </div>
+
+                    <!-- Modals (these can be outside main-content if you wish) -->
+                    <div id="newPaymentModal" class="modal">...</div>
+                    <div id="payInvoiceModal" class="modal">...</div>
+                    <div id="draftPaymentModal" class="modal">...</div>
+                    <div id="addMemberModal" class="modal">...</div>
+                    <div id="successModal" class="modal">...</div>
+                    <div id="removeMemberModal" class="modal">...</div>
+                    <!-- ...any other modals... -->
                 </div>
             </div>
         </div>
