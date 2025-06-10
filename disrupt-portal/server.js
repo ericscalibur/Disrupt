@@ -12,9 +12,18 @@ const bolt11 = require("bolt11");
 const JWT_SECRET = process.env.JWT_SECRET || "your-very-secret-key";
 const jwt = require("jsonwebtoken");
 const lnurlPay = require("lnurl-pay");
-app.use(cors({ origin: "http://localhost:5500" })); // allows cross-origin requests
 app.use(express.json());
 require("dotenv").config();
+app.use(
+  cors({
+    origin: "http://localhost:5500",
+    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 const fetch = require("node-fetch");
 const BLINK_API_KEY = process.env.BLINK_API_KEY;
@@ -97,16 +106,6 @@ async function getBlinkTransactions() {
     (edge) => edge.node,
   );
 }
-
-// Middleware to avoid CORS error
-app.use(
-  cors({
-    origin: "http://localhost:5500",
-    credentials: true,
-  }),
-);
-app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
 
 // User Authentication
 app.post("/login", async (req, res) => {
@@ -603,6 +602,7 @@ app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
         message: "Payment failed: " + err.message + " " + blinkError,
       });
     }
+    console.log("Draft data on approval:", draft);
 
     // 9. Approve the draft
     draft.status = "approved";
@@ -620,11 +620,13 @@ app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
     } catch (err) {
       if (err.code !== "ENOENT") throw err;
     }
+    console.log("Draft data on approval:", draft);
+
     const transaction = {
       id: paymentHash || Date.now(),
       date: new Date().toISOString(),
       type: "lightning",
-      receiver: draft.name || "Unknown",
+      receiver: draft.recipientName || draft.name || "Unknown",
       lightningAddress: lightningAddress || null,
       invoice: invoice || null,
       amount: Number(amount) || 0,
@@ -633,7 +635,12 @@ app.post("/api/drafts/approve", authenticateToken, async (req, res) => {
       direction: "SENT",
       status: paymentResult?.status || "complete",
       paymentHash: paymentHash,
+      approvedStatus: draft.status,
+      approvedAt: draft.approvedAt,
+      approvedBy: draft.approvedBy,
     };
+    console.log("Constructed transaction:", transaction);
+
     transactions.unshift(transaction);
     await fs.writeFile(
       TRANSACTIONS_FILE,
@@ -680,7 +687,7 @@ app.post("/api/drafts/decline", async (req, res) => {
   }
 });
 
-app.get("/transactions", async (req, res) => {
+app.get("/api/transactions", authenticateToken, async (req, res) => {
   try {
     // 1. Read local transactions.json
     let localTxns = [];
@@ -720,7 +727,7 @@ app.get("/transactions", async (req, res) => {
   }
 });
 
-app.post("/new-transaction", async (req, res) => {
+app.post("/api/transactions", authenticateToken, async (req, res) => {
   const { recipient, amountSats, memo } = req.body;
   const apiKey = BLINK_API_KEY;
 
@@ -808,7 +815,7 @@ app.post("/new-transaction", async (req, res) => {
 });
 
 // GET EXCHANGE RATE
-app.get("/btc-usd-rate", async (req, res) => {
+app.get("/api/btc-usd-rate", authenticateToken, async (req, res) => {
   const url = "https://api.blink.sv/graphql";
   const query = { query: "query { btcPrice { base offset } }" };
   try {
@@ -839,8 +846,6 @@ async function submitNewPayment() {
   const amountSats = document.getElementById("newPaymentAmount").value.trim();
   const memo = document.getElementById("newPaymentMemo").value.trim();
 
-  // Optional: Validate inputs here
-
   try {
     const response = await fetch(`${API_BASE}/new-transaction`, {
       method: "POST",
@@ -861,7 +866,7 @@ async function submitNewPayment() {
   }
 }
 
-app.post("/transactions", async (req, res) => {
+app.post("/api/transactions", authenticateToken, async (req, res) => {
   try {
     const newTransaction = req.body;
 
@@ -923,7 +928,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-app.post("/forgot-password", async (req, res) => {
+app.post("/api/forgot-password", authenticateToken, async (req, res) => {
   const { email } = req.body;
   let users;
 

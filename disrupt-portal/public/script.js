@@ -156,14 +156,7 @@ function sortEmployeeDraftsByColumn(columnIdx) {
 }
 
 function renderPendingDraftsTable(drafts, showActions = true) {
-  console.log(
-    "Rendering drafts for pendingDraftsTable:",
-    drafts,
-    "showActions:",
-    showActions,
-  );
   const tbody = document.querySelector("#pendingDraftsTable tbody");
-  console.log("Found tbody?", tbody);
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
@@ -235,16 +228,15 @@ function showSettingsPage() {
     console.error("Settings container not found!");
     return;
   }
-  settingsDiv.style.display = "";
+  settingsDiv.style.display = "block";
 
-  // Show Forgot Password button only for Employee and Bookkeeper roles
+  // Show Forgot Password button for Employee, Bookkeeper, and Admin roles
   const forgotBtn = document.getElementById("forgotPasswordBtn");
   if (forgotBtn) {
-    if (currentUser.role === "Employee" || currentUser.role === "Bookkeeper") {
-      forgotBtn.style.display = "";
-    } else {
-      forgotBtn.style.display = "none";
-    }
+    const allowedRoles = ["Employee", "Bookkeeper", "Admin"];
+    forgotBtn.style.display = allowedRoles.includes(currentUser.role)
+      ? "inline-block"
+      : "none";
   }
 
   // Clear any previous messages
@@ -253,7 +245,6 @@ function showSettingsPage() {
 }
 
 async function loadAccountingPage() {
-  console.log("Starting load Accounting Page...");
   try {
     const transactionsTable = document.getElementById("transactionsTable");
     const transactionsTitle = document.getElementById(
@@ -391,8 +382,6 @@ async function populateDraftRecipientDetails() {
 }
 
 async function showContent(contentId, event) {
-  console.log(`showContent called with contentId: ${contentId}`);
-
   // List of all content container IDs
   const contentIds = [
     "welcomeContent",
@@ -425,7 +414,6 @@ async function showContent(contentId, event) {
   const contentElement = document.getElementById(containerId);
   if (contentElement) {
     contentElement.style.display = "block";
-    console.log(`Displayed container: ${containerId}`);
   } else {
     console.warn(`Content container not found for ID: ${containerId}`);
   }
@@ -470,6 +458,32 @@ async function showContent(contentId, event) {
   } catch (err) {
     console.error(`Error loading ${contentId} data:`, err);
   }
+}
+
+// Function to format and show transaction details in modal
+function showTransactionDetails(txn) {
+  const detailsContainer = document.getElementById("transactionDetails");
+  if (!detailsContainer) {
+    console.error("Details container element not found");
+    return;
+  }
+
+  const details = `
+<span class="label">Receiver:</span> <span class="data">${txn.receiver}</span>
+<span class="label">Amount:</span> <span class="data">${txn.amount} ${txn.currency}</span>
+<span class="label">Date:</span> <span class="data">${new Date(txn.date).toLocaleString()}</span>
+<span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span>
+<span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span>
+<span class="label">Approved Status:</span> <span class="data">${txn.approvedStatus || "N/A"}</span>
+<span class="label">Approved At:</span> <span class="data">${txn.approvedAt ? new Date(txn.approvedAt).toLocaleString() : "N/A"}</span>
+<span class="label">Approved By:</span> <span class="data">${txn.approvedBy || "N/A"}</span>
+<span class="label">Lightning Address:</span> <span class="data">${txn.lightningAddress || "N/A"}</span>
+<span class="label">Invoice:</span> <span class="data">${txn.invoice || "N/A"}</span>
+<span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span>
+  `.trim();
+
+  detailsContainer.innerHTML = details;
+  document.getElementById("transactionModal").style.display = "flex";
 }
 
 function addPendingDraftsTableSortHandlers() {
@@ -530,14 +544,12 @@ function sortPendingDraftsByColumn(columnIdx) {
 }
 
 async function loadPendingDrafts() {
-  console.log("Starting to load Pending Drafts...");
   try {
     const token = sessionStorage.getItem("token");
     const response = await fetch(`${API_BASE}/api/drafts`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
-    console.log("Drafts data:", data);
 
     if (data.success) {
       allDrafts = data.drafts || [];
@@ -549,7 +561,6 @@ async function loadPendingDrafts() {
         true,
       );
       addPendingDraftsTableSortHandlers();
-      console.log("Finishing to load Pending Drafts...");
     } else {
       allDrafts = [];
       allPendingDrafts = [];
@@ -565,7 +576,6 @@ async function loadPendingDrafts() {
 }
 
 async function loadEmployeeDrafts() {
-  console.log("Starting to load Employee Drafts...");
   if (!currentUser || !currentUser.email) {
     console.error("No current user available");
     renderEmployeeDraftsTable([]);
@@ -592,12 +602,9 @@ async function loadEmployeeDrafts() {
         (d) => d.createdBy.toLowerCase() === currentUser.email.toLowerCase(),
       );
 
-      console.log("Drafts to render:", drafts);
-      console.log("Current user email:", currentUser.email);
       drafts.forEach((d) => console.log("Draft createdBy:", d.createdBy));
 
       renderEmployeeDraftsTable(drafts);
-      console.log("Finishing to load Employee Drafts...");
 
       if (typeof addEmployeeDraftsTableSortHandlers === "function") {
         addEmployeeDraftsTableSortHandlers();
@@ -725,7 +732,6 @@ function renderPendingDraftsTable(drafts, showActions = true) {
 }
 
 function renderEmployeeDraftsTable(drafts) {
-  console.log("Rendering drafts in Recent Drafts table:", drafts);
   const tbody = document.querySelector("#draftsTable tbody");
   tbody.innerHTML = "";
 
@@ -779,9 +785,11 @@ function renderEmployeeDraftsTable(drafts) {
 
 async function handleDraftApproval(e) {
   const draftId = e.target.getAttribute("data-draft-id");
+
   if (confirm("Approve this draft?")) {
     try {
       const token = sessionStorage.getItem("token");
+
       const response = await fetch(`${API_BASE}/api/drafts/approve`, {
         method: "POST",
         headers: {
@@ -790,10 +798,16 @@ async function handleDraftApproval(e) {
         },
         body: JSON.stringify({ draftId }),
       });
+
       const result = await response.json();
+
       if (result.success) {
         alert("Draft approved!");
-        loadPendingDrafts();
+        await loadPendingDrafts();
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        await loadTransactions();
       } else {
         alert("Approval failed: " + (result.message || "Unknown error"));
       }
@@ -819,7 +833,8 @@ async function handleDraftDecline(e) {
       const result = await response.json();
       if (result.success) {
         alert("Draft declined successfully.");
-        loadPendingDrafts();
+        await loadPendingDrafts();
+        await loadTransactions();
       } else {
         alert(
           "Failed to decline draft: " + (result.message || "Unknown error"),
@@ -1081,7 +1096,6 @@ async function loadTransactions() {
     const data = await response.json();
 
     if (data.success) {
-      console.log("Transactions to render:", data.transactions);
       renderTransactions(data.transactions);
     } else {
       renderTransactions([]);
@@ -1093,13 +1107,10 @@ async function loadTransactions() {
 }
 
 function renderTransactions(transactions) {
-  console.log("renderTransactions called");
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
 
   transactions.forEach((txn) => {
-    console.log("Txn:", txn);
-
     let dateDisplay = "";
     if (txn.date) {
       const d = new Date(txn.date);
@@ -1251,9 +1262,6 @@ async function submitNewPayment(event) {
   };
   const endpoint = `${API_BASE}/pay`;
 
-  // LOGGING: print endpoint, method, and payload
-  console.log("New Payment API CALL:", endpoint, "POST", payload);
-
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -1302,9 +1310,6 @@ async function submitPayInvoice(event) {
   }
 
   const endpoint = `${API_BASE}/pay-invoice`;
-
-  // LOGGING: print endpoint, method, and payload
-  console.log("Pay Invoice API CALL:", endpoint, "POST", payload);
 
   try {
     const response = await fetch(endpoint, {
@@ -1377,14 +1382,6 @@ async function decodeInvoiceFromFrontend(invoice) {
       const now = Math.floor(Date.now() / 1000);
       const secondsLeft = invoiceExpiresAt - now;
 
-      // Console logs for debugging
-      console.log("Decoded Invoice:", decoded);
-      console.log("invoiceCreatedAt (timestamp):", invoiceCreatedAt);
-      console.log("expirySeconds:", expirySeconds);
-      console.log("invoiceExpiresAt:", invoiceExpiresAt);
-      console.log("now (current time):", now);
-      console.log("secondsLeft:", secondsLeft);
-
       let expiryStr = "";
       if (isNaN(secondsLeft)) {
         expiryStr = `<span style="color:#e74c3c;">Unknown</span>`;
@@ -1416,7 +1413,6 @@ async function decodeInvoiceFromFrontend(invoice) {
         const amountSection = decoded.sections.find((s) => s.name === "amount");
         if (amountSection) amountSats = amountSection.value;
       }
-      console.log("amountSats:", amountSats);
 
       if (amountSats && Number(amountSats) > 0) {
         html += `<li><strong>Amount:</strong> ${amountSats} sats</li>`;
@@ -1502,16 +1498,45 @@ function updateCurrentDate() {
 // Load and display transactions
 async function loadTransactions() {
   try {
-    const response = await fetch(`${API_BASE}/transactions`);
+    const token = sessionStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("No authentication token found. Please log in.");
+    }
+
+    const response = await fetch(
+      `${API_BASE}/api/transactions?ts=${Date.now()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (response.status === 401) {
+      // Unauthorized - token invalid or expired
+      throw new Error("Unauthorized access. Please log in again.");
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const text = await response.text();
+      throw new Error(`Expected JSON but received:\n${text.substring(0, 200)}`);
+    }
+
     const data = await response.json();
 
     if (data.success) {
       renderTransactions(data.transactions);
     } else {
-      console.error("Failed to load transactions:", data.message);
+      console.warn("No transactions returned or success false");
+      renderTransactions([]);
     }
   } catch (err) {
     console.error("Error loading transactions:", err);
+    alert(err.message);
+    renderTransactions([]);
   }
 }
 
@@ -1525,10 +1550,7 @@ function renderTransactions(transactions) {
   recentTransactions.forEach((txn) => {
     const row = document.createElement("tr");
 
-    // Add lightning icon if it's a lightning transaction (optional)
     const icon = txn.type === "lightning" ? "⚡" : "";
-
-    // Define amountClass for coloring
     const amountClass = txn.amount < 0 ? "amount negative" : "amount";
     const amountValue = `${txn.amount} ${txn.currency || "SATS"}`;
 
@@ -1540,6 +1562,12 @@ function renderTransactions(transactions) {
       <td>${txn.note || ""}</td>
       <td>${renderStatus(txn.status, txn.receiver)}</td>
     `;
+
+    row.style.cursor = "pointer";
+    row.addEventListener("click", () => {
+      showTransactionDetails(txn);
+    });
+
     tbody.appendChild(row);
   });
 }
@@ -1582,10 +1610,13 @@ function formatDate(date) {
 }
 
 async function loadTeamMembers() {
-  console.log("Starting load Team Members...");
   const tbody = document.querySelector("#teamTable tbody");
-  if (!tbody) return;
+  if (!tbody) {
+    console.warn("Team table tbody element not found.");
+    return;
+  }
 
+  // Show loading message
   tbody.innerHTML =
     '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
 
@@ -1596,18 +1627,21 @@ async function loadTeamMembers() {
       try {
         const errorData = await response.json();
         if (errorData.message) errorMsg += ` - ${errorData.message}`;
-      } catch (e) {}
+      } catch (e) {
+        // Ignore JSON parse errors here
+      }
       throw new Error(errorMsg);
     }
+
     const data = await response.json();
     if (!data || !Array.isArray(data.users)) {
       throw new Error("Invalid response format from server");
     }
 
-    // --- Filtering logic based on currentUser role ---
+    // Filter users based on currentUser role and department
     let filteredUsers = [];
     if (!currentUser) {
-      console.warn("No currentUser found, no team members will be shown.");
+      console.warn("No currentUser found; no team members will be shown.");
     } else if (currentUser.role === "Admin") {
       filteredUsers = data.users;
     } else if (
@@ -1621,8 +1655,11 @@ async function loadTeamMembers() {
     }
 
     renderTeamMembers(filteredUsers);
-    updateTeamActionsVisibility();
-    console.log("Finished loading Team Members");
+
+    // Update UI actions visibility if function exists
+    if (typeof updateTeamActionsVisibility === "function") {
+      updateTeamActionsVisibility();
+    }
   } catch (err) {
     console.error("Failed to load team members:", err);
     tbody.innerHTML = `
@@ -1634,6 +1671,7 @@ async function loadTeamMembers() {
       </tr>
     `;
 
+    // Add retry button
     const retryButton = document.createElement("button");
     retryButton.textContent = "Retry";
     retryButton.className = "retry-btn";
@@ -1643,12 +1681,16 @@ async function loadTeamMembers() {
         '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
       await loadTeamMembers();
     };
-    tbody.querySelector("td").appendChild(retryButton);
+
+    // Append retry button inside the error message cell
+    const errorCell = tbody.querySelector("td.error-message");
+    if (errorCell) {
+      errorCell.appendChild(retryButton);
+    }
   }
 }
 
 function renderTeamMembers(users) {
-  console.log("Rendering team members:", users);
   const tbody = document.querySelector("#teamTable tbody");
   if (!tbody) {
     console.error("tbody element not found in renderTeamMembers");
@@ -1683,15 +1725,24 @@ function renderTeamMembers(users) {
 }
 
 function updateAccountingActionsVisibility() {
-  const btnRow = document.getElementById("accountingBtnRow"); // add id to your <div>
+  const btnRow = document.getElementById("accountingBtnRow"); // container div for buttons
   const newPaymentBtn = document.getElementById("newPaymentBtn");
   const payInvoiceBtn = document.getElementById("payInvoiceBtn");
   const draftBtn = document.getElementById("draftPaymentBtn");
 
-  if (!newPaymentBtn || !payInvoiceBtn || !draftBtn) return;
+  if (!btnRow || !newPaymentBtn || !payInvoiceBtn || !draftBtn) {
+    console.warn("One or more accounting buttons or container not found.");
+    return;
+  }
 
   if (!currentUser || !currentUser.role) {
     console.warn("currentUser or currentUser.role is not available.");
+    // Hide all buttons and container if no user info
+    btnRow.style.display = "none";
+    [newPaymentBtn, payInvoiceBtn, draftBtn].forEach((btn) => {
+      btn.classList.remove("d-block");
+      btn.classList.add("d-none");
+    });
     return;
   }
 
@@ -1700,19 +1751,41 @@ function updateAccountingActionsVisibility() {
     element.classList.toggle("d-none", !show);
   };
 
-  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
-    setVisibility(newPaymentBtn, true);
-    setVisibility(payInvoiceBtn, true);
-    setVisibility(draftBtn, false);
-  } else if (currentUser.role === "Employee") {
-    setVisibility(newPaymentBtn, false);
-    setVisibility(payInvoiceBtn, false);
-    setVisibility(draftBtn, true);
-  } else if (currentUser.role === "Bookkeeper") {
-    if (btnRow) {
+  switch (currentUser.role) {
+    case "Admin":
+    case "Manager":
+      // Show payment buttons, hide draft button
+      setVisibility(newPaymentBtn, true);
+      setVisibility(payInvoiceBtn, true);
+      setVisibility(draftBtn, false);
+      btnRow.style.display = "flex"; // Show button row
+      break;
+
+    case "Employee":
+      // Show draft button, hide payment buttons
+      setVisibility(newPaymentBtn, false);
+      setVisibility(payInvoiceBtn, false);
+      setVisibility(draftBtn, true);
+      btnRow.style.display = "flex"; // Show button row
+      break;
+
+    case "Bookkeeper":
+      // Hide all buttons and button row
       btnRow.style.display = "none";
-    }
-    return;
+      [newPaymentBtn, payInvoiceBtn, draftBtn].forEach((btn) => {
+        btn.classList.remove("d-block");
+        btn.classList.add("d-none");
+      });
+      break;
+
+    default:
+      // Hide all buttons and button row for unknown roles
+      btnRow.style.display = "none";
+      [newPaymentBtn, payInvoiceBtn, draftBtn].forEach((btn) => {
+        btn.classList.remove("d-block");
+        btn.classList.add("d-none");
+      });
+      break;
   }
 }
 
@@ -1772,8 +1845,19 @@ function updateTeamActionsVisibility() {
   const addBtn = document.getElementById("addMemberBtn");
   const removeBtn = document.getElementById("removeMemberBtn");
 
-  if (!addBtn || !removeBtn) return;
+  if (!addBtn || !removeBtn) {
+    console.warn("Add or Remove member buttons not found.");
+    return;
+  }
 
+  if (!currentUser || !currentUser.role) {
+    console.warn("currentUser or currentUser.role is not defined.");
+    addBtn.style.display = "none";
+    removeBtn.style.display = "none";
+    return;
+  }
+
+  // Show buttons only for Admin and Manager roles
   if (currentUser.role === "Admin" || currentUser.role === "Manager") {
     addBtn.style.display = "inline-block";
     removeBtn.style.display = "inline-block";
@@ -2152,6 +2236,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
   const balanceElem = document.getElementById("balanceAmount");
+  const detailsContainer = document.getElementById("transactionDetails");
+  const transactionModal = document.getElementById("transactionModal");
+  const transactionCloseBtn = document.getElementById("closeTransactionModal");
+  const transactionDetailsContainer =
+    document.getElementById("transactionDetails");
 
   updateCurrentDate();
 
@@ -2382,6 +2471,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  transactionCloseBtn.addEventListener("click", () => {
+    transactionModal.style.display = "none";
+  });
+
+  window.addEventListener("click", (event) => {
+    if (event.target === transactionModal) {
+      transactionModal.style.display = "none";
+    }
+  });
+
   // Close when clicking outside modal
   window.addEventListener("click", (event) => {
     if (event.target === document.getElementById("removeMemberModal")) {
@@ -2499,7 +2598,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  const closeModalBtn = document.getElementById("closeModalBtn");
+  const closeModalBtn = document.getElementById("closeModal");
   if (closeModalBtn) {
     closeModalBtn.addEventListener("click", () => {
       document.getElementById("newPaymentModal").style.display = "none";

@@ -71,6 +71,27 @@ br {
     color: #2c3e50;
 }
 
+#transactionDetails {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    color: #7f8c8d; /* default text color (gray) */
+    font-family: monospace; /* optional for invoice/hash */
+}
+
+#transactionDetails .label {
+    color: white; /* labels in white */
+    font-weight: bold;
+    display: inline-block;
+    width: 140px; /* fixed width for alignment */
+}
+
+#transactionDetails .data {
+    color: #7f8c8d; /* same gray as close button */
+    word-break: break-all; /* break long strings */
+}
+
 .transactions-table td.amount {
     color: #16a34a;
 }
@@ -702,6 +723,14 @@ input:checked + .slider:before {
 
 .danger-btn:hover {
     background-color: #c0392b;
+}
+
+.d-none {
+    display: none !important;
+}
+
+.d-block {
+    display: block !important;
 }
 
 /* VOLCANO MODE */
