@@ -33,8 +33,10 @@
     "note": "lots of carpet",
     "dateCreated": "2025-06-05T11:32:54.453Z",
     "createdBy": "tilcboy44@gmail.com",
-    "status": "pending",
-    "id": "mbjarz2p7ucfyvr5rj3"
+    "status": "declined",
+    "id": "mbjarz2p7ucfyvr5rj3",
+    "declinedAt": "2025-06-11T21:59:36.835Z",
+    "declinedBy": "ericscalibur@protonmail.com"
   },
   {
     "recipientEmail": "xu@japanesegarden.com",
@@ -44,8 +46,10 @@
     "note": "KOI",
     "dateCreated": "2025-06-05T11:36:33.711Z",
     "createdBy": "tilcboy44@gmail.com",
-    "status": "pending",
-    "id": "mbjawo8pzukdtx6beag"
+    "status": "declined",
+    "id": "mbjawo8pzukdtx6beag",
+    "declinedAt": "2025-06-11T21:59:31.262Z",
+    "declinedBy": "ericscalibur@protonmail.com"
   },
   {
     "recipientEmail": "xu@japanesegarden.com",
@@ -214,6 +218,19 @@
     "dateCreated": "2025-06-10T05:44:40.526Z",
     "status": "approved",
     "approvedAt": "2025-06-10T05:45:30.218Z",
+    "approvedBy": "ericscalibur@protonmail.com"
+  },
+  {
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 520,
+    "note": "andrea",
+    "id": "mbr9m846g089l1k4lqt",
+    "createdBy": "tilcboy44@gmail.com",
+    "dateCreated": "2025-06-11T01:22:36.054Z",
+    "status": "approved",
+    "approvedAt": "2025-06-11T01:24:33.459Z",
     "approvedBy": "ericscalibur@protonmail.com"
   }
 ]

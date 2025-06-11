@@ -402,6 +402,7 @@
                                         id="invoiceString"
                                         oninput="onInvoiceInputChange()"
                                         autocomplete="off"
+                                        required
                                     />
                                     <div
                                         id="invoiceDetails"
@@ -428,6 +429,24 @@
                                         />
                                     </div>
                                 </div>
+
+                                <!-- New Receiver Name input -->
+                                <div class="form-group">
+                                    <label for="receiverNameInput"
+                                        >Receiver Name
+                                        <span style="color: #e74c3c"
+                                            >*</span
+                                        ></label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="receiverNameInput"
+                                        placeholder="Enter recipient name"
+                                        autocomplete="off"
+                                        required
+                                    />
+                                </div>
+
                                 <div class="form-group">
                                     <label for="invoiceNote"
                                         >Note (optional)</label
@@ -439,6 +458,7 @@
                                         autocomplete="off"
                                     />
                                 </div>
+
                                 <div class="modal-footer">
                                     <button type="submit" class="submit-btn">
                                         Pay
@@ -447,6 +467,8 @@
                             </form>
                         </div>
                     </div>
+
+                    <!-- DRAFT PAYMENT MODAL -->
                     <div
                         id="draftPaymentModal"
                         class="modal"

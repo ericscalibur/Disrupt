@@ -95,6 +95,11 @@ br {
 .transactions-table td.amount {
     color: #16a34a;
 }
+
+.transactions-table td.amount.amount-blue {
+    color: #3498db !important;
+}
+
 .transactions-table td.amount.negative {
     color: #dc2626;
 }
@@ -150,6 +155,10 @@ br {
 
 .transactions-table tr:last-child td {
     border-bottom: none;
+}
+
+.amount-blue {
+    color: #3498db; /* Replace with your exact blue from your color scheme */
 }
 
 .amount-cell {
