@@ -252,15 +252,6 @@ function showSettingsPage() {
   }
   settingsDiv.style.display = "block";
 
-  // Show Forgot Password button for Employee, Bookkeeper, and Admin roles
-  const forgotBtn = document.getElementById("forgotPasswordBtn");
-  if (forgotBtn) {
-    const allowedRoles = ["Employee", "Bookkeeper", "Admin"];
-    forgotBtn.style.display = allowedRoles.includes(currentUser.role)
-      ? "inline-block"
-      : "none";
-  }
-
   // Clear any previous messages
   const msgDiv = document.getElementById("forgotPasswordMessage");
   if (msgDiv) msgDiv.textContent = "";
@@ -370,62 +361,54 @@ async function populateDraftRecipientDropdown() {
     }
 
     const data = await response.json();
-    const suppliers = data.suppliers || [];
+    suppliersList = data.suppliers || [];
 
-    suppliers.forEach((supplier) => {
+    suppliersList.forEach((supplier) => {
       const option = document.createElement("option");
-      option.value = supplier.email; // or supplier.id if you use IDs
+      option.value = supplier.id; // use id consistently
       option.textContent = supplier.name;
       select.appendChild(option);
     });
+
+    // Optionally, select the first supplier and fill details
+    if (suppliersList.length > 0) {
+      select.value = suppliersList[0].id;
+      populateDraftRecipientDetails();
+    } else {
+      document.getElementById("draftRecipientName").value = "";
+      document.getElementById("draftRecipientEmail").value = "";
+      document.getElementById("draftRecipientLightningAddress").value = "";
+    }
   } catch (err) {
     console.error("Failed to load suppliers:", err);
     select.innerHTML = '<option value="">Unable to load suppliers</option>';
   }
 }
 
-// Open the Draft Payment modal
 async function populateDraftRecipientDetails() {
-  const select = document.getElementById("draftRecipientSelect");
-  const email = select.value;
-  if (!email) {
-    document.getElementById("draftRecipientName").value = "";
-    document.getElementById("draftRecipientEmail").value = "";
-    document.getElementById("draftRecipientLightningAddress").value = "";
+  const type = document.getElementById("recipientType").value;
+  const id = document.getElementById("recipientSelect").value;
+
+  if (!id) {
+    // Clear fields if no recipient selected
+    document.getElementById("recipientName").value = "";
+    document.getElementById("recipientEmail").value = "";
+    document.getElementById("recipientLightningAddress").value = "";
     return;
   }
 
-  try {
-    const token = sessionStorage.getItem("token");
-    if (!token) {
-      alert("Please log in to load supplier details.");
-      return;
-    }
+  let recipient;
+  if (type === "employee") {
+    recipient = await fetchUserById(id); // implement this to fetch user data
+  } else if (type === "supplier") {
+    recipient = await fetchSupplierById(id); // implement this to fetch supplier data
+  }
 
-    const response = await fetch(`${API_BASE}/suppliers`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to load suppliers: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const suppliers = data.suppliers || [];
-    const supplier = suppliers.find((s) => s.email === email);
-
-    if (supplier) {
-      document.getElementById("draftRecipientName").value = supplier.name || "";
-      document.getElementById("draftRecipientEmail").value =
-        supplier.email || "";
-      document.getElementById("draftRecipientLightningAddress").value =
-        supplier.lightningAddress || "";
-    }
-  } catch (err) {
-    console.error("Failed to load supplier details:", err);
+  if (recipient) {
+    document.getElementById("recipientName").value = recipient.name || "";
+    document.getElementById("recipientEmail").value = recipient.email || "";
+    document.getElementById("recipientLightningAddress").value =
+      recipient.lightningAddress || "";
   }
 }
 
@@ -487,6 +470,7 @@ async function showContent(contentId, event) {
       case "team":
         await loadTeamMembers();
         await loadDepartments();
+        await updateTeamActionsVisibility();
         break;
       case "pending":
         await loadPendingDrafts();
@@ -639,14 +623,13 @@ async function loadPendingDrafts() {
 }
 
 async function loadEmployeeDrafts() {
-  if (!currentUser || !currentUser.email) {
-    console.error("No current user available");
-    renderEmployeeDraftsTable([]);
-    return;
-  }
-
   try {
     const token = sessionStorage.getItem("token");
+    if (!token) {
+      alert("Please log in to view drafts.");
+      return;
+    }
+
     const response = await fetch(`${API_BASE}/drafts`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -655,34 +638,29 @@ async function loadEmployeeDrafts() {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      throw new Error(`Failed to load drafts: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (data.success) {
-      const drafts = (data.drafts || []).filter(
-        (d) => d.createdBy.toLowerCase() === currentUser.email.toLowerCase(),
-      );
+      // Trust backend filtering - no client-side filtering needed
+      renderEmployeeDraftsTable(data.drafts || []);
 
-      drafts.forEach((d) => console.log("Draft createdBy:", d.createdBy));
-
-      renderEmployeeDraftsTable(drafts);
-
+      // Optional: Initialize sorting if needed
       if (typeof addEmployeeDraftsTableSortHandlers === "function") {
         addEmployeeDraftsTableSortHandlers();
       }
     } else {
       renderEmployeeDraftsTable([]);
-      console.warn("Failed to load employee drafts:", data.message);
+      console.warn("Failed to load drafts:", data.message);
     }
   } catch (err) {
     renderEmployeeDraftsTable([]);
-    console.error("Error loading employee drafts:", err);
+    console.error("Error loading drafts:", err);
   }
 }
 
-// Add this after rendering the table
 function addEmployeeDraftsTableSortHandlers() {
   const table = document.getElementById("draftsTable");
   if (!table) return;
@@ -715,9 +693,6 @@ function sortEmployeeDraftsByColumn(columnIdx) {
     } else if (column === "amount") {
       aVal = Number(aVal);
       bVal = Number(bVal);
-    } else if (column === "status") {
-      aVal = aVal.toString().toLowerCase();
-      bVal = bVal.toString().toLowerCase();
     } else {
       aVal = aVal.toString().toLowerCase();
       bVal = bVal.toString().toLowerCase();
@@ -828,10 +803,7 @@ function renderEmployeeDraftsTable(drafts) {
     const formattedDate = date ? date.toLocaleString() : "N/A";
 
     const formattedAmount = draft.amount
-      ? Number(draft.amount).toLocaleString("en-US", {
-          style: "currency",
-          currency: "USD",
-        })
+      ? Number(draft.amount).toLocaleString("en-US") + " SATS"
       : "";
 
     const row = document.createElement("tr");
@@ -1260,7 +1232,10 @@ async function loadSuppliers() {
 }
 
 function renderSuppliers(suppliers) {
+  // Sort suppliers by creation date descending
   suppliers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  // Render suppliers table
   const tbody = document.querySelector("#suppliersTable tbody");
   tbody.innerHTML = "";
   suppliers.forEach((supplier) => {
@@ -1284,6 +1259,31 @@ function renderSuppliers(suppliers) {
     `;
     tbody.appendChild(tr);
   });
+
+  // Populate recipient dropdown
+  const select = document.getElementById("recipientSelect");
+  if (!select) {
+    console.error("Recipient dropdown element not found");
+    return;
+  }
+
+  select.innerHTML = '<option value="">Select Supplier</option>';
+  suppliers.forEach((supplier) => {
+    const option = document.createElement("option");
+    option.value = supplier.id;
+    option.textContent = supplier.name || "Unnamed Supplier";
+    select.appendChild(option);
+  });
+
+  // Auto-select first supplier and populate details if available
+  if (suppliers.length > 0) {
+    select.value = suppliers[0].id;
+    populateRecipientDetails();
+  } else {
+    document.getElementById("recipientName").value = "";
+    document.getElementById("recipientEmail").value = "";
+    document.getElementById("recipientLightningAddress").value = "";
+  }
 }
 
 // Load transactions
@@ -1364,77 +1364,47 @@ function renderTransactions(transactions) {
   });
 }
 
-function renderStatus(status) {
-  if (!status) return "Paid";
-  const s = status.toLowerCase();
-  if (["complete", "success", "paid"].includes(s)) return "Paid";
-  if (["cancelled", "canceled", "failed"].includes(s)) return "Cancelled";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-// Load employees and suppliers from backend
-async function loadRecipientLists() {
-  const token = sessionStorage.getItem("token");
-  if (!token) {
-    alert("Please log in to load recipient lists.");
-    employeesList = [];
-    suppliersList = [];
-    updateRecipientDropdown();
-    return;
-  }
-
-  // Load employees
-  try {
-    const empRes = await fetch(`${API_BASE}/employees`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const empData = await empRes.json();
-    employeesList = empData.success ? empData.employees : [];
-  } catch {
-    employeesList = [];
-  }
-
-  // Load suppliers
-  try {
-    const supRes = await fetch(`${API_BASE}/suppliers`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const supData = await supRes.json();
-    suppliersList = supData.success ? supData.suppliers : [];
-  } catch {
-    suppliersList = [];
-  }
-
-  updateRecipientDropdown();
-}
-
 function closeNewPaymentModal() {
   document.getElementById("newPaymentModal").style.display = "none";
 }
 
+// employ or supplier
 function updateRecipientDropdown() {
-  const type = document.getElementById("recipientType").value;
+  const type = document.getElementById("recipientType").value; // "employee" or "supplier"
   const select = document.getElementById("recipientSelect");
-  select.innerHTML = "";
-  const list = type === "employee" ? employeesList : suppliersList;
+  select.innerHTML = ""; // Clear previous options
+
+  let list = [];
+  let placeholder = "";
+
+  if (type === "employee") {
+    list = employeesList;
+    placeholder = "Select Employee";
+  } else if (type === "supplier") {
+    list = suppliersList;
+    placeholder = "Select Supplier";
+  }
+
+  // Add placeholder option
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = placeholder;
+  select.appendChild(placeholderOption);
+
+  // Populate options
   list.forEach((item) => {
     const option = document.createElement("option");
-    option.value = item.id;
+    option.value = item.id || item.email;
     option.textContent = item.name;
     select.appendChild(option);
   });
-  // Auto-populate details for the first recipient in the list
+
+  // Optionally, auto-select first real option and populate details
   if (list.length > 0) {
-    select.value = list[0].id;
+    select.value = list[0].id || list[0].email;
     populateRecipientDetails();
   } else {
-    // Clear fields if no recipients
+    // Clear details if no options
     document.getElementById("recipientName").value = "";
     document.getElementById("recipientEmail").value = "";
     document.getElementById("recipientLightningAddress").value = "";
@@ -1443,24 +1413,46 @@ function updateRecipientDropdown() {
 
 function populateRecipientDetails() {
   const type = document.getElementById("recipientType").value;
-  const id = document.getElementById("recipientSelect").value;
-  const list = type === "employee" ? employeesList : suppliersList;
-  const recipient = list.find((item) => item.id === id);
-  document.getElementById("recipientName").value = recipient
-    ? recipient.name
-    : "";
-  document.getElementById("recipientEmail").value = recipient
-    ? recipient.email
-    : "";
-  document.getElementById("recipientLightningAddress").value = recipient
-    ? recipient.lightningAddress
-    : "";
+  const select = document.getElementById("recipientSelect");
+  const selectedValue = select.value;
+
+  let recipient = null;
+  if (type === "employee") {
+    recipient = employeesList.find(
+      (emp) => emp.id === selectedValue || emp.email === selectedValue,
+    );
+  } else if (type === "supplier") {
+    recipient = suppliersList.find(
+      (sup) => sup.id === selectedValue || sup.email === selectedValue,
+    );
+  }
+
+  if (recipient) {
+    document.getElementById("recipientName").value = recipient.name || "";
+    document.getElementById("recipientEmail").value = recipient.email || "";
+    document.getElementById("recipientLightningAddress").value =
+      recipient.lightningAddress || "";
+  } else {
+    document.getElementById("recipientName").value = "";
+    document.getElementById("recipientEmail").value = "";
+    document.getElementById("recipientLightningAddress").value = "";
+  }
 }
 
-function openNewPaymentModal() {
-  document.getElementById("newPaymentModal").style.display = "flex";
-  document.getElementById("newPaymentForm").reset();
-  loadRecipientLists();
+async function loadEmployeesForPaymentModal() {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
+    const response = await fetch(`${API_BASE}/users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Failed to load employees");
+    // /api/users returns a naked array
+    employeesList = await response.json();
+  } catch (err) {
+    console.error("Error loading employees for payment modal:", err);
+    employeesList = [];
+  }
 }
 
 function closeNewPaymentModal() {
@@ -1497,14 +1489,13 @@ async function submitNewPayment(event) {
   const note = document.getElementById("paymentNote").value;
 
   const payload = {
-    type,
-    id,
-    name,
-    email,
+    recipientType: type,
+    recipientId: id,
     lightningAddress,
-    amount,
-    note,
+    paymentAmount: amount,
+    paymentNote: note,
   };
+
   const endpoint = `${API_BASE}/pay`;
 
   try {
@@ -1878,101 +1869,85 @@ function formatDate(date) {
 }
 
 async function loadTeamMembers() {
-  const tbody = document.querySelector("#teamTable tbody");
-  if (!tbody) {
-    console.warn("Team table tbody element not found.");
-    return;
-  }
-
-  // Show loading message
-  tbody.innerHTML =
-    '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
-
+  const token = sessionStorage.getItem("token");
   try {
     const token = sessionStorage.getItem("token");
     if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
+      console.error("No authentication token found in sessionStorage.");
+      throw new Error("No authentication token found. Please log in.");
     }
 
-    const response = await fetch(`${API_BASE}/users`, {
+    const endpoint =
+      currentUser.role === "Admin" || currentUser.role === "Manager"
+        ? "/employees"
+        : "/users"; // Employees use /users endpoint
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
+    // Check content-type before parsing
+    const contentType = response.headers.get("content-type");
+
+    const text = await response.text();
+
     if (!response.ok) {
       let errorMsg = `HTTP error! Status: ${response.status}`;
       try {
-        const errorData = await response.json();
-        if (errorData.message) errorMsg += ` - ${errorData.message}`;
-      } catch (e) {
-        // Ignore JSON parse errors here
+        const errorData = JSON.parse(text);
+        errorMsg = errorData.message || errorMsg;
+      } catch {
+        // If parsing error response failed, keep original message
       }
       throw new Error(errorMsg);
     }
 
-    const data = await response.json();
-    if (!data || !Array.isArray(data.users)) {
-      throw new Error("Invalid response format from server");
-    }
-
-    // Filter users based on currentUser role and department
-    let filteredUsers = [];
-    if (!currentUser) {
-      console.warn("No currentUser found; no team members will be shown.");
-    } else if (currentUser.role === "Admin") {
-      filteredUsers = data.users;
-    } else if (
-      ["Manager", "Employee", "Bookkeeper"].includes(currentUser.role)
-    ) {
-      filteredUsers = data.users.filter(
-        (user) =>
-          user.department?.toLowerCase() ===
-          currentUser.department?.toLowerCase(),
+    if (!contentType || !contentType.includes("application/json")) {
+      console.error(
+        "Expected JSON response but received different content-type.",
       );
+      alert("Error loading team members: Server returned non-JSON data.");
+      return;
     }
 
-    renderTeamMembers(filteredUsers);
-
-    // Update UI actions visibility if function exists
-    if (typeof updateTeamActionsVisibility === "function") {
-      updateTeamActionsVisibility();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Failed to parse JSON from response:", parseError);
+      alert("Error loading team members: Server returned invalid JSON.");
+      return;
     }
+
+    const teamMembers = Array.isArray(data)
+      ? data
+      : data.users || data.employees || [];
+
+    renderTeamMembersTable(teamMembers);
   } catch (err) {
     console.error("Failed to load team members:", err);
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5" class="error-message">
-          Failed to load team members.
-          ${err.message || "Please try again later."}
-        </td>
-      </tr>
-    `;
-
-    // Add retry button
-    const retryButton = document.createElement("button");
-    retryButton.textContent = "Retry";
-    retryButton.className = "retry-btn";
-    retryButton.onclick = async () => {
-      retryButton.remove();
-      tbody.innerHTML =
-        '<tr><td colspan="5" class="loading-message">Loading team members...</td></tr>';
-      await loadTeamMembers();
-    };
-
-    // Append retry button inside the error message cell
-    const errorCell = tbody.querySelector("td.error-message");
-    if (errorCell) {
-      errorCell.appendChild(retryButton);
-    }
+    alert("Error loading team members: " + err.message);
   }
 }
 
-function renderTeamMembers(users) {
+function escapeHtml(text) {
+  return text
+    ? text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;")
+    : "";
+}
+
+function renderTeamMembersTable(users) {
   const tbody = document.querySelector("#teamTable tbody");
   if (!tbody) {
-    console.error("tbody element not found in renderTeamMembers");
+    console.error("tbody element not found in renderTeamMembersTable");
     return;
   }
   tbody.innerHTML = "";
@@ -1991,14 +1966,12 @@ function renderTeamMembers(users) {
       ? new Date(user.dateAdded).toLocaleDateString()
       : "N/A";
 
-    // Sanitize or escape user data here if necessary
-
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${user.name || "N/A"}</td>
-      <td>${user.role || "N/A"}</td>
-      <td>${user.department || "N/A"}</td>
-      <td>${user.email || "N/A"}</td>
+      <td>${escapeHtml(user.name) || "N/A"}</td>
+      <td>${escapeHtml(user.role) || "N/A"}</td>
+      <td>${escapeHtml(user.department) || "N/A"}</td>
+      <td>${escapeHtml(user.email) || "N/A"}</td>
       <td>${dateAddedFormatted}</td>
     `;
     tbody.appendChild(row);
@@ -2006,7 +1979,7 @@ function renderTeamMembers(users) {
 }
 
 function updateAccountingActionsVisibility() {
-  const btnRow = document.getElementById("accountingBtnRow"); // container div for buttons
+  const btnRow = document.getElementById("accountingBtnRow");
   const newPaymentBtn = document.getElementById("newPaymentBtn");
   const payInvoiceBtn = document.getElementById("payInvoiceBtn");
   const draftBtn = document.getElementById("draftPaymentBtn");
@@ -2018,7 +1991,6 @@ function updateAccountingActionsVisibility() {
 
   if (!currentUser || !currentUser.role) {
     console.warn("currentUser or currentUser.role is not available.");
-    // Hide all buttons and container if no user info
     btnRow.style.display = "none";
     [newPaymentBtn, payInvoiceBtn, draftBtn].forEach((btn) => {
       btn.classList.remove("d-block");
@@ -2126,6 +2098,9 @@ function updateTeamActionsVisibility() {
   const addBtn = document.getElementById("addMemberBtn");
   const removeBtn = document.getElementById("removeMemberBtn");
 
+  console.log("updateTeamActionsVisibility called");
+  console.log("currentUser:", currentUser);
+
   if (!addBtn || !removeBtn) {
     console.warn("Add or Remove member buttons not found.");
     return;
@@ -2133,18 +2108,19 @@ function updateTeamActionsVisibility() {
 
   if (!currentUser || !currentUser.role) {
     console.warn("currentUser or currentUser.role is not defined.");
-    addBtn.style.display = "none";
-    removeBtn.style.display = "none";
+    addBtn.classList.add("d-none");
+    removeBtn.classList.add("d-none");
     return;
   }
 
-  // Show buttons only for Admin and Manager roles
   if (currentUser.role === "Admin" || currentUser.role === "Manager") {
-    addBtn.style.display = "inline-block";
-    removeBtn.style.display = "inline-block";
+    console.log("Showing buttons for", currentUser.role);
+    addBtn.classList.remove("d-none");
+    removeBtn.classList.remove("d-none");
   } else {
-    addBtn.style.display = "none";
-    removeBtn.style.display = "none";
+    console.log("Hiding buttons for", currentUser.role);
+    addBtn.classList.add("d-none");
+    removeBtn.classList.add("d-none");
   }
 }
 
@@ -2175,7 +2151,7 @@ async function addTeamMember() {
       role: document.getElementById("memberRole").value.trim(),
       email: document.getElementById("memberEmail").value.trim(),
       department: document.getElementById("memberDepartment").value.trim(),
-      address: document.getElementById("memberLightning").value.trim(),
+      lightningAddress: document.getElementById("memberLightning").value.trim(),
     };
 
     // Validation
@@ -2184,7 +2160,7 @@ async function addTeamMember() {
       !newMember.role ||
       !newMember.email ||
       !newMember.department ||
-      !newMember.address
+      !newMember.lightningAddress
     ) {
       throw new Error("Please fill in all required fields");
     }
@@ -2341,6 +2317,16 @@ async function showRemoveMemberModal() {
   }
 }
 
+async function openNewPaymentModal() {
+  await Promise.all([
+    loadEmployeesForPaymentModal(),
+    loadSuppliersForPaymentModal(),
+  ]);
+  updateRecipientDropdown();
+  // Show the modal (replace with your actual modal logic)
+  document.getElementById("newPaymentModal").style.display = "flex";
+}
+
 function openNewSupplierPaymentModal() {
   document.getElementById("newSupplierPaymentModal").style.display = "flex";
   populateSupplierSelect();
@@ -2401,6 +2387,11 @@ async function populateSupplierSelect() {
     console.error("Error loading suppliers:", err);
     select.innerHTML = "<option value=''>Error loading suppliers</option>";
   }
+}
+
+function openDraftPaymentModal() {
+  document.getElementById("draftPaymentModal").style.display = "flex";
+  populateDraftRecipientDropdown();
 }
 
 function openAddSupplierModal() {
@@ -2467,6 +2458,38 @@ async function submitAddSupplier(event) {
   } catch (err) {
     console.error("Error adding supplier:", err);
     alert("Error adding supplier.");
+  }
+}
+
+async function loadEmployeesForPaymentModal() {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
+    const response = await fetch(`${API_BASE}/users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Failed to load employees");
+    // The /api/users endpoint returns a naked array (see server.js)
+    employeesList = await response.json();
+  } catch (err) {
+    console.error("Error loading employees for payment modal:", err);
+    employeesList = [];
+  }
+}
+
+async function loadSuppliersForPaymentModal() {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
+    const response = await fetch(`${API_BASE}/suppliers`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Failed to load suppliers");
+    const data = await response.json();
+    suppliersList = data.suppliers || [];
+  } catch (err) {
+    console.error("Error loading suppliers for payment modal:", err);
+    suppliersList = [];
   }
 }
 
@@ -2730,6 +2753,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     addPendingDraftsTableSortHandlers && addPendingDraftsTableSortHandlers();
   };
 
+  document
+    .getElementById("recipientSelect")
+    .addEventListener("change", populateRecipientDetails);
+  document.getElementById("recipientType").addEventListener("change", () => {
+    // Optionally update recipientSelect options here
+    populateRecipientDetails();
+  });
+
   document.getElementById("addDepartmentBtn").onclick = async function () {
     const dep = prompt("Enter new department name:");
     if (dep) {
@@ -2877,7 +2908,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Close the Draft Payment modal
-  document.getElementById("closeDraftModal").addEventListener("click", () => {
+  document.getElementById("closeDraftButton").addEventListener("click", () => {
     const modal = document.getElementById("draftPaymentModal");
     if (modal) modal.style.display = "none";
   });
@@ -2896,6 +2927,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       e.preventDefault();
 
       // Get values from modal fields
+      const draftTitle = document
+        .getElementById("draftPaymentTitle")
+        .value.trim();
       const recipientEmail = document.getElementById(
         "draftRecipientSelect",
       ).value;
@@ -2912,6 +2946,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       // Validation
       if (
+        !draftTitle ||
         !recipientEmail ||
         !recipientName ||
         !recipientLightningAddress ||
@@ -2924,6 +2959,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const draftData = {
+        title: draftTitle, // Include the draft title for backend validation
         recipientEmail,
         recipientName,
         recipientLightningAddress,
@@ -2960,7 +2996,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           alert("Draft payment submitted successfully!");
           document.getElementById("draftPaymentForm").reset();
           document.getElementById("draftPaymentModal").style.display = "none";
-          await loadEmployeeDrafts();
+          await loadEmployeeDrafts(); // Refresh draft list after submission
         } else {
           alert(
             "Failed to submit draft: " + (result.message || "Unknown error"),

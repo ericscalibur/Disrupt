@@ -10,7 +10,8 @@
     "status": "declined",
     "id": "mbj5uw51fv2ymtdarbk",
     "declinedAt": "2025-06-05T10:19:43.573Z",
-    "declinedBy": "admin"
+    "declinedBy": "admin",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "xu@japanesegarden.com",
@@ -23,7 +24,8 @@
     "status": "declined",
     "id": "mbj8oevv6tc4c30rhqg",
     "declinedAt": "2025-06-05T10:51:59.064Z",
-    "declinedBy": "admin"
+    "declinedBy": "admin",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "francis@carpetworld.com",
@@ -36,7 +38,8 @@
     "status": "declined",
     "id": "mbjarz2p7ucfyvr5rj3",
     "declinedAt": "2025-06-11T21:59:36.835Z",
-    "declinedBy": "ericscalibur@protonmail.com"
+    "declinedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "xu@japanesegarden.com",
@@ -49,7 +52,8 @@
     "status": "declined",
     "id": "mbjawo8pzukdtx6beag",
     "declinedAt": "2025-06-11T21:59:31.262Z",
-    "declinedBy": "ericscalibur@protonmail.com"
+    "declinedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "xu@japanesegarden.com",
@@ -62,7 +66,8 @@
     "status": "declined",
     "id": "mbjb1oaboez1hyqrg48",
     "declinedAt": "2025-06-06T00:23:08.199Z",
-    "declinedBy": "admin"
+    "declinedBy": "admin",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -75,7 +80,8 @@
     "status": "approved",
     "id": "mbojg9xhp9tmjv14kyi",
     "approvedAt": "2025-06-09T05:34:29.116Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -88,7 +94,8 @@
     "status": "approved",
     "id": "mboo9w2w15gaudkhb51h",
     "approvedAt": "2025-06-09T05:50:31.957Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -101,7 +108,8 @@
     "status": "approved",
     "id": "mboom2l9iwczjwnknbf",
     "approvedAt": "2025-06-09T05:59:21.768Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -114,7 +122,8 @@
     "status": "approved",
     "id": "mbooy3ehmlv5779bmo",
     "approvedAt": "2025-06-09T06:08:50.063Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -127,7 +136,8 @@
     "status": "approved",
     "id": "mbopwwn4mql0hd7uhr",
     "approvedAt": "2025-06-09T06:35:52.096Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -140,7 +150,8 @@
     "dateCreated": "2025-06-09T22:41:37.770Z",
     "status": "approved",
     "approvedAt": "2025-06-09T22:42:04.614Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -153,7 +164,8 @@
     "dateCreated": "2025-06-09T22:52:26.982Z",
     "status": "approved",
     "approvedAt": "2025-06-09T22:52:48.026Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -166,7 +178,8 @@
     "dateCreated": "2025-06-09T23:25:48.637Z",
     "status": "approved",
     "approvedAt": "2025-06-09T23:26:10.993Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -179,7 +192,8 @@
     "dateCreated": "2025-06-10T02:22:00.073Z",
     "status": "approved",
     "approvedAt": "2025-06-10T02:22:55.303Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -192,7 +206,8 @@
     "dateCreated": "2025-06-10T05:24:22.263Z",
     "status": "approved",
     "approvedAt": "2025-06-10T05:26:11.189Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -205,7 +220,8 @@
     "dateCreated": "2025-06-10T05:36:30.828Z",
     "status": "approved",
     "approvedAt": "2025-06-10T05:37:18.763Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -218,7 +234,8 @@
     "dateCreated": "2025-06-10T05:44:40.526Z",
     "status": "approved",
     "approvedAt": "2025-06-10T05:45:30.218Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
   },
   {
     "recipientEmail": "al@420shop.com",
@@ -231,6 +248,37 @@
     "dateCreated": "2025-06-11T01:22:36.054Z",
     "status": "approved",
     "approvedAt": "2025-06-11T01:24:33.459Z",
-    "approvedBy": "ericscalibur@protonmail.com"
+    "approvedBy": "ericscalibur@protonmail.com",
+    "department": "Engineering"
+  },
+  {
+    "title": "Water Bill",
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 333,
+    "note": "gracias",
+    "id": "mbsk973qab7iegdn37",
+    "createdBy": "dave@company.com",
+    "dateCreated": "2025-06-11T23:08:10.166Z",
+    "status": "approved",
+    "department": "Accounting",
+    "approvedAt": "2025-06-11T23:30:01.708Z",
+    "approvedBy": "quentin@company.com"
+  },
+  {
+    "title": "Rolling paper",
+    "recipientEmail": "al@420shop.com",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 566,
+    "note": "disrupt internal note",
+    "id": "mbsz5oc7thsd5n3m3sc",
+    "createdBy": "dave@company.com",
+    "department": "Accounting",
+    "dateCreated": "2025-06-12T06:05:20.119Z",
+    "status": "approved",
+    "approvedAt": "2025-06-12T06:06:01.193Z",
+    "approvedBy": "quentin@company.com"
   }
 ]
