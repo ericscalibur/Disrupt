@@ -476,12 +476,29 @@
                     >
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h2>Draft Payment</h2>
-                                <span class="close-btn" id="closeDraftModal"
-                                    >&times;</span
-                                >
+                                <span class="modal-title">Draft Payment</span>
+                                <button class="close-btn" id="closeDraftButton">
+                                    &times;
+                                </button>
                             </div>
                             <form id="draftPaymentForm">
+                                <!-- Draft Title added here -->
+                                <div class="form-group">
+                                    <label for="draftPaymentTitle"
+                                        >Draft Title
+                                        <span style="color: #e74c3c"
+                                            >*</span
+                                        ></label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="draftPaymentTitle"
+                                        name="draftPaymentTitle"
+                                        placeholder="Enter draft title"
+                                        required
+                                    />
+                                </div>
+
                                 <div class="form-group">
                                     <label for="draftRecipientSelect"
                                         >Recipient</label

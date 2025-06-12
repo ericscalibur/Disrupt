@@ -63,9 +63,39 @@
     "role": "Employee",
     "email": "jenny@company.com",
     "department": "Developement",
-    "address": "bingbong@bongbing.com",
+    "lightningAddress": "bingbong@bongbing.com",
     "password": "1234",
     "dateAdded": "2025-06-07",
     "id": "2a73b5abd3a5996289a02af48b7cbcd5d47061c687e94c40c59a7296aefed6b0"
+  },
+  {
+    "name": "Quentin MPB",
+    "role": "Manager",
+    "email": "quentin@company.com",
+    "department": "Accounting",
+    "lightningAddress": "quentin@blink.sv",
+    "password": "1234",
+    "dateAdded": "2025-06-11",
+    "id": "14418a27c66a4d4a581af429ca8d10a3c1559373c6337f656ba4f90f1f5d1cf6"
+  },
+  {
+    "name": "David McKee",
+    "role": "Employee",
+    "email": "dave@company.com",
+    "department": "Accounting",
+    "lightningAddress": "david@company.com",
+    "password": "1234",
+    "dateAdded": "2025-06-11",
+    "id": "6261c42005e6254654292863271698ba9fc1fd51f8dcec4e5f08c2b310167abd"
+  },
+  {
+    "name": "Big John",
+    "role": "Employee",
+    "department": "Accounting",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "email": "bigJ@company.com",
+    "password": "1234",
+    "dateAdded": "2025-06-12",
+    "id": "99f88ba6ed3acc9d2506e0e503902671bc1fbbda0981f960834c8a422fa47e0a"
   }
 ]
