@@ -409,11 +409,8 @@ app.post(
   authenticateToken,
   authorizeRoles(...authorizedRoles),
   async (req, res) => {
-    console.log("Received /api/users payload:", req.body);
     try {
       const { action, email, ...rest } = req.body;
-      console.log("rest object:", rest);
-      // Ensure req.user is populated by authenticateToken middleware
       if (!req.user || !req.user.role) {
         return res.status(401).json({
           success: false,
@@ -522,7 +519,6 @@ app.post(
         dateAdded: new Date().toISOString().split("T")[0],
         id,
       };
-      console.log("New user object to save:", newUser);
       users.push(newUser);
       await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
       return res.json({ success: true, user: newUser });
@@ -600,7 +596,7 @@ app.get("/api/drafts", authenticateToken, async (req, res) => {
     }
 
     // Filter drafts by department for non-admin users
-    if (userRole !== "admin") {
+    if (userRole !== "Admin") {
       drafts = drafts.filter((draft) => draft.department === userDepartment);
     }
 
@@ -1234,6 +1230,29 @@ app.post(
     }
   },
 );
+
+// FOR DRAFT MODAL
+app.get("/api/suppliers/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await fs.readFile(SUPPLIERS_FILE, "utf8");
+    const suppliers = data.trim() ? JSON.parse(data) : [];
+
+    const supplier = suppliers.find((s) => s.id === id);
+    if (!supplier) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Supplier not found." });
+    }
+
+    res.json({ success: true, supplier });
+  } catch (err) {
+    console.error("Failed to load supplier:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to load supplier." });
+  }
+});
 
 // Remove Supplier
 app.delete("/api/suppliers/:id", authenticateToken, async (req, res) => {

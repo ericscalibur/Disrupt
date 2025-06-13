@@ -1,5 +1,35 @@
 [
   {
+    "id": "8d721a7a82a0b270a7bda0c2f3c58c39edc1922b8e00fca49d766e87339c872f",
+    "date": "2025-06-12T14:27:05.302Z",
+    "type": "lightning",
+    "receiver": "Charlie",
+    "lightningAddress": null,
+    "invoice": "lnbc4200n1p5y4cudpp534ep575z5ze8pfaa5rp083vv88kury3t3cq0efyawehgwvuusuhsdqqcqzzsxqyz5vqsp5hs4xe2k2stc3d9f5uqxsfj6lxq8t2ka6nsg67pj30cvw48tt3mqs9qxpqysgqwjhfyjj7e0d85x4pdy8jencz60qemlqjxtxm8zf05m3z80t938rkj8vdvqtj7gf8wqcvjeg39lxwkt26xyfhgy64nsmmh58whla3z3spx9spjn",
+    "amount": 420,
+    "currency": "SATS",
+    "note": "",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "8d721a7a82a0b270a7bda0c2f3c58c39edc1922b8e00fca49d766e87339c872f"
+  },
+  {
+    "id": "0c42dc9d5a0539fefeed018d94a609052cc23e836dc5c6ad598c8cdcb1d8746b",
+    "date": "2025-06-12T14:21:55.351Z",
+    "type": "payment",
+    "recipientType": "employee",
+    "recipientId": "253beff153faa1714628c425657a9060edc8a3bd755c5f79e3c4ddf978a76933",
+    "recipientName": "Jasper",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc5550n1p5y4c5zpp5p3pde826q5ulalhdqxxeffsfq5kvy05rdhzudt2e3jxdevwcw34shp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp5x74crrjmu5llkfjdx3z56yuvcd4wk458hekeclpgprhsmrqaq6gs9qxpqysgqcnz8tp22nk2sxkew3xw23rc024xxeuawgvvle6ju7jrrdcx56cu9htvcxrnpw7e6f2e4htc6kjy832a5ew4tkqhn364ly6jx4epwlaqpu966qw",
+    "amount": 555,
+    "currency": "SATS",
+    "note": "helloworld",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "0c42dc9d5a0539fefeed018d94a609052cc23e836dc5c6ad598c8cdcb1d8746b"
+  },
+  {
     "id": "6db5919641458790edb2707cfc0d5ec20ae85828fa32d08b45397c1baacf8924",
     "date": "2025-06-12T08:58:20.654Z",
     "type": "lightning",

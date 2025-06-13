@@ -338,6 +338,7 @@ function renderPendingDraftsTable(drafts) {
   });
 }
 
+// LOADS SUPPLIERS IN DROPDOWN
 async function populateDraftRecipientDropdown() {
   const select = document.getElementById("draftRecipientSelect");
   select.innerHTML = '<option value="">Select supplier...</option>';
@@ -365,7 +366,7 @@ async function populateDraftRecipientDropdown() {
 
     suppliersList.forEach((supplier) => {
       const option = document.createElement("option");
-      option.value = supplier.id; // use id consistently
+      option.value = supplier.id;
       option.textContent = supplier.name;
       select.appendChild(option);
     });
@@ -385,30 +386,76 @@ async function populateDraftRecipientDropdown() {
   }
 }
 
+// LOADS REMAINING DATA FIELDS AFTER RECIPIENT SELECTED
 async function populateDraftRecipientDetails() {
-  const type = document.getElementById("recipientType").value;
-  const id = document.getElementById("recipientSelect").value;
+  const id = document.getElementById("draftRecipientSelect").value;
 
   if (!id) {
     // Clear fields if no recipient selected
-    document.getElementById("recipientName").value = "";
-    document.getElementById("recipientEmail").value = "";
-    document.getElementById("recipientLightningAddress").value = "";
+    document.getElementById("draftRecipientName").value = "";
+    document.getElementById("draftRecipientEmail").value = "";
+    document.getElementById("draftRecipientLightningAddress").value = "";
     return;
   }
 
-  let recipient;
-  if (type === "employee") {
-    recipient = await fetchUserById(id); // implement this to fetch user data
-  } else if (type === "supplier") {
-    recipient = await fetchSupplierById(id); // implement this to fetch supplier data
-  }
+  let recipient = await fetchSupplierById(id);
 
   if (recipient) {
-    document.getElementById("recipientName").value = recipient.name || "";
-    document.getElementById("recipientEmail").value = recipient.email || "";
-    document.getElementById("recipientLightningAddress").value =
+    document.getElementById("draftRecipientName").value = recipient.name || "";
+    document.getElementById("draftRecipientEmail").value =
+      recipient.email || "";
+    document.getElementById("draftRecipientLightningAddress").value =
       recipient.lightningAddress || "";
+  }
+}
+
+// Fetch employee/user data by ID
+async function fetchUserById(id) {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
+
+    const response = await fetch(`${API_BASE}/users/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.user || null;
+  } catch (err) {
+    console.error("Error fetching user by ID:", err);
+    return null;
+  }
+}
+
+// Fetch supplier data by ID
+async function fetchSupplierById(id) {
+  try {
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("Not authenticated");
+
+    const response = await fetch(`${API_BASE}/suppliers/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch supplier: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.supplier || null;
+  } catch (err) {
+    console.error("Error fetching supplier by ID:", err);
+    return null;
   }
 }
 
@@ -518,13 +565,52 @@ function showTransactionDetails(txn) {
   document.getElementById("transactionModal").style.display = "flex";
 }
 
-function addPendingDraftsTableSortHandlers() {
-  const table = document.getElementById("pendingDraftsTable");
-  if (!table) return;
-  const headers = table.querySelectorAll("th");
-  headers.forEach((th, idx) => {
-    th.style.cursor = "pointer";
-    th.onclick = () => sortPendingDraftsByColumn(idx);
+function setupTransactionRowClicks(allTransactions) {
+  const modal = document.getElementById("transactionModal");
+  const detailsContainer = document.getElementById("transactionDetails");
+  const closeButton = document.getElementById("closeTransactionModal");
+
+  if (!modal || !detailsContainer || !closeButton) {
+    console.error("Transaction modal elements missing");
+    return;
+  }
+
+  // Close modal on close button click
+  closeButton.addEventListener("click", () => {
+    modal.style.display = "none";
+  });
+
+  // Function to populate and show modal
+  function showTransactionDetails(txn) {
+    const details = `
+      <span class="label">Receiver:</span> <span class="data">${txn.receiver}</span><br>
+      <span class="label">Amount:</span> <span class="data">${txn.amount} ${txn.currency || "N/A"}</span><br>
+      <span class="label">Date:</span> <span class="data">${new Date(txn.date).toLocaleString()}</span><br>
+      <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span><br>
+      <span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span><br>
+      <span class="label">Approved Status:</span> <span class="data">${txn.approvedStatus || "N/A"}</span><br>
+      <span class="label">Approved At:</span> <span class="data">${txn.approvedAt ? new Date(txn.approvedAt).toLocaleString() : "N/A"}</span><br>
+      <span class="label">Approved By:</span> <span class="data">${txn.approvedBy || "N/A"}</span><br>
+      <span class="label">Lightning Address:</span> <span class="data">${txn.lightningAddress || "N/A"}</span><br>
+      <span class="label">Invoice:</span> <span class="data">${txn.invoice || "N/A"}</span><br>
+      <span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span>
+    `.trim();
+
+    detailsContainer.innerHTML = details;
+    modal.style.display = "flex";
+  }
+
+  // Attach click handlers to each transaction row
+  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
+    row.addEventListener("click", () => {
+      const txnId = row.getAttribute("data-txn-id");
+      const txn = allTransactions.find((t) => t.id === txnId);
+      if (txn) {
+        showTransactionDetails(txn);
+      } else {
+        console.warn(`Transaction with id ${txnId} not found`);
+      }
+    });
   });
 }
 
@@ -1331,6 +1417,9 @@ function renderTransactions(transactions) {
 
     const row = document.createElement("tr");
 
+    // Add a data attribute for transaction ID to identify the transaction on click
+    row.setAttribute("data-txn-id", id);
+
     const dateCell = document.createElement("td");
     dateCell.textContent = dateDisplay;
 
@@ -1362,6 +1451,8 @@ function renderTransactions(transactions) {
 
     tbody.appendChild(row);
   });
+
+  setupTransactionRowClicks(transactions);
 }
 
 function closeNewPaymentModal() {
@@ -2098,9 +2189,6 @@ function updateTeamActionsVisibility() {
   const addBtn = document.getElementById("addMemberBtn");
   const removeBtn = document.getElementById("removeMemberBtn");
 
-  console.log("updateTeamActionsVisibility called");
-  console.log("currentUser:", currentUser);
-
   if (!addBtn || !removeBtn) {
     console.warn("Add or Remove member buttons not found.");
     return;
@@ -2114,11 +2202,9 @@ function updateTeamActionsVisibility() {
   }
 
   if (currentUser.role === "Admin" || currentUser.role === "Manager") {
-    console.log("Showing buttons for", currentUser.role);
     addBtn.classList.remove("d-none");
     removeBtn.classList.remove("d-none");
   } else {
-    console.log("Hiding buttons for", currentUser.role);
     addBtn.classList.add("d-none");
     removeBtn.classList.add("d-none");
   }
@@ -2678,6 +2764,35 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // Attach click handlers to each transaction row
+  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
+    row.addEventListener("click", () => {
+      const txnId = row.getAttribute("data-txn-id");
+      const txn = allTransactions.find((t) => t.id === txnId);
+      if (txn) {
+        showTransactionDetails(txn);
+      } else {
+        console.warn(`Transaction with id ${txnId} not found`);
+      }
+    });
+  });
+
+  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
+      row.getAttribute("data-txn-id"),
+    );
+
+    row.addEventListener("click", () => {
+      const txnId = row.getAttribute("data-txn-id");
+
+      const txn = allTransactions.find((t) => t.id === txnId);
+      if (txn) {
+        showTransactionDetails(txn);
+      } else {
+        console.warn(`Transaction with id ${txnId} not found`);
+      }
+    });
+  });
+
   const removeBtn = document.getElementById("removeDepartmentBtn");
   if (removeBtn) {
     removeBtn.addEventListener("click", async () => {
@@ -2756,8 +2871,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document
     .getElementById("recipientSelect")
     .addEventListener("change", populateRecipientDetails);
+
   document.getElementById("recipientType").addEventListener("change", () => {
-    // Optionally update recipientSelect options here
     populateRecipientDetails();
   });
 
