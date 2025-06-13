@@ -97,5 +97,15 @@
     "password": "1234",
     "dateAdded": "2025-06-12",
     "id": "99f88ba6ed3acc9d2506e0e503902671bc1fbbda0981f960834c8a422fa47e0a"
+  },
+  {
+    "name": "Charlie",
+    "role": "Employee",
+    "department": "Accounting",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "email": "charlie@company.com",
+    "password": "1234",
+    "dateAdded": "2025-06-12",
+    "id": "29ec830af09bf9c45f04162524f0bec238c695b14d16444fc32b2d07a86b15d7"
   }
 ]

@@ -280,5 +280,18 @@
     "status": "approved",
     "approvedAt": "2025-06-12T06:06:01.193Z",
     "approvedBy": "quentin@company.com"
+  },
+  {
+    "title": "Very Important Title",
+    "recipientEmail": "sup1749440017541",
+    "recipientName": "420Shop",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 363,
+    "note": "get this note",
+    "id": "mbu5vw9vzuw5o941ym9",
+    "createdBy": "dave@company.com",
+    "department": "Accounting",
+    "dateCreated": "2025-06-13T02:01:27.331Z",
+    "status": "pending"
   }
 ]
