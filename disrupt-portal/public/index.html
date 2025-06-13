@@ -571,7 +571,7 @@
                         style="display: none"
                     >
                         <div class="accounting-header">
-                            <h2>Pending Drafts</h2>
+                            <h2>Payment Drafts</h2>
                         </div>
                         <div class="pending-header-row">
                             <div class="pending-count">
@@ -782,6 +782,37 @@
                                     Remove
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                    <!-- EDIT TEAM MEMBER MODAL -->
+                    <div
+                        id="editTeamMemberModal"
+                        class="modal"
+                        style="display: none"
+                    >
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>Edit Team Member</h2>
+                                <button
+                                    id="closeEditTeamMemberModal"
+                                    class="close-btn"
+                                    aria-label="Close modal"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <form id="editTeamMemberForm">
+                                <!-- Input fields will be dynamically generated here -->
+                                <div id="teamMemberInputs"></div>
+                                <div class="modal-footer">
+                                    <button
+                                        type="submit"
+                                        id="saveTeamMemberBtn"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
 
