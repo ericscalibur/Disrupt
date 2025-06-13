@@ -18,6 +18,8 @@ let currentBalanceSATS = 0;
 let btcToUsdRate = 70000; // fallback value
 const balanceDisplayModes = ["BTC", "SATS", "USD"];
 let currentBalanceMode = 0;
+const authorizedRoles = ["Admin", "Manager"];
+const token = sessionStorage.getItem("token");
 
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
@@ -26,6 +28,26 @@ if (!currentUser) {
     currentUser = JSON.parse(userStr);
   }
 }
+
+function decodeJwt(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(""),
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("Failed to decode JWT:", e);
+    return null;
+  }
+}
+
+const decoded = decodeJwt(token);
+const currentUserRole = decoded ? decoded.role : null;
 
 // Login function
 async function login() {
@@ -344,7 +366,6 @@ async function populateDraftRecipientDropdown() {
   select.innerHTML = '<option value="">Select supplier...</option>';
 
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       alert("Please log in to load suppliers.");
       return;
@@ -371,7 +392,6 @@ async function populateDraftRecipientDropdown() {
       select.appendChild(option);
     });
 
-    // Optionally, select the first supplier and fill details
     if (suppliersList.length > 0) {
       select.value = suppliersList[0].id;
       populateDraftRecipientDetails();
@@ -412,7 +432,6 @@ async function populateDraftRecipientDetails() {
 // Fetch employee/user data by ID
 async function fetchUserById(id) {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
 
     const response = await fetch(`${API_BASE}/users/${id}`, {
@@ -437,7 +456,6 @@ async function fetchUserById(id) {
 // Fetch supplier data by ID
 async function fetchSupplierById(id) {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
 
     const response = await fetch(`${API_BASE}/suppliers/${id}`, {
@@ -563,6 +581,118 @@ function showTransactionDetails(txn) {
 
   detailsContainer.innerHTML = details;
   document.getElementById("transactionModal").style.display = "flex";
+}
+
+function setupTeamTableClicks(teamMembers) {
+  const modal = document.getElementById("editTeamMemberModal");
+  const closeButton = document.getElementById("closeEditTeamMemberModal");
+  const form = document.getElementById("editTeamMemberForm");
+  const inputsContainer = document.getElementById("teamMemberInputs");
+  let currentMember = null;
+
+  if (!modal || !closeButton || !form || !inputsContainer) {
+    console.error("Edit Team Member modal elements missing");
+    return;
+  }
+
+  // Close modal handler
+  closeButton.addEventListener("click", () => {
+    modal.style.display = "none";
+    form.reset();
+    inputsContainer.innerHTML = "";
+    currentMember = null;
+  });
+
+  // Attach click listeners to each team member row
+  document.querySelectorAll("#teamTable tbody tr").forEach((row) => {
+    row.addEventListener("click", () => {
+      if (!authorizedRoles.includes(currentUserRole)) {
+        alert("You do not have permission to edit team member information.");
+        return;
+      }
+
+      const memberId = row.getAttribute("data-member-id");
+      currentMember = teamMembers.find((m) => m.id === memberId);
+      if (!currentMember) {
+        console.warn(`Team member with id ${memberId} not found`);
+        return;
+      }
+      populateEditForm(currentMember);
+      modal.style.display = "flex";
+    });
+  });
+
+  // Populate the form inputs dynamically based on currentMember attributes
+  function populateEditForm(member) {
+    inputsContainer.innerHTML = ""; // Clear previous inputs
+    for (const [key, value] of Object.entries(member)) {
+      // Skip id field if you don't want it editable
+      if (key === "id") continue;
+
+      const label = document.createElement("label");
+      label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+      label.setAttribute("for", `input-${key}`);
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.id = `input-${key}`;
+      input.name = key;
+      input.placeholder = value || "";
+      input.value = value || "";
+
+      inputsContainer.appendChild(label);
+      inputsContainer.appendChild(input);
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentMember) return;
+
+    const formData = new FormData(form);
+    const updatedMember = {};
+    for (const [key, value] of formData.entries()) {
+      updatedMember[key] = value;
+    }
+    updatedMember.id = currentMember.id; // Keep ID unchanged
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/api/team-members/${updatedMember.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`, // Use global token variable
+          },
+          body: JSON.stringify(updatedMember),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update team member");
+      }
+
+      const savedMember = await response.json();
+
+      // Update local data and UI
+      const index = teamMembers.findIndex((m) => m.id === savedMember.id);
+      if (index !== -1) {
+        teamMembers[index] = savedMember;
+      }
+
+      modal.style.display = "none";
+      form.reset();
+      inputsContainer.innerHTML = "";
+      currentMember = null;
+
+      renderTeamMembersTable(teamMembers);
+    } catch (error) {
+      console.error("Error saving team member:", error);
+      alert(`Error saving changes: ${error.message}`);
+    }
+  });
 }
 
 function setupTransactionRowClicks(allTransactions) {
@@ -2058,6 +2188,9 @@ function renderTeamMembersTable(users) {
       : "N/A";
 
     const row = document.createElement("tr");
+    // Add data-member-id attribute for click identification
+    row.setAttribute("data-member-id", user.id);
+
     row.innerHTML = `
       <td>${escapeHtml(user.name) || "N/A"}</td>
       <td>${escapeHtml(user.role) || "N/A"}</td>
@@ -2067,6 +2200,9 @@ function renderTeamMembersTable(users) {
     `;
     tbody.appendChild(row);
   });
+
+  // Setup click listeners for editing team members after rendering
+  setupTeamTableClicks(users);
 }
 
 function updateAccountingActionsVisibility() {
@@ -2361,9 +2497,41 @@ async function showRemoveMemberModal() {
   const container = document.getElementById("membersListContainer");
 
   try {
-    // Load current members
-    const response = await fetch(`${API_BASE}/users`);
-    const { users } = await response.json();
+    const token = sessionStorage.getItem("token"); // Adjust if you store token elsewhere
+    if (!token) {
+      alert("You must be logged in to load members.");
+      return;
+    }
+
+    const response = await fetch(`${API_BASE}/users`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error(
+        "Failed to load members, status:",
+        response.status,
+        errorData,
+      );
+      alert(
+        "Failed to load members: " + (errorData.message || "Unknown error"),
+      );
+      return;
+    }
+
+    const users = await response.json();
+
+    if (!Array.isArray(users)) {
+      console.error("Invalid users data:", users);
+      alert("Unexpected data format received from server.");
+      return;
+    }
+
+    // Store members globally if needed
     membersToRemove = users;
 
     // Clear previous content
@@ -2374,15 +2542,15 @@ async function showRemoveMemberModal() {
       const item = document.createElement("div");
       item.className = "member-remove-item";
       item.innerHTML = `
-                    <label>
-                      <input type="radio" name="memberToRemove" value="${user.email}">
-                      <div class="member-info">
-                        <div class="member-name">${user.name} (${user.role})</div>
-                        <div class="member-email">${user.email}</div>
-                        <div class="member-dept">${user.department}</div>
-                      </div>
-                    </label>
-                  `;
+        <label>
+          <input type="radio" name="memberToRemove" value="${user.email}">
+          <div class="member-info">
+            <div class="member-name">${user.name} (${user.role})</div>
+            <div class="member-email">${user.email}</div>
+            <div class="member-dept">${user.department}</div>
+          </div>
+        </label>
+      `;
       container.appendChild(item);
     });
 
@@ -2399,7 +2567,7 @@ async function showRemoveMemberModal() {
     modal.style.display = "flex";
   } catch (err) {
     console.error("Error loading members:", err);
-    alert("Failed to load members list");
+    alert("Failed to load members list due to a network or server error.");
   }
 }
 
@@ -2768,22 +2936,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
     row.addEventListener("click", () => {
       const txnId = row.getAttribute("data-txn-id");
-      const txn = allTransactions.find((t) => t.id === txnId);
-      if (txn) {
-        showTransactionDetails(txn);
-      } else {
-        console.warn(`Transaction with id ${txnId} not found`);
-      }
-    });
-  });
-
-  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
-      row.getAttribute("data-txn-id"),
-    );
-
-    row.addEventListener("click", () => {
-      const txnId = row.getAttribute("data-txn-id");
-
       const txn = allTransactions.find((t) => t.id === txnId);
       if (txn) {
         showTransactionDetails(txn);

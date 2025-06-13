@@ -18,7 +18,7 @@ app.use(
   cors({
     origin: "http://localhost:5500",
     credentials: true,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
@@ -172,6 +172,22 @@ async function getSupplierById(id) {
   }
 }
 
+async function updateEmployeeById(id, updates) {
+  try {
+    const data = await fs.readFile(USERS_FILE, "utf8");
+    const users = JSON.parse(data);
+    const index = users.findIndex((user) => String(user.id) === String(id));
+    if (index === -1) return null;
+
+    users[index] = { ...users[index], ...updates };
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+    return users[index];
+  } catch (err) {
+    console.error("Error updating users.json:", err);
+    throw err;
+  }
+}
+
 //////// ROUTES ////////
 
 // User Authentication
@@ -252,7 +268,7 @@ app.get("/api/me", authenticateToken, async (req, res) => {
 app.get(
   "/api/users",
   authenticateToken,
-  authorizeRoles("Admin", "Manager", "Employee"), // Adjust roles as needed
+  authorizeRoles("Admin", "Manager", "Employee"),
   async (req, res) => {
     try {
       const data = await fs.readFile(USERS_FILE, "utf8");
@@ -264,31 +280,26 @@ app.get(
         console.warn("Invalid JSON in users.json, initializing empty array");
       }
 
-      // Filter users by department if user is not Admin
+      console.log(
+        `User ${req.user.email} requested users, returning ${users.length} records`,
+      );
+
       if (req.user.role !== "Admin" && req.user.department) {
-        const beforeFilterCount = users.length;
         users = users.filter((user) => user.department === req.user.department);
-      } else {
-        // unhandled
       }
 
-      // Remove passwords before sending
       const sanitizedUsers = users.map(({ password, ...rest }) => rest);
 
-      // Respond with naked array to match users.json structure
       res.json(sanitizedUsers);
     } catch (err) {
       console.error("Error in /api/users:", err);
-
-      if (err.code === "ENOENT") {
-        res.json([]);
-      } else {
-        res.status(500).json({
+      res
+        .status(500)
+        .json({
           success: false,
           message: "Failed to load users",
           error: err.message,
         });
-      }
     }
   },
 );
@@ -528,6 +539,63 @@ app.post(
     }
   },
 );
+
+app.post("/users", async (req, res) => {
+  const { action, email } = req.body;
+
+  if (!action || !email) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing action or email" });
+  }
+
+  if (action !== "remove") {
+    return res.status(400).json({ success: false, message: "Invalid action" });
+  }
+
+  // Add authentication/authorization middleware before this handler
+
+  try {
+    const data = await fs.readFile(USERS_FILE, "utf8");
+    let users = [];
+    try {
+      const parsed = data.trim() === "" ? [] : JSON.parse(data);
+      users = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      console.warn("Invalid JSON in users.json, initializing empty array");
+    }
+
+    const updatedUsers = users.filter((user) => user.email !== email);
+    await fs.writeFile(USERS_FILE, JSON.stringify(updatedUsers, null, 2));
+
+    res.status(204).end(); // No content on success
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/////  EDIT EMPLOYEE DETAILS ////
+app.put("/api/team-members/:id", async (req, res) => {
+  const id = req.params.id;
+  const updates = req.body;
+
+  try {
+    const data = await fs.readFile(USERS_FILE, "utf8");
+    const users = JSON.parse(data);
+    const index = users.findIndex((user) => String(user.id) === String(id));
+    if (index === -1) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    users[index] = { ...users[index], ...updates };
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+
+    res.json(users[index]);
+  } catch (err) {
+    console.error("Error updating user:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 // FOR ADMIN/MANGER
 app.get(

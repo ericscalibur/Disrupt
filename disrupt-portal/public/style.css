@@ -401,7 +401,7 @@ label {
 }
 
 input {
-    width: 20%;
+    width: 100%;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -701,6 +701,7 @@ input:checked + .slider:before {
 
 .member-remove-item input[type="radio"] {
     margin-right: 10px;
+    width: 20%;
 }
 
 .member-info {
