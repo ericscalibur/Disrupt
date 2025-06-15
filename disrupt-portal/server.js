@@ -2,16 +2,17 @@ const express = require("express");
 const fs = require("fs").promises;
 const path = require("path");
 const cors = require("cors");
-const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const app = express();
 const axios = require("axios");
 const crypto = require("crypto");
-const { decode } = require("light-bolt11-decoder");
 const bolt11 = require("bolt11");
 const jwt = require("jsonwebtoken");
 const lnurlPay = require("lnurl-pay");
 const authorizedRoles = ["Admin", "Manager"];
+const refreshTokensStore = new Set();
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
 app.use(express.json());
 require("dotenv").config();
 app.use(
@@ -22,8 +23,11 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
-app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
 
 const fetch = require("node-fetch");
 const BLINK_API_KEY = process.env.BLINK_API_KEY;
@@ -37,10 +41,15 @@ const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 const SUPPLIERS_FILE = path.join(DATA_DIR, "suppliers.json");
 const DEPARTMENTS_FILE = path.join(DATA_DIR, "departments.json");
 const DRAFTS_FILE = path.join(DATA_DIR, "drafts.json");
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is not defined");
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
+
+if (!ACCESS_TOKEN_SECRET) {
+  throw new Error("ACCESS_TOKEN_SECRET environment variable is not defined");
 }
+
+const jwtSecret = ACCESS_TOKEN_SECRET;
+const refreshSecret = REFRESH_TOKEN_SECRET;
 
 async function getBlinkWallets() {
   const apiKey = BLINK_API_KEY;
@@ -113,23 +122,43 @@ async function getBlinkTransactions() {
 
 // Middleware to authenticate JWT and attach user info to req.user
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) {
-    return res
-      .status(401)
-      .json({ success: false, message: "No token provided" });
-  }
+  try {
+    const authHeader = req.headers["authorization"];
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
+    if (!authHeader) {
       return res
         .status(401)
-        .json({ success: false, message: "Invalid or expired token" });
+        .json({ success: false, message: "Authorization header missing" });
     }
-    req.user = user;
-    next();
-  });
+
+    const tokenParts = authHeader.split(" ");
+
+    if (tokenParts.length !== 2 || tokenParts[0] !== "Bearer") {
+      return res
+        .status(401)
+        .json({ success: false, message: "Malformed authorization header" });
+    }
+
+    const token = tokenParts[1];
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Token missing" });
+    }
+
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+      if (err) {
+        console.error("JWT verification error:", err);
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid or expired token" });
+      }
+      req.user = user;
+      next();
+    });
+  } catch (err) {
+    console.error("Authentication middleware error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 }
 
 // Middleware to authorize based on allowed roles
@@ -188,12 +217,31 @@ async function updateEmployeeById(id, updates) {
   }
 }
 
+function extractCompanyFromEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  const match = email.match(/@([^\.]+)\./);
+  return match && match[1] ? match[1].toLowerCase() : "";
+}
+
 //////// ROUTES ////////
 
 // User Authentication
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
+    }
+
     const data = await fs.readFile(USERS_FILE, "utf8");
     let users = [];
     try {
@@ -204,32 +252,52 @@ app.post("/api/login", async (req, res) => {
     }
 
     const user = users.find(
-      (u) => u.email === email && u.password === password,
+      (u) =>
+        u.email.toLowerCase() === email.toLowerCase() &&
+        u.password === password,
     );
 
-    if (user) {
-      const tokenPayload = {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        department: user.department, // Include department here
-      };
-
-      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-        expiresIn: "1h",
-      });
-
-      res.json({
-        success: true,
-        token,
-        message: "Login successful",
-      });
-    } else {
-      res.status(401).json({
+    if (!user) {
+      return res.status(401).json({
         success: false,
         message: "Invalid email or password",
       });
     }
+
+    const tokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+    };
+
+    // Generate access token (short-lived)
+    const accessToken = jwt.sign(tokenPayload, jwtSecret, {
+      expiresIn: "15m", // 15 minutes
+    });
+
+    // Generate refresh token (long-lived)
+    const refreshToken = jwt.sign(tokenPayload, refreshSecret, {
+      expiresIn: "7d", // 7 days
+    });
+
+    // Store refresh token in memory (replace with DB in production)
+    refreshTokensStore.add(refreshToken);
+
+    // Set refresh token as HttpOnly cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+    });
+
+    // Send access token in response body
+    res.json({
+      success: true,
+      accessToken,
+      message: "Login successful",
+    });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({
@@ -264,6 +332,73 @@ app.get("/api/me", authenticateToken, async (req, res) => {
   }
 });
 
+//// REFRESH ////
+app.post("/api/refresh", (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res
+      .status(401)
+      .json({ success: false, message: "No refresh token provided" });
+  }
+
+  if (!refreshTokensStore.has(refreshToken)) {
+    return res
+      .status(403)
+      .json({ success: false, message: "Invalid refresh token" });
+  }
+
+  jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Invalid refresh token" });
+    }
+
+    // Remove old refresh token and optionally generate a new refresh token (refresh token rotation)
+    refreshTokensStore.delete(refreshToken);
+
+    const tokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+    };
+
+    const newAccessToken = jwt.sign(
+      tokenPayload,
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: "15m",
+      },
+    );
+
+    const newRefreshToken = jwt.sign(
+      tokenPayload,
+      process.env.REFRESH_TOKEN_SECRET,
+      {
+        expiresIn: "7d",
+      },
+    );
+
+    // Store new refresh token
+    refreshTokensStore.add(newRefreshToken);
+
+    // Set new refresh token cookie
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+      success: true,
+      accessToken: newAccessToken,
+    });
+  });
+});
+
 // User Management
 app.get(
   "/api/users",
@@ -293,13 +428,11 @@ app.get(
       res.json(sanitizedUsers);
     } catch (err) {
       console.error("Error in /api/users:", err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Failed to load users",
-          error: err.message,
-        });
+      res.status(500).json({
+        success: false,
+        message: "Failed to load users",
+        error: err.message,
+      });
     }
   },
 );
@@ -680,28 +813,93 @@ app.get("/api/drafts", authenticateToken, async (req, res) => {
 // NEW DRAFT
 app.post("/api/drafts", authenticateToken, async (req, res) => {
   try {
-    const newDraft = req.body;
+    const {
+      title,
+      recipientEmail,
+      company,
+      contact,
+      recipientLightningAddress,
+      amount,
+      note,
+    } = req.body;
 
     // Basic validation
-    if (!newDraft.title || typeof newDraft.title !== "string") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Draft title is required." });
+    if (!title || typeof title !== "string" || title.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Draft title is required and must be a non-empty string.",
+      });
     }
 
-    // Add department from authenticated user info
+    if (
+      !recipientEmail ||
+      typeof recipientEmail !== "string" ||
+      recipientEmail.trim() === ""
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Recipient email is required and must be a non-empty string.",
+      });
+    }
+
+    if (!company || typeof company !== "string" || company.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Company is required and must be a non-empty string.",
+      });
+    }
+
+    if (!contact || typeof contact !== "string" || contact.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Contact is required and must be a non-empty string.",
+      });
+    }
+
+    if (
+      !recipientLightningAddress ||
+      typeof recipientLightningAddress !== "string" ||
+      recipientLightningAddress.trim() === ""
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Recipient Lightning Address is required and must be a non-empty string.",
+      });
+    }
+
+    if (amount === undefined || isNaN(Number(amount)) || Number(amount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount is required and must be a positive number.",
+      });
+    }
+
+    // Validate user department from authenticated token
     if (!req.user.department) {
-      return res
-        .status(400)
-        .json({ success: false, message: "User department is required." });
+      return res.status(400).json({
+        success: false,
+        message: "User department is required.",
+      });
     }
 
-    newDraft.id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    newDraft.createdBy = req.user.email;
-    newDraft.department = req.user.department; // Assign department here
-    newDraft.dateCreated = new Date().toISOString();
-    newDraft.status = "pending";
+    // Create new draft object
+    const newDraft = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      title: title.trim(),
+      recipientEmail: recipientEmail.trim(),
+      company: company.trim(),
+      contact: contact.trim(),
+      recipientLightningAddress: recipientLightningAddress.trim(),
+      amount: Number(amount),
+      note: note ? note.trim() : "",
+      createdBy: req.user.email,
+      department: req.user.department,
+      dateCreated: new Date().toISOString(),
+      status: "pending",
+    };
 
+    // Read existing drafts from file
     let drafts = [];
     try {
       const data = await fs.readFile(DRAFTS_FILE, "utf8");
@@ -710,8 +908,11 @@ app.post("/api/drafts", authenticateToken, async (req, res) => {
       drafts = [];
     }
 
+    // Save new draft
     drafts.push(newDraft);
     await fs.writeFile(DRAFTS_FILE, JSON.stringify(drafts, null, 2));
+
+    // Respond with success and new draft
     res.json({ success: true, draft: newDraft });
   } catch (err) {
     console.error("Error saving draft:", err);
@@ -888,7 +1089,7 @@ app.post(
         id: paymentHash || Date.now(),
         date: new Date().toISOString(),
         type: "lightning",
-        receiver: draft.recipientName || draft.name || "Unknown",
+        receiver: draft.company || draft.contact || "Unknown",
         lightningAddress: lightningAddress || null,
         invoice: invoice || null,
         amount: amount || 0,
@@ -956,9 +1157,15 @@ app.post(
   },
 );
 
-app.get("/api/transactions", authenticateToken, async (req, res) => {
+app.get("/api/transactions", async (req, res) => {
   try {
-    // 1. Read local transactions.json
+    let blinkTxns = [];
+    try {
+      blinkTxns = await getBlinkTransactions();
+    } catch (blinkErr) {
+      console.error("Error fetching Blink transactions:", blinkErr.message);
+    }
+
     let localTxns = [];
     try {
       const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -970,28 +1177,62 @@ app.get("/api/transactions", authenticateToken, async (req, res) => {
       if (err.code !== "ENOENT") throw err;
     }
 
-    // 2. Normalize transactions to ensure 'receiver' field exists
-    localTxns = localTxns.map((txn) => ({
-      ...txn,
-      receiver: txn.receiver || txn.recipientName || "Unknown",
+    const getReceiver = (txn) =>
+      txn.recipient_name ||
+      txn.receiver ||
+      txn.contact ||
+      txn.company ||
+      txn.memo ||
+      "Unknown";
+
+    const mergedTxns = blinkTxns.map((blinkTxn) => {
+      const local = localTxns.find((t) => t.id === blinkTxn.id);
+
+      let amount, currency;
+      if (blinkTxn.settlementCurrency === "BTC") {
+        amount = blinkTxn.settlementAmount; // sats
+        currency = "SATS";
+      } else if (blinkTxn.settlementCurrency === "USD") {
+        amount = (blinkTxn.settlementAmount / 100).toFixed(2); // dollars
+        currency = "USD";
+      } else {
+        amount = blinkTxn.settlementAmount;
+        currency = blinkTxn.settlementCurrency || "";
+      }
+
+      return {
+        id: blinkTxn.id,
+        date: blinkTxn.createdAt,
+        receiver: local ? getReceiver(local) : blinkTxn.memo || "Unknown",
+        amount,
+        currency,
+        note: blinkTxn.memo || "",
+        type: "lightning",
+      };
+    });
+
+    // Include local transactions not in Blink
+    const blinkTxnIds = new Set(blinkTxns.map((txn) => txn.id));
+    const uniqueLocalTxns = localTxns.filter((txn) => !blinkTxnIds.has(txn.id));
+
+    const formattedLocalTxns = uniqueLocalTxns.map((txn) => ({
+      id: txn.id,
+      date: txn.date,
+      receiver: getReceiver(txn),
+      amount: txn.amount,
+      currency: txn.currency,
+      note: txn.note || "",
+      type: txn.type || "local",
     }));
 
-    // 3. Filter for valid, real transactions
-    const validTxns = localTxns
-      .filter(
-        (txn) =>
-          typeof txn.date === "string" &&
-          !isNaN(new Date(txn.date).getTime()) &&
-          txn.receiver &&
-          txn.receiver !== "Unknown",
-      )
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 20); // Only show the 20 most recent
+    const allTxns = [...mergedTxns, ...formattedLocalTxns];
 
-    // 4. Send response
+    // Sort by date descending
+    allTxns.sort((a, b) => new Date(b.date) - new Date(a.date));
+
     res.json({
       success: true,
-      transactions: validTxns,
+      transactions: allTxns,
     });
   } catch (err) {
     console.error("Error reading transactions:", err);
@@ -1007,47 +1248,51 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
   const { recipient, amountSats, memo } = req.body;
   const apiKey = BLINK_API_KEY;
 
-  // Get your BTC wallet ID from Blink
-  let wallets;
-  try {
-    wallets = await getBlinkWallets();
-  } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch wallets" });
-  }
-  const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
-  if (!btcWallet) {
-    return res
-      .status(400)
-      .json({ success: false, message: "No BTC wallet found" });
+  if (!recipient || !amountSats) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required fields: recipient and amountSats",
+    });
   }
 
-  // Prepare GraphQL mutation for Lightning Address payment
-  const query = `
-    mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
-      lnLightningAddressPaymentSend(input: $input) {
-        status
-        errors { message }
-        payment {
-          id
+  try {
+    // Fetch wallets from Blink API
+    const wallets = await getBlinkWallets();
+    const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+
+    if (!btcWallet) {
+      return res.status(400).json({
+        success: false,
+        message: "No BTC wallet found",
+      });
+    }
+
+    // Prepare GraphQL mutation for Lightning Address payment
+    const query = `
+      mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
+        lnLightningAddressPaymentSend(input: $input) {
           status
-          paymentHash
+          errors { message }
+          payment {
+            id
+            status
+            paymentHash
+          }
         }
       }
-    }
-  `;
-  const variables = {
-    input: {
-      walletId: btcWallet.id,
-      paymentRequest: null,
-      lnAddress: recipient,
-      amount: Number(amountSats),
-      memo: memo || "",
-    },
-  };
+    `;
 
-  try {
+    const variables = {
+      input: {
+        walletId: btcWallet.id,
+        paymentRequest: null,
+        lnAddress: recipient,
+        amount: Number(amountSats),
+        memo: memo || "",
+      },
+    };
+
+    // Send payment request to Blink API
     const response = await axios.post(
       "https://api.blink.sv/graphql",
       { query, variables },
@@ -1058,12 +1303,17 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
         },
       },
     );
+
     const result = response.data.data.lnLightningAddressPaymentSend;
+
     if (result.errors && result.errors.length > 0) {
-      return res.json({ success: false, message: result.errors[0].message });
+      return res.json({
+        success: false,
+        message: result.errors[0].message,
+      });
     }
 
-    // Save to transactions.json (optional, but recommended)
+    // Prepare new transaction object
     const newTxn = {
       id: result.payment.id,
       date: new Date().toISOString(),
@@ -1075,18 +1325,39 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
       direction: "SENT",
       status: result.payment.status,
     };
-    // Read, append, and write
+
+    // Read existing transactions
     let txns = [];
     try {
       const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
       txns = data.trim() ? JSON.parse(data) : [];
-    } catch (err) {}
-    txns.push(newTxn);
+    } catch (err) {
+      if (err.code !== "ENOENT") {
+        throw err;
+      }
+      // If file doesn't exist, start with empty array
+      txns = [];
+    }
+
+    // Add new transaction to beginning (newest first)
+    txns.unshift(newTxn);
+
+    // Write updated transactions back to file
     await fs.writeFile(TRANSACTIONS_FILE, JSON.stringify(txns, null, 2));
 
-    res.json({ success: true, payment: result.payment });
+    // Respond with success and payment info
+    res.json({
+      success: true,
+      payment: result.payment,
+      transaction: newTxn,
+    });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    console.error("Error processing Lightning payment:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to process Lightning payment",
+      error: err.message,
+    });
   }
 });
 
@@ -1353,10 +1624,54 @@ app.delete("/api/suppliers/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// NEW PAYMENT
+//// EDIT SUPPLIER /////
+app.put("/api/suppliers/:id", async (req, res) => {
+  const id = req.params.id;
+  const updates = req.body;
+
+  try {
+    const data = await fs.readFile(SUPPLIERS_FILE, "utf8");
+    const suppliers = JSON.parse(data);
+
+    const index = suppliers.findIndex((s) => String(s.id) === String(id));
+    if (index === -1) {
+      return res.status(404).json({ message: "Supplier not found" });
+    }
+
+    const originalSupplier = suppliers[index];
+    suppliers[index] = {
+      ...originalSupplier,
+      ...updates,
+      id: originalSupplier.id,
+      createdAt: originalSupplier.createdAt,
+    };
+
+    await fs.writeFile(
+      SUPPLIERS_FILE,
+      JSON.stringify(suppliers, null, 2),
+      "utf8",
+    );
+
+    res.json(suppliers[index]);
+  } catch (err) {
+    console.error("Error updating supplier:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//// NEW PAYMENT /////
 app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
   try {
-    const { recipientType, recipientId, paymentAmount, paymentNote } = req.body;
+    const {
+      recipientType,
+      recipientId,
+      contact,
+      company,
+      email,
+      lightningAddress,
+      paymentAmount,
+      paymentNote,
+    } = req.body;
 
     // Validate required fields
     if (!recipientType || !recipientId || !paymentAmount) {
@@ -1366,7 +1681,31 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    // Lookup recipient - replace these with your actual data access methods
+    if (!contact || !company) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing contact or company information.",
+      });
+    }
+
+    if (!lightningAddress) {
+      return res.status(400).json({
+        success: false,
+        message: "Recipient does not have a Lightning Address.",
+      });
+    }
+
+    const amount = Number(paymentAmount);
+    const note = paymentNote || "";
+
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment amount.",
+      });
+    }
+
+    // Lookup recipient for validation (optional but recommended)
     let recipient;
     if (recipientType === "employee") {
       recipient = await getEmployeeById(recipientId);
@@ -1386,24 +1725,12 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    if (!recipient.lightningAddress) {
-      return res.status(400).json({
-        success: false,
-        message: "Recipient does not have a Lightning Address.",
-      });
-    }
-
-    const name = recipient.name;
-    const lightningAddress = recipient.lightningAddress;
-    const amount = paymentAmount;
-    const note = paymentNote || "";
-
-    // 1. Resolve Lightning Address to invoice via LNURL-pay
+    // Resolve Lightning Address to invoice via LNURL-pay
     let invoice;
     try {
       const lnurlResp = await lnurlPay.requestInvoice({
         lnUrlOrAddress: lightningAddress,
-        tokens: parseInt(amount, 10),
+        tokens: amount,
         comment: note,
       });
       invoice = lnurlResp.invoice;
@@ -1418,7 +1745,7 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    // 2. Fetch BTC wallet ID from Blink
+    // Fetch BTC wallet ID from Blink
     let walletId;
     try {
       const walletQuery = `
@@ -1455,7 +1782,7 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    // 3. Decode invoice to get payment_hash
+    // Decode invoice to get payment_hash
     let paymentHash = null;
     try {
       const decodedInvoice = bolt11.decode(invoice);
@@ -1466,7 +1793,7 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       console.warn("Failed to decode invoice:", err);
     }
 
-    // 4. Pay the invoice via Blink
+    // Pay the invoice via Blink
     let paymentResult;
     try {
       const mutation = `
@@ -1511,7 +1838,7 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    // 5. Read existing transactions
+    // Read existing transactions
     let transactions = [];
     try {
       const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -1526,25 +1853,26 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       }
     }
 
-    // 6. Create new transaction record
+    // Create new transaction record
     const transaction = {
       id: paymentHash || Date.now(),
       date: new Date().toISOString(),
       type: "payment",
       recipientType,
       recipientId,
-      recipientName: name,
+      contact,
+      company,
       lightningAddress,
       invoice,
-      amount: Number(amount) || 0,
+      amount,
       currency: "SATS",
       note,
       direction: "SENT",
-      status: paymentResult?.status || "complete",
+      status: (paymentResult?.status || "SUCCESS").toUpperCase(),
       paymentHash,
     };
 
-    // 7. Save transactions
+    // Save transactions
     transactions.unshift(transaction);
     try {
       await fs.writeFile(
@@ -1559,7 +1887,7 @@ app.post("/api/pay", authenticateToken, express.json(), async (req, res) => {
       });
     }
 
-    // 8. Respond success
+    // Respond success
     return res.json({ success: true, transaction });
   } catch (err) {
     console.error("Internal server error in /api/pay:", err);
@@ -1576,7 +1904,7 @@ app.post(
   authenticateToken,
   express.json(),
   async (req, res) => {
-    const { invoice, note, recipientName, name, lightningAddress } = req.body;
+    const { invoice, note, receiverName, lightningAddress } = req.body;
 
     if (!invoice) {
       return res
@@ -1620,11 +1948,12 @@ app.post(
       });
     }
 
-    // Step 2: Decode invoice to extract payment_hash, receiver, amount
+    // Step 2: Decode invoice to extract payment_hash, amount
     let paymentHash = null;
-    let receiver = recipientName || name || "Unknown";
     let amount = 0;
     let currency = "SATS";
+    let receiver =
+      receiverName && receiverName.trim() !== "" ? receiverName.trim() : null;
 
     try {
       const decodedInvoice = bolt11.decode(invoice);
@@ -1633,16 +1962,22 @@ app.post(
         decodedInvoice.tags.find((t) => t.tagName === "payment_hash")?.data ||
         null;
 
-      const payeeTag = decodedInvoice.tags.find((t) =>
-        ["payee_node_key", "pubkey", "node_id"].includes(t.tagName),
-      );
-      if (payeeTag && payeeTag.data) {
-        receiver = payeeTag.data;
-      }
-
       amount = decodedInvoice.satoshis || 0;
+
+      // Only use payee node key if recipientName not provided
+      if (!receiver) {
+        const payeeTag = decodedInvoice.tags.find((t) =>
+          ["payee_node_key", "pubkey", "node_id"].includes(t.tagName),
+        );
+        if (payeeTag && payeeTag.data) {
+          receiver = payeeTag.data;
+        } else {
+          receiver = "Unknown";
+        }
+      }
     } catch (err) {
       console.warn("Failed to decode invoice:", err);
+      if (!receiver) receiver = "Unknown";
     }
 
     // Step 3: Pay the invoice via Blink (simplified mutation)
@@ -1776,7 +2111,26 @@ app.post("/api/decode-invoice", authenticateToken, (req, res) => {
   }
 });
 
+// Logout route to revoke refresh token
+app.post("/logout", (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+  if (refreshToken) {
+    refreshTokensStore.delete(refreshToken);
+  }
+  res.clearCookie("refreshToken");
+  res.sendStatus(204);
+});
+
 // Serve frontend
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return res
+      .status(404)
+      .json({ success: false, message: "API endpoint not found" });
+  }
+  next();
+});
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
