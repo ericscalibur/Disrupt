@@ -1,5 +1,7 @@
 const API_BASE = "http://localhost:3001/api";
 let currentUser = null;
+let currentUserRole = null;
+let currentSupplier = null;
 let membersToRemove = [];
 let selectedMemberEmail = null;
 let invoiceDecodeTimeout = null;
@@ -21,14 +23,32 @@ let currentBalanceMode = 0;
 const authorizedRoles = ["Admin", "Manager"];
 const token = sessionStorage.getItem("token");
 
+let modal;
+let inputsContainer;
+
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
   const userStr = sessionStorage.getItem("user");
   if (userStr) {
     currentUser = JSON.parse(userStr);
+    console.log(currentUser);
+    currentUserRole = currentUser.role; // adjust property name if different
   }
 }
 
+if (token) {
+  const payload = decodeJwt(token);
+  if (payload && payload.role) {
+    currentUserRole = payload.role;
+    console.log("Current user role:", currentUserRole);
+  } else {
+    console.warn("Role claim not found in token");
+  }
+} else {
+  console.warn("No token found");
+}
+
+// Helper to decode JWT token payload
 function decodeJwt(token) {
   try {
     const base64Url = token.split(".")[1];
@@ -46,10 +66,102 @@ function decodeJwt(token) {
   }
 }
 
-const decoded = decodeJwt(token);
-const currentUserRole = decoded ? decoded.role : null;
+// Helper to check if token is expired
+function isTokenExpired(token) {
+  if (!token) return true;
+  const decoded = decodeJwt(token);
+  if (!decoded || !decoded.exp) return true;
+  const now = Math.floor(Date.now() / 1000);
+  return decoded.exp < now;
+}
 
-// Login function
+// Centralized fetch helper that includes Authorization header
+async function authFetch(url, options = {}) {
+  let token = sessionStorage.getItem("token");
+
+  if (!token) {
+    alert("Session expired or missing. Please log in again.");
+    // Optionally redirect to login page here
+    throw new Error("Invalid or missing token");
+  }
+
+  const headers = {
+    ...options.headers,
+    Authorization: `Bearer ${token}`,
+  };
+
+  if (!headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: "include",
+    });
+  } catch (networkError) {
+    console.error("Network error during fetch:", networkError);
+    throw networkError;
+  }
+
+  if (response.status === 401) {
+    try {
+      const refreshResponse = await fetch(`${API_BASE}/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!refreshResponse.ok) {
+        alert("Session expired. Please log in again.");
+        handleLogout();
+        throw new Error("Refresh token expired or invalid");
+      }
+
+      const data = await refreshResponse.json();
+
+      if (!data.accessToken) {
+        alert("Failed to refresh session. Please log in again.");
+        handleLogout();
+        throw new Error("Failed to refresh access token");
+      }
+
+      sessionStorage.setItem("token", data.accessToken);
+
+      // Retry original request with new token
+      const newHeaders = {
+        ...options.headers,
+        Authorization: `Bearer ${data.accessToken}`,
+      };
+
+      if (!newHeaders["Content-Type"]) {
+        newHeaders["Content-Type"] = "application/json";
+      }
+
+      response = await fetch(url, {
+        ...options,
+        headers: newHeaders,
+        credentials: "include",
+      });
+    } catch (err) {
+      console.error("Error during token refresh:", err);
+      alert("Session expired. Please log in again.");
+      handleLogout();
+      throw err;
+    }
+  }
+
+  return response;
+}
+
+function handleLogout() {
+  sessionStorage.removeItem("token");
+  // Redirect or show login UI
+  window.location.href = "/login";
+}
+
+// Updated login function
 async function login() {
   const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
@@ -64,10 +176,12 @@ async function login() {
   }
 
   try {
+    // Login request (with credentials to accept cookies)
     const response = await fetch(`${API_BASE}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
+      credentials: "include", // Required for cookies
     });
 
     if (!response.ok) {
@@ -77,14 +191,14 @@ async function login() {
       );
     }
 
-    const data = await response.json();
+    const { accessToken } = await response.json();
 
-    if (data.success && data.token) {
-      sessionStorage.setItem("token", data.token);
+    if (accessToken) {
+      // Store access token
+      sessionStorage.setItem("token", accessToken);
 
-      const profileResp = await fetch(`${API_BASE}/me`, {
-        headers: { Authorization: `Bearer ${data.token}` },
-      });
+      // Fetch user profile with new token
+      const profileResp = await authFetch(`${API_BASE}/me`);
 
       if (!profileResp.ok) {
         throw new Error("Failed to load user profile.");
@@ -95,16 +209,15 @@ async function login() {
       if (profile.success) {
         currentUser = profile.user;
 
-        // Call populateDepartmentsList only after currentUser is set and token stored
+        // Call initialization functions
         await populateDepartmentsList();
-
         showDashboard();
         await loadEmployeeDrafts();
       } else {
         throw new Error("Failed to load user profile.");
       }
     } else {
-      throw new Error(data.message || "Invalid email or password.");
+      throw new Error("No access token received.");
     }
   } catch (err) {
     console.error("Login error:", err);
@@ -141,18 +254,38 @@ function showDashboard() {
 }
 
 // Logout function
-function logout() {
+async function logout() {
+  try {
+    const response = await fetch(`${API_BASE}/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      console.warn("Logout request failed:", response.status);
+    }
+  } catch (err) {
+    console.error("Logout error:", err);
+  } finally {
+    resetUIAfterLogout();
+  }
+}
+
+function resetUIAfterLogout() {
   currentUser = null;
   sessionStorage.removeItem("user");
   sessionStorage.removeItem("token");
+
   document.getElementById("email").value = "";
   document.getElementById("password").value = "";
   document.getElementById("loginPage").style.display = "flex";
   document.getElementById("dashboard").style.display = "none";
   document.body.classList.remove("volcano-mode");
+
   const dashboard = document.getElementById("dashboard");
   if (dashboard) dashboard.classList.remove("volcano-mode");
+
   localStorage.removeItem("volcanoMode");
+
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
   if (toggleText) toggleText.textContent = "🌋 Volcano";
@@ -162,7 +295,14 @@ function logout() {
 // ===== Main Accounting Loader =====
 function sortEmployeeDraftsByColumn(columnIdx) {
   // Adjust these if your columns are ordered differently
-  const columns = ["dateCreated", "recipientName", "note", "amount", "status"];
+  const columns = [
+    "dateCreated",
+    "recipientName",
+    "contactName",
+    "note",
+    "amount",
+    "status",
+  ];
   const column = columns[columnIdx];
   if (!column) return;
 
@@ -208,11 +348,13 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     return;
   }
 
+  console.log("Drafts data received:", drafts);
+
   drafts.forEach((draft) => {
     let actionCell = "";
     let statusText = "";
     let statusClass = "";
-
+    console.log(draft);
     if (draft.status === "pending") {
       if (showActions) {
         actionCell = `
@@ -240,10 +382,23 @@ function renderPendingDraftsTable(drafts, showActions = true) {
       statusClass = "";
     }
 
+    // Prepare company and contact with fallback text
+    const companyName =
+      draft.company && draft.company.trim() !== ""
+        ? draft.company
+        : "(No Company)";
+    const contactName =
+      draft.contact && draft.contact.trim() !== ""
+        ? draft.contact
+        : "(No Contact)";
+
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${new Date(draft.dateCreated).toLocaleString()}</td>
-      <td>${draft.recipientName || draft.payee || ""}</td>
+      <td>
+        <div><strong>Company:</strong> ${companyName}</div>
+        <div><strong>Contact:</strong> ${contactName}</div>
+      </td>
       <td>${draft.note || draft.description || ""}</td>
       <td class="amount-cell">${draft.amount}</td>
       <td>${actionCell}</td>
@@ -382,21 +537,23 @@ async function populateDraftRecipientDropdown() {
       throw new Error(`Failed to load suppliers: ${response.status}`);
     }
 
+    // Here is where you assign suppliersList from the wrapped response
     const data = await response.json();
     suppliersList = data.suppliers || [];
 
     suppliersList.forEach((supplier) => {
       const option = document.createElement("option");
       option.value = supplier.id;
-      option.textContent = supplier.name;
+      option.textContent = supplier.company; // Use company name for dropdown
       select.appendChild(option);
     });
 
     if (suppliersList.length > 0) {
       select.value = suppliersList[0].id;
-      populateDraftRecipientDetails();
+      populateDraftRecipientDetails(); // Populate contact details for first supplier
     } else {
-      document.getElementById("draftRecipientName").value = "";
+      // Clear contact details fields if no suppliers
+      document.getElementById("draftContactName").value = "";
       document.getElementById("draftRecipientEmail").value = "";
       document.getElementById("draftRecipientLightningAddress").value = "";
     }
@@ -407,25 +564,21 @@ async function populateDraftRecipientDropdown() {
 }
 
 // LOADS REMAINING DATA FIELDS AFTER RECIPIENT SELECTED
-async function populateDraftRecipientDetails() {
-  const id = document.getElementById("draftRecipientSelect").value;
+function populateDraftRecipientDetails() {
+  const select = document.getElementById("draftRecipientSelect");
+  const selectedSupplierId = select.value;
 
-  if (!id) {
-    // Clear fields if no recipient selected
-    document.getElementById("draftRecipientName").value = "";
+  const supplier = suppliersList.find((s) => s.id === selectedSupplierId);
+
+  if (supplier) {
+    document.getElementById("draftContactName").value = supplier.contact || "";
+    document.getElementById("draftRecipientEmail").value = supplier.email || "";
+    document.getElementById("draftRecipientLightningAddress").value =
+      supplier.lightningAddress || "";
+  } else {
+    document.getElementById("draftContactName").value = "";
     document.getElementById("draftRecipientEmail").value = "";
     document.getElementById("draftRecipientLightningAddress").value = "";
-    return;
-  }
-
-  let recipient = await fetchSupplierById(id);
-
-  if (recipient) {
-    document.getElementById("draftRecipientName").value = recipient.name || "";
-    document.getElementById("draftRecipientEmail").value =
-      recipient.email || "";
-    document.getElementById("draftRecipientLightningAddress").value =
-      recipient.lightningAddress || "";
   }
 }
 
@@ -583,117 +736,105 @@ function showTransactionDetails(txn) {
   document.getElementById("transactionModal").style.display = "flex";
 }
 
-function setupTeamTableClicks(teamMembers) {
-  const modal = document.getElementById("editTeamMemberModal");
-  const closeButton = document.getElementById("closeEditTeamMemberModal");
-  const form = document.getElementById("editTeamMemberForm");
-  const inputsContainer = document.getElementById("teamMemberInputs");
-  let currentMember = null;
-
-  if (!modal || !closeButton || !form || !inputsContainer) {
-    console.error("Edit Team Member modal elements missing");
-    return;
-  }
-
-  // Close modal handler
-  closeButton.addEventListener("click", () => {
-    modal.style.display = "none";
-    form.reset();
-    inputsContainer.innerHTML = "";
-    currentMember = null;
-  });
-
-  // Attach click listeners to each team member row
+// Attach click listeners to each team member row
+function setupTeamTableClicks(users) {
   document.querySelectorAll("#teamTable tbody tr").forEach((row) => {
     row.addEventListener("click", () => {
+      console.log("Current user role:", currentUserRole);
+
       if (!authorizedRoles.includes(currentUserRole)) {
-        alert("You do not have permission to edit team member information.");
+        alert("You are not authorized to edit team members.");
         return;
       }
 
       const memberId = row.getAttribute("data-member-id");
-      currentMember = teamMembers.find((m) => m.id === memberId);
+      const currentMember = users.find((m) => String(m.id) === memberId);
+
       if (!currentMember) {
         console.warn(`Team member with id ${memberId} not found`);
         return;
       }
+
       populateEditForm(currentMember);
-      modal.style.display = "flex";
+      editTeamMemberModal.style.display = "flex";
     });
   });
-
-  // Populate the form inputs dynamically based on currentMember attributes
-  function populateEditForm(member) {
-    inputsContainer.innerHTML = ""; // Clear previous inputs
-    for (const [key, value] of Object.entries(member)) {
-      // Skip id field if you don't want it editable
-      if (key === "id") continue;
-
-      const label = document.createElement("label");
-      label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
-      label.setAttribute("for", `input-${key}`);
-
-      const input = document.createElement("input");
-      input.type = "text";
-      input.id = `input-${key}`;
-      input.name = key;
-      input.placeholder = value || "";
-      input.value = value || "";
-
-      inputsContainer.appendChild(label);
-      inputsContainer.appendChild(input);
-    }
-  }
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!currentMember) return;
-
-    const formData = new FormData(form);
-    const updatedMember = {};
-    for (const [key, value] of formData.entries()) {
-      updatedMember[key] = value;
-    }
-    updatedMember.id = currentMember.id; // Keep ID unchanged
-
-    try {
-      const response = await fetch(
-        `http://localhost:3001/api/team-members/${updatedMember.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`, // Use global token variable
-          },
-          body: JSON.stringify(updatedMember),
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update team member");
-      }
-
-      const savedMember = await response.json();
-
-      // Update local data and UI
-      const index = teamMembers.findIndex((m) => m.id === savedMember.id);
-      if (index !== -1) {
-        teamMembers[index] = savedMember;
-      }
-
-      modal.style.display = "none";
-      form.reset();
-      inputsContainer.innerHTML = "";
-      currentMember = null;
-
-      renderTeamMembersTable(teamMembers);
-    } catch (error) {
-      console.error("Error saving team member:", error);
-      alert(`Error saving changes: ${error.message}`);
-    }
-  });
 }
+
+// Populate the form inputs dynamically based on currentMember attributes
+function populateEditForm(member) {
+  inputsContainer.innerHTML = ""; // Clear previous inputs
+
+  for (const [key, value] of Object.entries(member)) {
+    if (key === "id") continue;
+
+    const label = document.createElement("label");
+    label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+    label.setAttribute("for", `input-${key}`);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = `input-${key}`;
+    input.name = key;
+    input.placeholder = value || "";
+    input.value = value || "";
+
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+
+    inputsContainer.appendChild(wrapper);
+  }
+}
+
+editTeamMemberForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentMember) return;
+
+  const formData = new FormData(form);
+  const updatedMember = {};
+  for (const [key, value] of formData.entries()) {
+    updatedMember[key] = value;
+  }
+  updatedMember.id = currentMember.id; // Keep ID unchanged
+
+  try {
+    const response = await fetch(
+      `http://localhost:3001/api/team-members/${updatedMember.id}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // Use global token variable
+        },
+        body: JSON.stringify(updatedMember),
+      },
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to update team member");
+    }
+
+    const savedMember = await response.json();
+
+    // Update local data and UI
+    const index = employeesList.findIndex((m) => m.id === savedMember.id);
+    if (index !== -1) {
+      employeesList[index] = savedMember;
+    }
+
+    editTeamMemberModal.style.display = "none";
+    form.reset();
+    inputsContainer.innerHTML = "";
+    currentMember = null;
+
+    renderTeamMembersTable(employeesList);
+  } catch (error) {
+    console.error("Error saving team member:", error);
+    alert(`Error saving changes: ${error.message}`);
+  }
+});
 
 function setupTransactionRowClicks(allTransactions) {
   const modal = document.getElementById("transactionModal");
@@ -793,7 +934,6 @@ function sortPendingDraftsByColumn(columnIdx) {
 
 async function loadPendingDrafts() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       throw new Error("Authentication token missing. Please log in.");
     }
@@ -840,11 +980,8 @@ async function loadPendingDrafts() {
 
 async function loadEmployeeDrafts() {
   try {
-    const token = sessionStorage.getItem("token");
-    if (!token) {
-      alert("Please log in to view drafts.");
-      return;
-    }
+    // Show loading state if desired
+    // e.g., showLoadingIndicator(true);
 
     const response = await fetch(`${API_BASE}/drafts`, {
       headers: {
@@ -860,20 +997,30 @@ async function loadEmployeeDrafts() {
     const data = await response.json();
 
     if (data.success) {
-      // Trust backend filtering - no client-side filtering needed
-      renderEmployeeDraftsTable(data.drafts || []);
+      if (!suppliersList || !Array.isArray(suppliersList)) {
+        console.warn(
+          "suppliersList is not loaded or invalid. Drafts may display incomplete info.",
+        );
+      }
+      // Render drafts with suppliersList for lookup
+      renderEmployeeDraftsTable(data.drafts || [], suppliersList || []);
 
-      // Optional: Initialize sorting if needed
+      // Initialize sorting handlers if available
       if (typeof addEmployeeDraftsTableSortHandlers === "function") {
         addEmployeeDraftsTableSortHandlers();
       }
     } else {
-      renderEmployeeDraftsTable([]);
+      // Render empty drafts table with suppliersList (if any)
+      renderEmployeeDraftsTable([], suppliersList || []);
       console.warn("Failed to load drafts:", data.message);
     }
   } catch (err) {
-    renderEmployeeDraftsTable([]);
+    // Render empty drafts table on error
+    renderEmployeeDraftsTable([], suppliersList || []);
     console.error("Error loading drafts:", err);
+  } finally {
+    // Hide loading state if used
+    // e.g., showLoadingIndicator(false);
   }
 }
 
@@ -888,7 +1035,14 @@ function addEmployeeDraftsTableSortHandlers() {
 }
 
 function sortEmployeeDraftsByColumn(columnIdx) {
-  const columns = ["dateCreated", "recipientName", "note", "amount", "status"];
+  const columns = [
+    "dateCreated",
+    "recipientName",
+    "contactName",
+    "note",
+    "amount",
+    "status",
+  ];
   const column = columns[columnIdx];
   if (!column) return;
 
@@ -968,8 +1122,8 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${new Date(draft.dateCreated).toLocaleString()}</td>
-      <td>${draft.recipientName || draft.payee || ""}</td>
-      <td>${draft.note || draft.description || ""}</td>
+      <td>${draft.company || draft.contact || ""}</td>
+      <td>${draft.note || ""}</td>
       <td class="amount-cell">${draft.amount}</td>
       <td>${actionCell}</td>
     `;
@@ -985,12 +1139,12 @@ function renderPendingDraftsTable(drafts, showActions = true) {
   });
 }
 
-function renderEmployeeDraftsTable(drafts) {
+function renderEmployeeDraftsTable(drafts, suppliersList) {
   const tbody = document.querySelector("#draftsTable tbody");
   tbody.innerHTML = "";
 
   if (!drafts || drafts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="loading-message">No drafts found.</td></tr>`;
     return;
   }
 
@@ -998,6 +1152,8 @@ function renderEmployeeDraftsTable(drafts) {
   drafts.sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated));
 
   drafts.forEach((draft) => {
+    console.log("Draft object:", draft);
+
     let statusText = "";
     let statusClass = "";
 
@@ -1022,14 +1178,36 @@ function renderEmployeeDraftsTable(drafts) {
       ? Number(draft.amount).toLocaleString("en-US") + " SATS"
       : "";
 
+    // Determine company and contact names
+    // If draft.company is an ID, look up supplier; else use draft.company/contact directly
+    let companyName = draft.company || "";
+    let contactName = draft.contact || "";
+
+    // If companyName looks like an ID (e.g., starts with 'sup'), try to find supplier
+    if (companyName && companyName.startsWith("sup")) {
+      const supplier = suppliersList.find((s) => s.id === companyName);
+      if (supplier) {
+        companyName = supplier.company || companyName;
+        contactName = supplier.contact || contactName;
+      }
+    }
+
+    // Fallback text if empty
+    companyName =
+      companyName.trim() !== "" ? companyName : "(No Business Name)";
+    contactName = contactName.trim() !== "" ? contactName : "(No Contact Name)";
+
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${formattedDate}</td>
-      <td>${draft.recipientName || draft.payee || ""}</td>
-      <td>${draft.note || draft.description || ""}</td>
+      <td>${draft.title || "(No Title)"}</td>
+      <td>${companyName}</td>
+      <td>${contactName}</td>
+      <td>${draft.note || ""}</td>
       <td class="amount-cell">${formattedAmount}</td>
       <td><span class="status-label ${statusClass}">${statusText}</span></td>
     `;
+
     tbody.appendChild(row);
   });
 }
@@ -1039,8 +1217,6 @@ async function handleDraftApproval(e) {
 
   if (confirm("Approve this draft?")) {
     try {
-      const token = sessionStorage.getItem("token");
-
       const response = await fetch(`${API_BASE}/drafts/approve`, {
         method: "POST",
         headers: {
@@ -1072,7 +1248,6 @@ async function handleDraftDecline(e) {
   const draftId = e.target.getAttribute("data-draft-id");
   if (confirm("Are you sure you want to decline this draft payment?")) {
     try {
-      const token = sessionStorage.getItem("token");
       const response = await fetch(`${API_BASE}/drafts/decline`, {
         method: "POST",
         headers: {
@@ -1120,8 +1295,6 @@ async function updateLightningBalance() {
   try {
     if (spinnerElem) spinnerElem.style.display = "inline";
     if (balanceElem) balanceElem.style.visibility = "hidden";
-
-    const token = sessionStorage.getItem("token"); // or wherever you store the JWT
 
     // Fetch both balance and USD rate in parallel, passing auth header for balance
     const [balanceResp, usdRate] = await Promise.all([
@@ -1173,7 +1346,6 @@ async function fetchBtcUsdRate() {
 // Load departments and populate the list
 async function loadDepartments() {
   try {
-    const token = sessionStorage.getItem("token"); // align with login token storage
     if (!token) {
       throw new Error("Authentication token missing. Please log in.");
     }
@@ -1219,8 +1391,6 @@ async function addDepartment() {
   if (!dep) return;
 
   try {
-    const token = sessionStorage.getItem("token"); // or wherever you store the JWT
-
     const response = await fetch(`${API_BASE}/departments`, {
       method: "POST",
       headers: {
@@ -1283,7 +1453,6 @@ async function removeDepartment(department) {
 // Load departments into the remove select dropdown
 async function loadRemoveDepartmentSelect() {
   try {
-    const token = sessionStorage.getItem("token"); // consistent with your other functions
     if (!token) {
       throw new Error("Authentication token missing. Please log in.");
     }
@@ -1323,7 +1492,6 @@ async function loadRemoveDepartmentSelect() {
 
 async function populateDepartmentsList() {
   try {
-    const token = sessionStorage.getItem("token"); // Use sessionStorage for token consistency
     if (!token) {
       throw new Error("No authentication token found. Please log in.");
     }
@@ -1373,7 +1541,6 @@ async function populateDepartmentsList() {
 
 async function populateDepartmentSelect() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       throw new Error("Authentication token missing. Please log in.");
     }
@@ -1416,7 +1583,6 @@ async function populateDepartmentSelect() {
 
 async function loadSuppliers() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       throw new Error("Authentication token missing. Please log in.");
     }
@@ -1437,6 +1603,7 @@ async function loadSuppliers() {
 
     const data = await response.json();
     if (data.success) {
+      suppliersList = data.suppliers; // assign to global variable
       renderSuppliers(data.suppliers);
     } else {
       throw new Error("Failed to load suppliers");
@@ -1447,15 +1614,83 @@ async function loadSuppliers() {
   }
 }
 
+// Populate supplier edit modal form with supplier data
+function populateEditSupplierForm(supplier) {
+  currentSupplier = supplier;
+  const form = document.getElementById("editSupplierForm");
+  form.elements["name"].value = supplier.name || "";
+  form.elements["contact"].value = supplier.contact || "";
+  form.elements["email"].value = supplier.email || "";
+  form.elements["lightningAddress"].value = supplier.lightningAddress || "";
+  form.elements["note"].value = supplier.note || "";
+  document.getElementById("editSupplierModal").style.display = "flex";
+}
+
+// Handle form submission
+document
+  .getElementById("editSupplierForm")
+  .addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSupplier) return;
+
+    const form = event.target;
+
+    const updatedSupplier = {
+      id: currentSupplier.id, // keep from currentSupplier or add hidden input if you prefer
+      name: form.elements["name"].value,
+      contact: form.elements["contact"].value,
+      email: form.elements["email"].value,
+      lightningAddress: form.elements["lightningAddress"].value,
+      note: form.elements["note"].value,
+      createdAt: currentSupplier.createdAt, // keep original createdAt
+    };
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/suppliers/${updatedSupplier.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`, // your global token variable
+          },
+          body: JSON.stringify(updatedSupplier),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update supplier");
+      }
+
+      const savedSupplier = await response.json();
+
+      // Update local suppliers list and UI
+      const index = suppliersList.findIndex((s) => s.id === savedSupplier.id);
+      if (index !== -1) {
+        suppliersList[index] = savedSupplier;
+      }
+
+      renderSuppliers(suppliersList);
+
+      // Close modal and reset
+      document.getElementById("editSupplierModal").style.display = "none";
+      form.reset();
+      currentSupplier = null;
+    } catch (error) {
+      console.error("Error saving supplier:", error);
+      alert(`Error saving changes: ${error.message}`);
+    }
+  });
+
 function renderSuppliers(suppliers) {
   // Sort suppliers by creation date descending
   suppliers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  // Render suppliers table
   const tbody = document.querySelector("#suppliersTable tbody");
   tbody.innerHTML = "";
   suppliers.forEach((supplier) => {
-    const name = supplier.name || "";
+    const name = supplier.company || "";
     const contact = supplier.contact || "";
     const email = supplier.email || "";
     const lightningAddress = supplier.lightningAddress || "";
@@ -1465,6 +1700,7 @@ function renderSuppliers(suppliers) {
       : "";
 
     const tr = document.createElement("tr");
+    tr.setAttribute("data-supplier-id", supplier.id); // Add this for identification
     tr.innerHTML = `
       <td>${name}</td>
       <td>${contact}</td>
@@ -1476,7 +1712,7 @@ function renderSuppliers(suppliers) {
     tbody.appendChild(tr);
   });
 
-  // Populate recipient dropdown
+  // Populate recipient dropdown (as before)
   const select = document.getElementById("recipientSelect");
   if (!select) {
     console.error("Recipient dropdown element not found");
@@ -1491,12 +1727,11 @@ function renderSuppliers(suppliers) {
     select.appendChild(option);
   });
 
-  // Auto-select first supplier and populate details if available
   if (suppliers.length > 0) {
     select.value = suppliers[0].id;
     populateRecipientDetails();
   } else {
-    document.getElementById("recipientName").value = "";
+    document.getElementById("contactName").value = "";
     document.getElementById("recipientEmail").value = "";
     document.getElementById("recipientLightningAddress").value = "";
   }
@@ -1505,7 +1740,6 @@ function renderSuppliers(suppliers) {
 // Load transactions
 async function loadTransactions() {
   try {
-    const token = sessionStorage.getItem("token");
     const response = await fetch(`${API_BASE}/transactions`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1529,14 +1763,30 @@ function renderTransactions(transactions) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
 
-  transactions.forEach((txn) => {
+  // Filter out any transactions with unknown receiver or invalid date just in case
+  const filteredTransactions = transactions.filter((txn) => {
+    return (
+      txn.receiver &&
+      txn.receiver !== "Unknown" &&
+      txn.receiver !== "Unknown Supplier" &&
+      txn.receiver !== "Unknown Employee" &&
+      typeof txn.date === "string" &&
+      !isNaN(new Date(txn.date).getTime())
+    );
+  });
+
+  filteredTransactions.forEach((txn) => {
+    // Format date
     let dateDisplay = "";
     if (txn.date) {
       const d = new Date(txn.date);
       dateDisplay = isNaN(d.getTime()) ? "" : d.toLocaleString();
     }
 
-    const receiver = txn.receiver || "Unknown";
+    // Use normalized receiver field from backend
+    const receiver = txn.receiver;
+
+    // Format amount
     const amountText = txn.amount
       ? `${txn.amount} ${txn.currency || "SATS"}`
       : "";
@@ -1545,33 +1795,43 @@ function renderTransactions(transactions) {
     const note = txn.note || "";
     const status = renderStatus(txn.status);
 
+    // Create table row
     const row = document.createElement("tr");
-
-    // Add a data attribute for transaction ID to identify the transaction on click
     row.setAttribute("data-txn-id", id);
 
+    // Date cell
     const dateCell = document.createElement("td");
     dateCell.textContent = dateDisplay;
 
+    // Receiver cell
     const receiverCell = document.createElement("td");
     receiverCell.textContent = receiver;
 
+    // Amount cell with styling
     const amountCell = document.createElement("td");
     amountCell.textContent = amountText;
     amountCell.classList.add("amount");
-    if (txn.status === "ALREADY_PAID") {
+    if (txn.status === "SUCCESS") {
+      amountCell.classList.add("amount-green");
+    } else if (txn.status === "ALREADY_PAID") {
       amountCell.classList.add("amount-blue");
+    } else {
+      amountCell.classList.add("amount-red");
     }
 
+    // ID cell
     const idCell = document.createElement("td");
     idCell.textContent = id;
 
+    // Note cell
     const noteCell = document.createElement("td");
     noteCell.textContent = note;
 
+    // Status cell (assumes renderStatus returns HTML string)
     const statusCell = document.createElement("td");
     statusCell.innerHTML = status;
 
+    // Append cells to row
     row.appendChild(dateCell);
     row.appendChild(receiverCell);
     row.appendChild(amountCell);
@@ -1579,10 +1839,12 @@ function renderTransactions(transactions) {
     row.appendChild(noteCell);
     row.appendChild(statusCell);
 
+    // Append row to tbody
     tbody.appendChild(row);
   });
 
-  setupTransactionRowClicks(transactions);
+  // Setup click handlers or other row interactions
+  setupTransactionRowClicks(filteredTransactions);
 }
 
 function closeNewPaymentModal() {
@@ -1606,63 +1868,92 @@ function updateRecipientDropdown() {
     placeholder = "Select Supplier";
   }
 
-  // Add placeholder option
+  // Add placeholder option with empty value
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
   placeholderOption.textContent = placeholder;
   select.appendChild(placeholderOption);
 
-  // Populate options
+  // Populate options with employee names or supplier company names
   list.forEach((item) => {
     const option = document.createElement("option");
-    option.value = item.id || item.email;
-    option.textContent = item.name;
+    option.value = item.id; // Use id consistently
+
+    if (type === "employee") {
+      option.textContent = item.name || "(Unnamed Employee)";
+    } else if (type === "supplier") {
+      option.textContent = item.company || "(Unnamed Supplier)";
+    }
+
     select.appendChild(option);
   });
 
-  // Optionally, auto-select first real option and populate details
+  // Reset details fields
+  const recipientEmailEl = document.getElementById("recipientEmail");
+  const lightningAddressEl = document.getElementById(
+    "recipientLightningAddress",
+  );
+  const supplierContactEl = document.getElementById("supplierContactReadonly");
+
+  if (recipientEmailEl) recipientEmailEl.value = "";
+  if (lightningAddressEl) lightningAddressEl.value = "";
+  if (supplierContactEl) supplierContactEl.value = "";
+
+  // Auto-select first real option if available (skip placeholder)
   if (list.length > 0) {
-    select.value = list[0].id || list[0].email;
+    select.value = list[0].id;
     populateRecipientDetails();
-  } else {
-    // Clear details if no options
-    document.getElementById("recipientName").value = "";
-    document.getElementById("recipientEmail").value = "";
-    document.getElementById("recipientLightningAddress").value = "";
   }
 }
 
 function populateRecipientDetails() {
-  const type = document.getElementById("recipientType").value;
-  const select = document.getElementById("recipientSelect");
-  const selectedValue = select.value;
+  const recipientType = document.getElementById("recipientType").value;
+  const recipientSelect = document.getElementById("recipientSelect");
+  const selectedId = recipientSelect.value;
 
-  let recipient = null;
-  if (type === "employee") {
-    recipient = employeesList.find(
-      (emp) => emp.id === selectedValue || emp.email === selectedValue,
-    );
-  } else if (type === "supplier") {
-    recipient = suppliersList.find(
-      (sup) => sup.id === selectedValue || sup.email === selectedValue,
-    );
+  // Elements to populate
+  const recipientEmailEl = document.getElementById("recipientEmail");
+  const lightningAddressEl = document.getElementById(
+    "recipientLightningAddress",
+  );
+  const supplierContactEl = document.getElementById("supplierContactReadonly");
+
+  // Clear fields initially
+  if (recipientEmailEl) recipientEmailEl.value = "";
+  if (lightningAddressEl) lightningAddressEl.value = "";
+  if (supplierContactEl) supplierContactEl.value = "";
+
+  if (!selectedId) {
+    // No recipient selected, clear fields and return
+    return;
   }
 
-  if (recipient) {
-    document.getElementById("recipientName").value = recipient.name || "";
-    document.getElementById("recipientEmail").value = recipient.email || "";
-    document.getElementById("recipientLightningAddress").value =
-      recipient.lightningAddress || "";
-  } else {
-    document.getElementById("recipientName").value = "";
-    document.getElementById("recipientEmail").value = "";
-    document.getElementById("recipientLightningAddress").value = "";
+  let recipient = null;
+
+  if (recipientType === "employee") {
+    recipient = employeesList.find((e) => e.id === selectedId);
+  } else if (recipientType === "supplier") {
+    recipient = suppliersList.find((s) => s.id === selectedId);
+  }
+
+  if (!recipient) {
+    // Recipient not found, clear fields and return
+    return;
+  }
+
+  // Populate email and lightning address (for both types)
+  if (recipientEmailEl) recipientEmailEl.value = recipient.email || "";
+  if (lightningAddressEl)
+    lightningAddressEl.value = recipient.lightningAddress || "";
+
+  // Populate contact only for suppliers
+  if (recipientType === "supplier" && supplierContactEl) {
+    supplierContactEl.value = recipient.contact || "";
   }
 }
 
 async function loadEmployeesForPaymentModal() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
     const response = await fetch(`${API_BASE}/users`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -1690,6 +1981,27 @@ function closePayInvoiceModal() {
   document.getElementById("payInvoiceModal").style.display = "none";
 }
 
+function extractCompanyFromEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  // Match the domain part between '@' and the first '.' after '@'
+  const match = email.match(/@([^\.]+)\./);
+  return match && match[1] ? match[1].toLowerCase() : "";
+}
+
+function toggleContactField() {
+  const recipientType = document.getElementById("recipientType").value;
+  const contactField = document.getElementById("contactField");
+
+  if (recipientType === "supplier") {
+    contactField.style.display = "block"; // Show Contact field for suppliers
+  } else {
+    contactField.style.display = "none"; // Hide Contact field for employees
+    // Clear contact field when hidden
+    const contactInput = document.getElementById("supplierContactReadonly");
+    if (contactInput) contactInput.value = "";
+  }
+}
+
 async function submitNewPayment(event) {
   event.preventDefault();
 
@@ -1699,34 +2011,85 @@ async function submitNewPayment(event) {
     submitBtn.textContent = "Sending...";
   }
 
-  const type = document.getElementById("recipientType").value;
-  const id = document.getElementById("recipientSelect").value;
-  const name = document.getElementById("recipientName").value;
-  const email = document.getElementById("recipientEmail").value;
-  const lightningAddress = document.getElementById(
-    "recipientLightningAddress",
-  ).value;
-  const amount = document.getElementById("paymentAmount").value;
-  const note = document.getElementById("paymentNote").value;
+  // Get recipient type and selected recipient ID
+  const recipientType = document.getElementById("recipientType")?.value || "";
+  const recipientId = document.getElementById("recipientSelect")?.value || "";
 
+  // Get email and lightning address fields
+  const email = document.getElementById("recipientEmail")?.value.trim() || "";
+  const lightningAddress =
+    document.getElementById("recipientLightningAddress")?.value.trim() || "";
+
+  // Get payment details
+  const paymentAmountStr =
+    document.getElementById("paymentAmount")?.value || "";
+  const paymentNote =
+    document.getElementById("paymentNote")?.value?.trim() || "";
+
+  // Parse amount
+  const paymentAmount = parseFloat(paymentAmountStr);
+
+  // Initialize contact and company variables
+  let contact = "";
+  let company = "";
+
+  // Get the selected option text (employee name or supplier company)
+  const recipientSelect = document.getElementById("recipientSelect");
+  const selectedOptionText =
+    recipientSelect.options[recipientSelect.selectedIndex]?.text || "";
+
+  // Build contact and company based on recipient type
+  if (recipientType === "supplier") {
+    contact =
+      document.getElementById("supplierContactReadonly")?.value.trim() || "";
+    const supplier = suppliersList.find((s) => s.id === recipientId);
+    company = supplier ? supplier.company || "" : "";
+  } else if (recipientType === "employee") {
+    contact = selectedOptionText; // Employee name from dropdown text
+    company = extractCompanyFromEmail(email);
+  }
+
+  // Validate required fields
+  if (!contact || !company) {
+    alert("Missing contact or company information.");
+    resetSubmitButton(submitBtn);
+    return;
+  }
+
+  // Validate amount
+  if (isNaN(paymentAmount) || paymentAmount <= 0) {
+    alert("Please enter a valid payment amount.");
+    resetSubmitButton(submitBtn);
+    return;
+  }
+
+  // Validate lightning address presence
+  if (!lightningAddress) {
+    alert("Selected recipient does not have a Lightning Address.");
+    resetSubmitButton(submitBtn);
+    return;
+  }
+
+  // Build payload
   const payload = {
-    recipientType: type,
-    recipientId: id,
+    recipientType,
+    recipientId,
+    contact,
+    company,
+    email,
     lightningAddress,
-    paymentAmount: amount,
-    paymentNote: note,
+    paymentAmount,
+    paymentNote,
   };
 
-  const endpoint = `${API_BASE}/pay`;
-
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       alert("Please log in to send payments.");
+      resetSubmitButton(submitBtn);
       return;
     }
 
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${API_BASE}/pay`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1736,6 +2099,7 @@ async function submitNewPayment(event) {
     });
 
     const data = await response.json();
+
     if (data.success) {
       alert("Payment sent!");
       closeNewPaymentModal();
@@ -1747,74 +2111,14 @@ async function submitNewPayment(event) {
   } catch (err) {
     alert("Error sending payment: " + err.message);
   } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Send";
-    }
+    resetSubmitButton(submitBtn);
   }
 }
 
-async function submitPayInvoice(event) {
-  event.preventDefault();
-
-  const invoice = document.getElementById("invoiceString").value.trim();
-  const note = document.getElementById("invoiceNote").value.trim();
-  const userAmount = document.getElementById("userAmount").value.trim();
-  const receiverName = document
-    .getElementById("receiverNameInput")
-    .value.trim();
-
-  if (!receiverName) {
-    alert("Please enter the receiver name.");
-    return;
-  }
-
-  const submitBtn = document.querySelector("#payInvoiceModal .submit-btn");
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Paying...";
-  }
-
-  const payload = { invoice, note, recipientName: receiverName };
-  const amountEntryDiv = document.getElementById("amountEntry");
-  if (amountEntryDiv && amountEntryDiv.style.display !== "none" && userAmount) {
-    payload.amount = userAmount;
-  }
-
-  const endpoint = `${API_BASE}/pay-invoice`;
-
-  try {
-    const token = sessionStorage.getItem("token");
-    if (!token) {
-      alert("Please log in to pay invoices.");
-      return;
-    }
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (data.success) {
-      alert("Invoice paid!");
-      closePayInvoiceModal();
-      await loadTransactions();
-      await updateLightningBalance();
-    } else {
-      alert("Error: " + (data.message || "Failed to pay invoice."));
-    }
-  } catch (err) {
-    alert("Error paying invoice: " + err.message);
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Pay";
-    }
+function resetSubmitButton(button) {
+  if (button) {
+    button.disabled = false;
+    button.textContent = "Send";
   }
 }
 
@@ -1834,6 +2138,69 @@ function clearPayInvoiceModal() {
   if (noteInput) noteInput.value = "";
 }
 
+async function submitPayInvoice(event) {
+  event.preventDefault();
+
+  const invoice = document.getElementById("invoiceString").value.trim();
+  const note = document.getElementById("invoiceNote").value.trim();
+  const userAmount = document.getElementById("userAmount").value.trim();
+
+  const submitBtn = document.querySelector("#payInvoiceModal .submit-btn");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Paying...";
+  }
+
+  // Prepare payload
+  const payload = { invoice, note };
+
+  // Include amount if applicable
+  const amountEntryDiv = document.getElementById("amountEntry");
+  if (amountEntryDiv && amountEntryDiv.style.display !== "none" && userAmount) {
+    payload.amount = userAmount;
+  }
+
+  // Get Receiver Name input value
+  const receiverName = document.getElementById("receiverNameInput");
+  if (receiverName && receiverName.value.trim() !== "") {
+    payload.receiverName = receiverName.value.trim();
+  }
+
+  try {
+    // Use authFetch to handle token refresh automatically
+    const response = await authFetch(`${API_BASE}/pay-invoice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "include", // ensure cookies (refresh token) are sent
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Server error: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      alert("Invoice paid!");
+      closePayInvoiceModal();
+      await loadTransactions();
+      await updateLightningBalance();
+    } else {
+      alert("Error: " + (data.message || "Failed to pay invoice."));
+    }
+  } catch (err) {
+    console.error("Error paying invoice:", err);
+    alert("Error paying invoice: " + err.message);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Pay";
+    }
+  }
+}
+
 async function decodeInvoiceFromFrontend(invoice) {
   const detailsDiv = document.getElementById("invoiceDetails");
   const amountEntryDiv = document.getElementById("amountEntry");
@@ -1847,7 +2214,6 @@ async function decodeInvoiceFromFrontend(invoice) {
   }
 
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       detailsDiv.innerHTML = `<span style="color:red;">Please log in to decode invoices.</span>`;
       if (amountEntryDiv) amountEntryDiv.style.display = "none";
@@ -2013,21 +2379,21 @@ function updateCurrentDate() {
 // Load and display transactions
 async function loadTransactions() {
   try {
-    const token = sessionStorage.getItem("token");
-
-    if (!token) {
+    if (!sessionStorage.getItem("token")) {
       throw new Error("No authentication token found. Please log in.");
     }
 
-    const response = await fetch(`${API_BASE}/transactions?ts=${Date.now()}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await authFetch(
+      `${API_BASE}/transactions?ts=${Date.now()}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // just in case refresh token cookie is needed
       },
-    });
+    );
 
     if (response.status === 401) {
-      // Unauthorized - token invalid or expired
       throw new Error("Unauthorized access. Please log in again.");
     }
 
@@ -2090,9 +2456,7 @@ function formatDate(date) {
 }
 
 async function loadTeamMembers() {
-  const token = sessionStorage.getItem("token");
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       console.error("No authentication token found in sessionStorage.");
       throw new Error("No authentication token found. Please log in.");
@@ -2387,7 +2751,6 @@ async function addTeamMember() {
       throw new Error("Please fill in all required fields");
     }
 
-    const token = sessionStorage.getItem("token");
     if (!token) {
       throw new Error("You must be logged in to add a team member.");
     }
@@ -2447,7 +2810,6 @@ async function addTeamMember() {
 
 async function removeTeamMember() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       throw new Error("You must be logged in to remove a team member.");
     }
@@ -2497,7 +2859,6 @@ async function showRemoveMemberModal() {
   const container = document.getElementById("membersListContainer");
 
   try {
-    const token = sessionStorage.getItem("token"); // Adjust if you store token elsewhere
     if (!token) {
       alert("You must be logged in to load members.");
       return;
@@ -2603,7 +2964,6 @@ async function populateSupplierSelect() {
   select.innerHTML = "<option value=''>Loading...</option>";
 
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       alert("Please log in to load suppliers.");
       select.innerHTML = "<option value=''>Please log in</option>";
@@ -2679,7 +3039,6 @@ async function submitAddSupplier(event) {
   const createdAt = new Date().toISOString();
 
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       alert("You must be logged in to add a supplier.");
       return;
@@ -2717,7 +3076,6 @@ async function submitAddSupplier(event) {
 
 async function loadEmployeesForPaymentModal() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
     const response = await fetch(`${API_BASE}/users`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -2733,7 +3091,6 @@ async function loadEmployeesForPaymentModal() {
 
 async function loadSuppliersForPaymentModal() {
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
     const response = await fetch(`${API_BASE}/suppliers`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -2777,7 +3134,6 @@ async function submitRemoveSupplier(event) {
   if (!confirm("Are you sure you want to remove this supplier?")) return;
 
   try {
-    const token = sessionStorage.getItem("token");
     if (!token) {
       alert("You must be logged in to remove a supplier.");
       return;
@@ -2865,7 +3221,6 @@ function setVolcanoMode(isVolcano) {
 
 /////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", async () => {
-  const token = sessionStorage.getItem("token");
   const isLoggedIn = token && token.split(".").length === 3;
   const volcanoPref = localStorage.getItem("volcanoMode");
   const body = document.body;
@@ -2878,6 +3233,88 @@ document.addEventListener("DOMContentLoaded", async () => {
   const transactionCloseBtn = document.getElementById("closeTransactionModal");
   const transactionDetailsContainer =
     document.getElementById("transactionDetails");
+  const editSupplierModal = document.getElementById("editSupplierModal");
+  const closeEditSupplierModal = document.getElementById(
+    "closeEditSupplierModal",
+  );
+  const editSupplierForm = document.getElementById("editSupplierForm");
+
+  editTeamMemberModal = document.getElementById("editTeamMemberModal");
+  let closeButton = document.getElementById("closeEditTeamMemberModal");
+  let editTeamMemberForm = document.getElementById("editTeamMemberForm");
+  inputsContainer = document.getElementById("teamMemberInputs");
+
+  if (
+    !editTeamMemberModal ||
+    !closeButton ||
+    !editTeamMemberForm ||
+    !inputsContainer
+  ) {
+    console.error("Edit Team Member modal elements missing");
+    return;
+  }
+
+  // Initialize global/shared variables here
+  currentMember = null;
+
+  // Close modal handler
+  closeButton.addEventListener("click", () => {
+    editTeamMemberModal.style.display = "none";
+    form.reset();
+    inputsContainer.innerHTML = "";
+    currentMember = null;
+  });
+
+  // Form submit handler
+  editTeamMemberForm.addEventListener("submit", async (event) => {
+    console.log("Gabba Gool");
+    event.preventDefault();
+    if (!currentMember) return;
+
+    const formData = new FormData(editTeamMemberForm);
+    const updatedMember = {};
+    for (const [key, value] of formData.entries()) {
+      updatedMember[key] = value;
+    }
+    updatedMember.id = currentMember.id;
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/api/team-members/${updatedMember.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(updatedMember),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update team member");
+      }
+
+      const savedMember = await response.json();
+
+      // Update local data and UI
+      const index = employeesList.findIndex((m) => m.id === savedMember.id);
+      if (index !== -1) {
+        employeesList[index] = savedMember;
+      }
+
+      editTeamMemberModal.style.display = "none";
+      editTeamMemberForm.reset();
+      inputsContainer.innerHTML = "";
+      currentMember = null;
+
+      renderTeamMembersTable(employeesList);
+    } catch (error) {
+      console.error("Error saving team member:", error);
+      alert(`Error saving changes: ${error.message}`);
+    }
+  });
 
   updateCurrentDate();
 
@@ -2963,6 +3400,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  const tbody = document.querySelector("#suppliersTable tbody");
+  if (!tbody) {
+    console.error("Suppliers table tbody not found");
+    return;
+  }
+
+  tbody.addEventListener("click", (event) => {
+    const tr = event.target.closest("tr");
+    if (!tr) return;
+
+    const supplierId = tr.getAttribute("data-supplier-id");
+    console.log("Clicked supplierId:", supplierId);
+
+    if (!supplierId) {
+      console.warn("Clicked row has no data-supplier-id");
+      return;
+    }
+
+    // Log all supplier IDs for comparison
+    console.log(
+      "Available supplier IDs:",
+      suppliersList.map((s) => s.id),
+    );
+
+    const supplier = suppliersList.find((s) => s.id === supplierId);
+    if (!supplier) {
+      alert("Supplier not found");
+      return;
+    }
+
+    // Open modal and populate form
+    populateEditSupplierForm(supplier);
+  });
+
   document.getElementById("th-date").onclick = function () {
     if (pendingDraftsSortColumn === "dateCreated") {
       pendingDraftsSortAsc = !pendingDraftsSortAsc;
@@ -2977,6 +3448,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       pendingDraftsSortAsc = !pendingDraftsSortAsc;
     } else {
       pendingDraftsSortColumn = "recipientName";
+      pendingDraftsSortAsc = true;
+    }
+    renderPendingDraftsTable(allPendingDrafts);
+  };
+  document.getElementById("th-recipient").onclick = function () {
+    if (pendingDraftsSortColumn === "contactName") {
+      pendingDraftsSortAsc = !pendingDraftsSortAsc;
+    } else {
+      pendingDraftsSortColumn = "contactName";
       pendingDraftsSortAsc = true;
     }
     renderPendingDraftsTable(allPendingDrafts);
@@ -3031,7 +3511,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("addDepartmentBtn").onclick = async function () {
     const dep = prompt("Enter new department name:");
     if (dep) {
-      const token = sessionStorage.getItem("token");
       if (!token) {
         alert("You must be logged in to add a department.");
         return;
@@ -3053,7 +3532,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("removeDepartmentBtn").onclick = async function () {
     const dep = prompt("Enter department name to remove:");
     if (dep) {
-      const token = sessionStorage.getItem("token");
       if (!token) {
         alert("You must be logged in to remove a department.");
         return;
@@ -3107,7 +3585,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       try {
-        const token = sessionStorage.getItem("token");
         if (!token) {
           alert("You must be logged in to remove a member.");
           return;
@@ -3149,6 +3626,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.getElementById("removeMemberModal").style.display = "none";
     });
   }
+
+  // Close modal event
+  closeEditSupplierModal.addEventListener("click", () => {
+    editSupplierModal.style.display = "none";
+    editSupplierForm.reset();
+    currentSupplier = null;
+  });
+
+  // Form submit event
+  editSupplierForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    // handle form submission
+  });
 
   const cancelRemoveBtn = document.getElementById("cancelRemoveBtn");
   if (cancelRemoveBtn) {
@@ -3193,15 +3683,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      // Get values from modal fields
       const draftTitle = document
         .getElementById("draftPaymentTitle")
         .value.trim();
-      const recipientEmail = document.getElementById(
-        "draftRecipientSelect",
-      ).value;
-      const recipientName = document
-        .getElementById("draftRecipientName")
+      const recipientEmail = document
+        .getElementById("draftRecipientEmail")
+        .value.trim();
+      const selectedSupplierId = document
+        .getElementById("draftRecipientSelect")
         .value.trim();
       const recipientLightningAddress = document
         .getElementById("draftRecipientLightningAddress")
@@ -3211,11 +3700,28 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
       const note = document.getElementById("draftPaymentNote").value.trim();
 
-      // Validation
+      if (!selectedSupplierId) {
+        alert("Please select a supplier.");
+        return;
+      }
+
+      const selectedSupplier = suppliersList.find(
+        (supplier) => supplier.id === selectedSupplierId,
+      );
+
+      if (!selectedSupplier) {
+        alert("Selected supplier not found.");
+        return;
+      }
+
+      const company = selectedSupplier.company;
+      const contact = selectedSupplier.contact;
+
       if (
         !draftTitle ||
         !recipientEmail ||
-        !recipientName ||
+        !company ||
+        !contact ||
         !recipientLightningAddress ||
         !amount ||
         isNaN(amount) ||
@@ -3226,16 +3732,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const draftData = {
-        title: draftTitle, // Include the draft title for backend validation
+        title: draftTitle,
         recipientEmail,
-        recipientName,
+        company,
+        contact,
         recipientLightningAddress,
         amount,
         note,
       };
 
       try {
-        const token = sessionStorage.getItem("token");
         if (!token) {
           alert("You must be logged in to submit a draft payment.");
           return;
@@ -3263,7 +3769,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           alert("Draft payment submitted successfully!");
           document.getElementById("draftPaymentForm").reset();
           document.getElementById("draftPaymentModal").style.display = "none";
-          await loadEmployeeDrafts(); // Refresh draft list after submission
+          await loadEmployeeDrafts();
         } else {
           alert(
             "Failed to submit draft: " + (result.message || "Unknown error"),

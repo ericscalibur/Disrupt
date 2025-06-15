@@ -3,7 +3,7 @@
     "name": "Captain Amazing",
     "role": "Admin",
     "department": "Executive",
-    "email": "ericscalibur@protonmail.com",
+    "email": "ericscalibur@disrupt.com",
     "lightningAddress": "ericscalibur@blink.sv",
     "password": "9555",
     "dateAdded": "2025-05-25",
@@ -13,7 +13,7 @@
     "name": "Joe",
     "role": "Manager",
     "department": "Engineering",
-    "email": "joe@company.com",
+    "email": "joe@disrupt.com",
     "lightningAddress": "joe@blink.sv",
     "password": "1234",
     "dateAdded": "2025-05-28",
@@ -22,7 +22,7 @@
   {
     "name": "Stephen",
     "role": "Employee",
-    "email": "tilcboy44@gmail.com",
+    "email": "tilcboy44@disrupt.com",
     "department": "Engineering",
     "lightningAddress": "stephen@blink.sv",
     "password": "1234",
@@ -32,7 +32,7 @@
   {
     "name": "Emily",
     "role": "Employee",
-    "email": "Emily@complany.com",
+    "email": "Emily@disrupt.com",
     "department": "Engineering",
     "lightningAddress": "emily@blink.sv",
     "password": "1234",
@@ -42,7 +42,7 @@
   {
     "name": "Jasper",
     "role": "Employee",
-    "email": "jasper@company.com",
+    "email": "jasper@disrupt.com",
     "department": "Research",
     "lightningAddress": "ericscalibur@walletofsatoshi.com",
     "password": "1234",
@@ -52,7 +52,7 @@
   {
     "name": "Jennifer",
     "role": "Employee",
-    "email": "jenny@company.com",
+    "email": "jenny@disrupt.com",
     "department": "Developement",
     "lightningAddress": "bingbong@bongbing.com",
     "password": "1234",
@@ -62,7 +62,7 @@
   {
     "name": "Quentin MPB",
     "role": "Manager",
-    "email": "quentin@company.com",
+    "email": "quentin@disrupt.com",
     "department": "Accounting",
     "lightningAddress": "quentin@blink.sv",
     "password": "1234",
@@ -72,7 +72,7 @@
   {
     "name": "David McKee",
     "role": "Employee",
-    "email": "dave@company.com",
+    "email": "dave@disrupt.com",
     "department": "Accounting",
     "lightningAddress": "david@company.com",
     "password": "1234",
@@ -84,7 +84,7 @@
     "role": "Employee",
     "department": "Accounting",
     "lightningAddress": "ericscalibur@walletofsatoshi.com",
-    "email": "bigJ@company.com",
+    "email": "bigJ@disrupt.com",
     "password": "1234",
     "dateAdded": "2025-06-12",
     "id": "99f88ba6ed3acc9d2506e0e503902671bc1fbbda0981f960834c8a422fa47e0a"
@@ -94,7 +94,7 @@
     "role": "Employee",
     "department": "Accounting",
     "lightningAddress": "ericscalibur@walletofsatoshi.com",
-    "email": "charlie@company.com",
+    "email": "charlie@disrupt.com",
     "password": "1234",
     "dateAdded": "2025-06-12",
     "id": "29ec830af09bf9c45f04162524f0bec238c695b14d16444fc32b2d07a86b15d7"

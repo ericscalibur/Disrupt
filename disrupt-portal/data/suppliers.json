@@ -1,8 +1,8 @@
 [
   {
     "id": "sup1749100883404",
-    "name": "CarpetWorld",
-    "contact": "francis",
+    "company": "CarpetWorld",
+    "contact": "Serenity",
     "email": "francis@carpetworld.com",
     "lightningAddress": "francis@blink.sv",
     "note": "funny guy",
@@ -10,16 +10,16 @@
   },
   {
     "id": "sup1749104441026",
-    "name": "JapaneseGarden",
+    "company": "JapaneseGarden",
     "contact": "xu feng",
     "email": "xu@japanesegarden.com",
     "lightningAddress": "xu@blink.sv",
-    "note": "yummy tea",
+    "note": "tea was shit",
     "createdAt": "2025-06-05T06:20:41.026Z"
   },
   {
     "id": "sup1749182344672",
-    "name": "ChickenFeet",
+    "company": "ChickenFeet",
     "contact": "Earl",
     "email": "earl@chickenfeet.com",
     "lightningAddress": "earl@blink.sv",
@@ -28,7 +28,7 @@
   },
   {
     "id": "sup1749440017541",
-    "name": "420Shop",
+    "company": "420Shop",
     "contact": "Al",
     "email": "al@420shop.com",
     "lightningAddress": "ericscalibur@walletofsatoshi.com",
