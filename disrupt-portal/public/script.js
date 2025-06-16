@@ -20,10 +20,11 @@ let currentBalanceSATS = 0;
 let btcToUsdRate = 70000; // fallback value
 const balanceDisplayModes = ["BTC", "SATS", "USD"];
 let currentBalanceMode = 0;
+let currentMember = null;
+let transactions = [];
 const authorizedRoles = ["Admin", "Manager"];
-const token = sessionStorage.getItem("token");
-
-let modal;
+let token = sessionStorage.getItem("token");
+let editTeamMemberModal;
 let inputsContainer;
 
 // Restore currentUser from sessionStorage if available
@@ -40,7 +41,6 @@ if (token) {
   const payload = decodeJwt(token);
   if (payload && payload.role) {
     currentUserRole = payload.role;
-    console.log("Current user role:", currentUserRole);
   } else {
     console.warn("Role claim not found in token");
   }
@@ -76,29 +76,31 @@ function isTokenExpired(token) {
 }
 
 // Centralized fetch helper that includes Authorization header
+function prepareHeaders(optionsHeaders = {}, accessToken) {
+  const headers = {
+    ...optionsHeaders,
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (!headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  return headers;
+}
+
 async function authFetch(url, options = {}) {
   let token = sessionStorage.getItem("token");
 
   if (!token) {
     alert("Session expired or missing. Please log in again.");
-    // Optionally redirect to login page here
     throw new Error("Invalid or missing token");
   }
 
-  const headers = {
-    ...options.headers,
-    Authorization: `Bearer ${token}`,
-  };
-
-  if (!headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-
   let response;
+
   try {
     response = await fetch(url, {
       ...options,
-      headers,
+      headers: prepareHeaders(options.headers, token),
       credentials: "include",
     });
   } catch (networkError) {
@@ -129,19 +131,9 @@ async function authFetch(url, options = {}) {
 
       sessionStorage.setItem("token", data.accessToken);
 
-      // Retry original request with new token
-      const newHeaders = {
-        ...options.headers,
-        Authorization: `Bearer ${data.accessToken}`,
-      };
-
-      if (!newHeaders["Content-Type"]) {
-        newHeaders["Content-Type"] = "application/json";
-      }
-
       response = await fetch(url, {
         ...options,
-        headers: newHeaders,
+        headers: prepareHeaders(options.headers, data.accessToken),
         credentials: "include",
       });
     } catch (err) {
@@ -181,7 +173,7 @@ async function login() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
-      credentials: "include", // Required for cookies
+      credentials: "include", // Required for cookies if backend sets them
     });
 
     if (!response.ok) {
@@ -193,32 +185,37 @@ async function login() {
 
     const { accessToken } = await response.json();
 
-    if (accessToken) {
-      // Store access token
-      sessionStorage.setItem("token", accessToken);
-
-      // Fetch user profile with new token
-      const profileResp = await authFetch(`${API_BASE}/me`);
-
-      if (!profileResp.ok) {
-        throw new Error("Failed to load user profile.");
-      }
-
-      const profile = await profileResp.json();
-
-      if (profile.success) {
-        currentUser = profile.user;
-
-        // Call initialization functions
-        await populateDepartmentsList();
-        showDashboard();
-        await loadEmployeeDrafts();
-      } else {
-        throw new Error("Failed to load user profile.");
-      }
-    } else {
+    if (!accessToken) {
       throw new Error("No access token received.");
     }
+
+    // Store access token immediately
+    sessionStorage.setItem("token", accessToken);
+    console.log("Access token saved:", accessToken);
+
+    // Fetch user profile with new token, ensure authFetch uses the stored token
+    const profileResp = await authFetch(`${API_BASE}/me`);
+
+    if (!profileResp.ok) {
+      throw new Error("Failed to load user profile.");
+    }
+
+    const profile = await profileResp.json();
+
+    if (!profile.success) {
+      throw new Error("Failed to load user profile.");
+    }
+
+    currentUser = profile.user;
+
+    // Now that token and user are ready, load protected data in sequence
+    await populateDepartmentsList();
+    await loadEmployeeDrafts();
+
+    await loadTeamMembers();
+    await loadDepartments();
+
+    showDashboard();
   } catch (err) {
     console.error("Login error:", err);
     errorMessage.textContent = err.message || "Login failed. Please try again.";
@@ -348,13 +345,10 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     return;
   }
 
-  console.log("Drafts data received:", drafts);
-
   drafts.forEach((draft) => {
     let actionCell = "";
     let statusText = "";
     let statusClass = "";
-    console.log(draft);
     if (draft.status === "pending") {
       if (showActions) {
         actionCell = `
@@ -472,7 +466,9 @@ async function loadAccountingPage() {
       await loadEmployeeDrafts();
     }
 
+    // Load and display lightning balance here
     await updateLightningBalance();
+
     updateAccountingActionsVisibility();
   } catch (err) {
     console.error("Failed to load accounting data", err);
@@ -521,23 +517,12 @@ async function populateDraftRecipientDropdown() {
   select.innerHTML = '<option value="">Select supplier...</option>';
 
   try {
-    if (!token) {
-      alert("Please log in to load suppliers.");
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/suppliers`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await authFetch(`${API_BASE}/suppliers`);
 
     if (!response.ok) {
       throw new Error(`Failed to load suppliers: ${response.status}`);
     }
 
-    // Here is where you assign suppliersList from the wrapped response
     const data = await response.json();
     suppliersList = data.suppliers || [];
 
@@ -585,11 +570,8 @@ function populateDraftRecipientDetails() {
 // Fetch employee/user data by ID
 async function fetchUserById(id) {
   try {
-    if (!token) throw new Error("Not authenticated");
-
-    const response = await fetch(`${API_BASE}/users/${id}`, {
+    const response = await authFetch(`${API_BASE}/users/${id}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -599,6 +581,7 @@ async function fetchUserById(id) {
     }
 
     const data = await response.json();
+
     return data.user || null;
   } catch (err) {
     console.error("Error fetching user by ID:", err);
@@ -609,11 +592,8 @@ async function fetchUserById(id) {
 // Fetch supplier data by ID
 async function fetchSupplierById(id) {
   try {
-    if (!token) throw new Error("Not authenticated");
-
-    const response = await fetch(`${API_BASE}/suppliers/${id}`, {
+    const response = await authFetch(`${API_BASE}/suppliers/${id}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -623,6 +603,7 @@ async function fetchSupplierById(id) {
     }
 
     const data = await response.json();
+
     return data.supplier || null;
   } catch (err) {
     console.error("Error fetching supplier by ID:", err);
@@ -740,15 +721,13 @@ function showTransactionDetails(txn) {
 function setupTeamTableClicks(users) {
   document.querySelectorAll("#teamTable tbody tr").forEach((row) => {
     row.addEventListener("click", () => {
-      console.log("Current user role:", currentUserRole);
-
       if (!authorizedRoles.includes(currentUserRole)) {
         alert("You are not authorized to edit team members.");
         return;
       }
 
       const memberId = row.getAttribute("data-member-id");
-      const currentMember = users.find((m) => String(m.id) === memberId);
+      currentMember = users.find((m) => String(m.id) === memberId);
 
       if (!currentMember) {
         console.warn(`Team member with id ${memberId} not found`);
@@ -787,61 +766,13 @@ function populateEditForm(member) {
   }
 }
 
-editTeamMemberForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!currentMember) return;
-
-  const formData = new FormData(form);
-  const updatedMember = {};
-  for (const [key, value] of formData.entries()) {
-    updatedMember[key] = value;
-  }
-  updatedMember.id = currentMember.id; // Keep ID unchanged
-
-  try {
-    const response = await fetch(
-      `http://localhost:3001/api/team-members/${updatedMember.id}`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // Use global token variable
-        },
-        body: JSON.stringify(updatedMember),
-      },
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || "Failed to update team member");
-    }
-
-    const savedMember = await response.json();
-
-    // Update local data and UI
-    const index = employeesList.findIndex((m) => m.id === savedMember.id);
-    if (index !== -1) {
-      employeesList[index] = savedMember;
-    }
-
-    editTeamMemberModal.style.display = "none";
-    form.reset();
-    inputsContainer.innerHTML = "";
-    currentMember = null;
-
-    renderTeamMembersTable(employeesList);
-  } catch (error) {
-    console.error("Error saving team member:", error);
-    alert(`Error saving changes: ${error.message}`);
-  }
-});
-
-function setupTransactionRowClicks(allTransactions) {
+function setupTransactionRowClicks(transactions) {
   const modal = document.getElementById("transactionModal");
   const detailsContainer = document.getElementById("transactionDetails");
   const closeButton = document.getElementById("closeTransactionModal");
+  const tbody = document.querySelector("#transactionsTable tbody");
 
-  if (!modal || !detailsContainer || !closeButton) {
+  if (!modal || !detailsContainer || !closeButton || !tbody) {
     console.error("Transaction modal elements missing");
     return;
   }
@@ -853,10 +784,14 @@ function setupTransactionRowClicks(allTransactions) {
 
   // Function to populate and show modal
   function showTransactionDetails(txn) {
+    console.log(txn);
+    const detailsContainer = document.getElementById("transactionDetails");
+    if (!detailsContainer) return;
+
     const details = `
-      <span class="label">Receiver:</span> <span class="data">${txn.receiver}</span><br>
-      <span class="label">Amount:</span> <span class="data">${txn.amount} ${txn.currency || "N/A"}</span><br>
-      <span class="label">Date:</span> <span class="data">${new Date(txn.date).toLocaleString()}</span><br>
+      <span class="label">Receiver:</span> <span class="data">${txn.receiver || "N/A"}</span><br>
+      <span class="label">Amount:</span> <span class="data">${txn.amount || "N/A"} ${txn.currency || "SATS"}</span><br>
+      <span class="label">Date:</span> <span class="data">${txn.date ? new Date(txn.date).toLocaleString() : "N/A"}</span><br>
       <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span><br>
       <span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span><br>
       <span class="label">Approved Status:</span> <span class="data">${txn.approvedStatus || "N/A"}</span><br>
@@ -868,20 +803,23 @@ function setupTransactionRowClicks(allTransactions) {
     `.trim();
 
     detailsContainer.innerHTML = details;
-    modal.style.display = "flex";
+    document.getElementById("transactionModal").style.display = "flex";
   }
 
-  // Attach click handlers to each transaction row
-  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
-    row.addEventListener("click", () => {
-      const txnId = row.getAttribute("data-txn-id");
-      const txn = allTransactions.find((t) => t.id === txnId);
-      if (txn) {
-        showTransactionDetails(txn);
-      } else {
-        console.warn(`Transaction with id ${txnId} not found`);
-      }
-    });
+  // Event delegation: attach one listener to tbody
+  tbody.addEventListener("click", (event) => {
+    const row = event.target.closest("tr");
+    if (!row) return;
+
+    const txnId = row.getAttribute("data-txn-id");
+    if (!txnId) return;
+
+    const txn = transactions.find((t) => String(t.id) === txnId);
+    if (txn) {
+      showTransactionDetails(txn);
+    } else {
+      console.warn(`Transaction with id ${txnId} not found`);
+    }
   });
 }
 
@@ -934,13 +872,8 @@ function sortPendingDraftsByColumn(columnIdx) {
 
 async function loadPendingDrafts() {
   try {
-    if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
-    }
-
-    const response = await fetch(`${API_BASE}/drafts`, {
+    const response = await authFetch(`${API_BASE}/drafts`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -980,12 +913,8 @@ async function loadPendingDrafts() {
 
 async function loadEmployeeDrafts() {
   try {
-    // Show loading state if desired
-    // e.g., showLoadingIndicator(true);
-
-    const response = await fetch(`${API_BASE}/drafts`, {
+    const response = await authFetch(`${API_BASE}/drafts`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -1002,6 +931,7 @@ async function loadEmployeeDrafts() {
           "suppliersList is not loaded or invalid. Drafts may display incomplete info.",
         );
       }
+
       // Render drafts with suppliersList for lookup
       renderEmployeeDraftsTable(data.drafts || [], suppliersList || []);
 
@@ -1152,8 +1082,6 @@ function renderEmployeeDraftsTable(drafts, suppliersList) {
   drafts.sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated));
 
   drafts.forEach((draft) => {
-    console.log("Draft object:", draft);
-
     let statusText = "";
     let statusClass = "";
 
@@ -1217,11 +1145,10 @@ async function handleDraftApproval(e) {
 
   if (confirm("Approve this draft?")) {
     try {
-      const response = await fetch(`${API_BASE}/drafts/approve`, {
+      const response = await authFetch(`${API_BASE}/drafts/approve`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ draftId }),
       });
@@ -1248,15 +1175,16 @@ async function handleDraftDecline(e) {
   const draftId = e.target.getAttribute("data-draft-id");
   if (confirm("Are you sure you want to decline this draft payment?")) {
     try {
-      const response = await fetch(`${API_BASE}/drafts/decline`, {
+      const response = await authFetch(`${API_BASE}/drafts/decline`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ draftId }),
       });
+
       const result = await response.json();
+
       if (result.success) {
         alert("Draft declined successfully.");
         await loadPendingDrafts();
@@ -1296,14 +1224,12 @@ async function updateLightningBalance() {
     if (spinnerElem) spinnerElem.style.display = "inline";
     if (balanceElem) balanceElem.style.visibility = "hidden";
 
-    // Fetch both balance and USD rate in parallel, passing auth header for balance
+    const token = sessionStorage.getItem("token");
+    if (!token) throw new Error("No authentication token found");
+
+    // Fetch balance and USD rate in parallel
     const [balanceResp, usdRate] = await Promise.all([
-      fetch(`${API_BASE}/lightning-balance`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }),
+      authFetch(`${API_BASE}/lightning-balance`),
       fetchBtcUsdRate(),
     ]);
 
@@ -1315,7 +1241,7 @@ async function updateLightningBalance() {
       btcToUsdRate = usdRate;
       currentBalanceMode = 0; // Always start with BTC
       updateBalanceDisplay();
-    } else {
+    } else if (balanceElem) {
       balanceElem.textContent = "Error";
     }
   } catch (err) {
@@ -1346,13 +1272,8 @@ async function fetchBtcUsdRate() {
 // Load departments and populate the list
 async function loadDepartments() {
   try {
-    if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
-    }
-
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -1391,11 +1312,10 @@ async function addDepartment() {
   if (!dep) return;
 
   try {
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ department: dep }),
     });
@@ -1417,11 +1337,10 @@ async function addDepartment() {
 // Remove a department
 async function removeDepartment(department) {
   try {
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + sessionStorage.getItem("token"),
       },
       body: JSON.stringify({ department }),
     });
@@ -1429,8 +1348,7 @@ async function removeDepartment(department) {
     let data;
     try {
       data = await response.json();
-    } catch (e) {
-      // If the response is not JSON, make a fallback error object
+    } catch {
       data = { success: false, message: "Unexpected server response." };
     }
 
@@ -1439,9 +1357,8 @@ async function removeDepartment(department) {
       // Optionally refresh department list here
       await populateDepartmentsList?.();
     } else if (response.status === 404) {
-      // 404 from backend, show the backend message if available
       alert(data.message || `Department "${department}" does not exist.`);
-    } else {
+    } else if (!response.ok) {
       alert(data.message || "Failed to remove department.");
     }
   } catch (err) {
@@ -1453,13 +1370,8 @@ async function removeDepartment(department) {
 // Load departments into the remove select dropdown
 async function loadRemoveDepartmentSelect() {
   try {
-    if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
-    }
-
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
@@ -1492,27 +1404,28 @@ async function loadRemoveDepartmentSelect() {
 
 async function populateDepartmentsList() {
   try {
-    if (!token) {
-      throw new Error("No authentication token found. Please log in.");
-    }
-
     if (!currentUser || !currentUser.role) {
       throw new Error("User information not loaded.");
     }
 
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
-    if (!response.ok) throw new Error("Failed to fetch departments");
+    if (!response.ok) {
+      throw new Error("Failed to fetch departments");
+    }
 
     const data = await response.json();
     let departments = data.departments || [];
 
     const deptList = document.getElementById("departmentsList");
+    if (!deptList) {
+      console.warn("departmentsList element not found");
+      return;
+    }
     deptList.innerHTML = "";
 
     // Role-based filtering
@@ -1536,19 +1449,15 @@ async function populateDepartmentsList() {
     if (deptList) {
       deptList.innerHTML = `<li style="color:red;">${err.message}</li>`;
     }
+    alert(err.message);
   }
 }
 
 async function populateDepartmentSelect() {
   try {
-    if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
-    }
-
-    const response = await fetch(`${API_BASE}/departments`, {
+    const response = await authFetch(`${API_BASE}/departments`, {
       headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json", // Keep Content-Type if you're sending a body
       },
     });
 
@@ -1583,16 +1492,7 @@ async function populateDepartmentSelect() {
 
 async function loadSuppliers() {
   try {
-    if (!token) {
-      throw new Error("Authentication token missing. Please log in.");
-    }
-
-    const response = await fetch(`${API_BASE}/suppliers`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await authFetch(`${API_BASE}/suppliers`);
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -1618,7 +1518,7 @@ async function loadSuppliers() {
 function populateEditSupplierForm(supplier) {
   currentSupplier = supplier;
   const form = document.getElementById("editSupplierForm");
-  form.elements["name"].value = supplier.name || "";
+  form.elements["name"].value = supplier.company || "";
   form.elements["contact"].value = supplier.contact || "";
   form.elements["email"].value = supplier.email || "";
   form.elements["lightningAddress"].value = supplier.lightningAddress || "";
@@ -1646,13 +1546,12 @@ document
     };
 
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/suppliers/${updatedSupplier.id}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`, // your global token variable
           },
           body: JSON.stringify(updatedSupplier),
         },
@@ -1737,33 +1636,10 @@ function renderSuppliers(suppliers) {
   }
 }
 
-// Load transactions
-async function loadTransactions() {
-  try {
-    const response = await fetch(`${API_BASE}/transactions`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      renderTransactions(data.transactions);
-    } else {
-      renderTransactions([]);
-    }
-  } catch (err) {
-    console.error("Error loading transactions:", err);
-    renderTransactions([]);
-  }
-}
-
 function renderTransactions(transactions) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
 
-  // Filter out any transactions with unknown receiver or invalid date just in case
   const filteredTransactions = transactions.filter((txn) => {
     return (
       txn.receiver &&
@@ -1776,62 +1652,42 @@ function renderTransactions(transactions) {
   });
 
   filteredTransactions.forEach((txn) => {
-    // Format date
-    let dateDisplay = "";
-    if (txn.date) {
-      const d = new Date(txn.date);
-      dateDisplay = isNaN(d.getTime()) ? "" : d.toLocaleString();
-    }
-
-    // Use normalized receiver field from backend
-    const receiver = txn.receiver;
-
-    // Format amount
-    const amountText = txn.amount
-      ? `${txn.amount} ${txn.currency || "SATS"}`
-      : "";
-
-    const id = txn.id || "";
-    const note = txn.note || "";
-    const status = renderStatus(txn.status);
-
-    // Create table row
     const row = document.createElement("tr");
-    row.setAttribute("data-txn-id", id);
+    row.setAttribute("data-txn-id", txn.id);
 
     // Date cell
     const dateCell = document.createElement("td");
-    dateCell.textContent = dateDisplay;
+    const d = new Date(txn.date);
+    dateCell.textContent = isNaN(d.getTime()) ? "" : d.toLocaleDateString();
 
     // Receiver cell
     const receiverCell = document.createElement("td");
-    receiverCell.textContent = receiver;
+    receiverCell.textContent = txn.receiver;
 
-    // Amount cell with styling
+    // Amount cell
     const amountCell = document.createElement("td");
-    amountCell.textContent = amountText;
+    amountCell.textContent = txn.amount
+      ? `${txn.amount} ${txn.currency || "SATS"}`
+      : "";
     amountCell.classList.add("amount");
-    if (txn.status === "SUCCESS") {
-      amountCell.classList.add("amount-green");
-    } else if (txn.status === "ALREADY_PAID") {
+    if (txn.status === "SUCCESS") amountCell.classList.add("amount-green");
+    else if (txn.status === "ALREADY_PAID")
       amountCell.classList.add("amount-blue");
-    } else {
-      amountCell.classList.add("amount-red");
-    }
+    else amountCell.classList.add("amount-red");
 
     // ID cell
     const idCell = document.createElement("td");
-    idCell.textContent = id;
+    idCell.textContent = txn.id || "";
 
     // Note cell
     const noteCell = document.createElement("td");
-    noteCell.textContent = note;
+    noteCell.textContent = txn.note || "";
 
-    // Status cell (assumes renderStatus returns HTML string)
+    // Status cell (renderStatus returns HTML string)
     const statusCell = document.createElement("td");
-    statusCell.innerHTML = status;
+    statusCell.innerHTML = renderStatus(txn.status);
 
-    // Append cells to row
+    // Append cells
     row.appendChild(dateCell);
     row.appendChild(receiverCell);
     row.appendChild(amountCell);
@@ -1839,11 +1695,10 @@ function renderTransactions(transactions) {
     row.appendChild(noteCell);
     row.appendChild(statusCell);
 
-    // Append row to tbody
     tbody.appendChild(row);
   });
 
-  // Setup click handlers or other row interactions
+  // Setup click handlers after rendering
   setupTransactionRowClicks(filteredTransactions);
 }
 
@@ -1954,10 +1809,7 @@ function populateRecipientDetails() {
 
 async function loadEmployeesForPaymentModal() {
   try {
-    if (!token) throw new Error("Not authenticated");
-    const response = await fetch(`${API_BASE}/users`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await authFetch(`${API_BASE}/users`);
     if (!response.ok) throw new Error("Failed to load employees");
     // /api/users returns a naked array
     employeesList = await response.json();
@@ -2083,17 +1935,10 @@ async function submitNewPayment(event) {
   };
 
   try {
-    if (!token) {
-      alert("Please log in to send payments.");
-      resetSubmitButton(submitBtn);
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/pay`, {
+    const response = await authFetch(`${API_BASE}/pay`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     });
@@ -2167,12 +2012,11 @@ async function submitPayInvoice(event) {
   }
 
   try {
-    // Use authFetch to handle token refresh automatically
     const response = await authFetch(`${API_BASE}/pay-invoice`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      credentials: "include", // ensure cookies (refresh token) are sent
+      credentials: "include", // ensure cookies (refresh token) are sent if needed
     });
 
     if (!response.ok) {
@@ -2214,6 +2058,9 @@ async function decodeInvoiceFromFrontend(invoice) {
   }
 
   try {
+    // Check token presence
+    const token = sessionStorage.getItem("token");
+
     if (!token) {
       detailsDiv.innerHTML = `<span style="color:red;">Please log in to decode invoices.</span>`;
       if (amountEntryDiv) amountEntryDiv.style.display = "none";
@@ -2221,11 +2068,11 @@ async function decodeInvoiceFromFrontend(invoice) {
       return;
     }
 
-    const response = await fetch("http://localhost:3001/api/decode-invoice", {
+    // Use authFetch to handle token and refresh automatically
+    const response = await authFetch(`${API_BASE}/decode-invoice`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ invoice }),
     });
@@ -2376,20 +2223,16 @@ function updateCurrentDate() {
   );
 }
 
-// Load and display transactions
+///// LOAD TRANSACTIONS FOR HISTORY TABLE /////
 async function loadTransactions() {
   try {
-    if (!sessionStorage.getItem("token")) {
-      throw new Error("No authentication token found. Please log in.");
-    }
-
     const response = await authFetch(
       `${API_BASE}/transactions?ts=${Date.now()}`,
       {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // just in case refresh token cookie is needed
+        credentials: "include", // keep if your backend requires cookies for refresh tokens
       },
     );
 
@@ -2406,14 +2249,18 @@ async function loadTransactions() {
     const data = await response.json();
 
     if (data.success) {
-      renderTransactions(data.transactions);
+      transactions = data.transactions;
+      console.log("Loaded transactions:", transactions);
+      renderTransactions(transactions);
     } else {
       console.warn("No transactions returned or success false");
+      transactions = [];
       renderTransactions([]);
     }
   } catch (err) {
     console.error("Error loading transactions:", err);
     alert(err.message);
+    transactions = [];
     renderTransactions([]);
   }
 }
@@ -2457,27 +2304,21 @@ function formatDate(date) {
 
 async function loadTeamMembers() {
   try {
-    if (!token) {
-      console.error("No authentication token found in sessionStorage.");
-      throw new Error("No authentication token found. Please log in.");
-    }
-
+    // Determine endpoint based on user role
     const endpoint =
       currentUser.role === "Admin" || currentUser.role === "Manager"
         ? "/employees"
         : "/users"; // Employees use /users endpoint
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await authFetch(`${API_BASE}${endpoint}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
-    // Check content-type before parsing
-    const contentType = response.headers.get("content-type");
-
+    // Read response as text first to handle non-JSON gracefully
     const text = await response.text();
+    const contentType = response.headers.get("content-type") || "";
 
     if (!response.ok) {
       let errorMsg = `HTTP error! Status: ${response.status}`;
@@ -2485,12 +2326,12 @@ async function loadTeamMembers() {
         const errorData = JSON.parse(text);
         errorMsg = errorData.message || errorMsg;
       } catch {
-        // If parsing error response failed, keep original message
+        // Keep original errorMsg if JSON parsing fails
       }
       throw new Error(errorMsg);
     }
 
-    if (!contentType || !contentType.includes("application/json")) {
+    if (!contentType.includes("application/json")) {
       console.error(
         "Expected JSON response but received different content-type.",
       );
@@ -2726,6 +2567,7 @@ async function showTeamPage() {
 
 async function addTeamMember() {
   await loadDepartments();
+
   const btn = document.getElementById("submitMemberBtn");
   const originalText = btn.textContent;
   btn.disabled = true;
@@ -2751,23 +2593,18 @@ async function addTeamMember() {
       throw new Error("Please fill in all required fields");
     }
 
-    if (!token) {
-      throw new Error("You must be logged in to add a team member.");
-    }
-
-    const response = await fetch(`${API_BASE}/users`, {
+    // Use authFetch to handle token and refresh automatically
+    const response = await authFetch(`${API_BASE}/users`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // Include JWT token
       },
       body: JSON.stringify(newMember),
     });
 
-    // Handle non-JSON error responses gracefully
+    // Handle non-OK responses gracefully
     if (!response.ok) {
       const text = await response.text();
-      // Try to parse JSON if possible, else use plain text
       let errorMessage = text;
       try {
         const data = JSON.parse(text);
@@ -2789,7 +2626,7 @@ async function addTeamMember() {
     await loadTeamMembers();
     await loadDepartments();
 
-    // Clear form
+    // Clear form fields
     [
       "memberName",
       "memberRole",
@@ -2810,15 +2647,10 @@ async function addTeamMember() {
 
 async function removeTeamMember() {
   try {
-    if (!token) {
-      throw new Error("You must be logged in to remove a team member.");
-    }
-
-    const saveResponse = await fetch(`${API_BASE}/users`, {
+    const response = await authFetch(`${API_BASE}/users`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // Include JWT token
       },
       body: JSON.stringify({
         action: "remove",
@@ -2826,8 +2658,8 @@ async function removeTeamMember() {
       }),
     });
 
-    if (!saveResponse.ok) {
-      const text = await saveResponse.text();
+    if (!response.ok) {
+      const text = await response.text();
       let errorMessage = text;
       try {
         const data = JSON.parse(text);
@@ -2838,7 +2670,7 @@ async function removeTeamMember() {
       throw new Error(errorMessage || "Failed to remove member");
     }
 
-    const result = await saveResponse.json();
+    const result = await response.json();
 
     if (!result.success) {
       throw new Error(result.message || "Failed to remove member");
@@ -2855,24 +2687,18 @@ async function removeTeamMember() {
 }
 
 async function showRemoveMemberModal() {
-  const modal = document.getElementById("removeMemberModal");
+  const removeMemberModal = document.getElementById("removeMemberModal");
   const container = document.getElementById("membersListContainer");
 
   try {
-    if (!token) {
-      alert("You must be logged in to load members.");
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/users`, {
+    const response = await authFetch(`${API_BASE}/users`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({}));
       console.error(
         "Failed to load members, status:",
         response.status,
@@ -2925,7 +2751,7 @@ async function showRemoveMemberModal() {
       });
 
     // Show the modal
-    modal.style.display = "flex";
+    removeMemberModal.style.display = "flex";
   } catch (err) {
     console.error("Error loading members:", err);
     alert("Failed to load members list due to a network or server error.");
@@ -2942,39 +2768,18 @@ async function openNewPaymentModal() {
   document.getElementById("newPaymentModal").style.display = "flex";
 }
 
-function openNewSupplierPaymentModal() {
-  document.getElementById("newSupplierPaymentModal").style.display = "flex";
-  populateSupplierSelect();
-}
-function closeNewSupplierPaymentModal() {
-  document.getElementById("newSupplierPaymentModal").style.display = "none";
-}
-
-function openPaySupplierInvoiceModal() {
-  document.getElementById("paySupplierInvoiceModal").style.display = "flex";
-  document.getElementById("paySupplierInvoiceForm").reset();
-  document.getElementById("invoiceDetails").style.display = "none";
-}
-function closePaySupplierInvoiceModal() {
-  document.getElementById("paySupplierInvoiceModal").style.display = "none";
-}
-
 async function populateSupplierSelect() {
   const select = document.getElementById("supplierSelect");
+  select.disabled = true;
   select.innerHTML = "<option value=''>Loading...</option>";
 
   try {
-    if (!token) {
-      alert("Please log in to load suppliers.");
-      select.innerHTML = "<option value=''>Please log in</option>";
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/suppliers`, {
+    const response = await authFetch(`${API_BASE}/suppliers`, {
+      method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
+      credentials: "include", // keep if your backend requires cookies (refresh tokens)
     });
 
     if (!response.ok) {
@@ -2983,11 +2788,19 @@ async function populateSupplierSelect() {
     }
 
     const data = await response.json();
-    if (data.success) {
+
+    if (
+      data.success &&
+      Array.isArray(data.suppliers) &&
+      data.suppliers.length > 0
+    ) {
       select.innerHTML = "";
-      const sortedSuppliers = data.suppliers.sort((a, b) => {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
+      select.disabled = false;
+
+      const sortedSuppliers = data.suppliers.sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+      );
+
       sortedSuppliers.forEach((supplier) => {
         const option = document.createElement("option");
         option.value = supplier.id;
@@ -2996,10 +2809,12 @@ async function populateSupplierSelect() {
       });
     } else {
       select.innerHTML = "<option value=''>No suppliers found</option>";
+      select.disabled = true;
     }
   } catch (err) {
     console.error("Error loading suppliers:", err);
     select.innerHTML = "<option value=''>Error loading suppliers</option>";
+    select.disabled = true;
   }
 }
 
@@ -3016,9 +2831,10 @@ function closeAddSupplierModal() {
   document.getElementById("addSupplierModal").style.display = "none";
 }
 
-function openRemoveSupplierModal() {
-  document.getElementById("removeSupplierModal").style.display = "flex";
+async function openRemoveSupplierModal() {
+  await loadSuppliers();
   populateRemoveSupplierDropdown();
+  document.getElementById("removeSupplierModal").style.display = "flex";
 }
 
 function closeRemoveSupplierModal() {
@@ -3027,28 +2843,23 @@ function closeRemoveSupplierModal() {
 
 async function submitAddSupplier(event) {
   event.preventDefault();
-  const name = document.getElementById("supplierName").value;
-  const email = document.getElementById("supplierEmail").value;
-  const contact = document.getElementById("supplierContact").value;
-  const lightningAddress = document.getElementById(
-    "supplierLightningAddress",
-  ).value;
-  const note = document.getElementById("supplierNote").value;
+
+  const name = document.getElementById("supplierName").value.trim();
+  const email = document.getElementById("supplierEmail").value.trim();
+  const contact = document.getElementById("supplierContact").value.trim();
+  const lightningAddress = document
+    .getElementById("supplierLightningAddress")
+    .value.trim();
+  const note = document.getElementById("supplierNote").value.trim();
 
   // Add createdAt timestamp
   const createdAt = new Date().toISOString();
 
   try {
-    if (!token) {
-      alert("You must be logged in to add a supplier.");
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/suppliers`, {
+    const response = await authFetch(`${API_BASE}/suppliers`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         name,
@@ -3061,6 +2872,7 @@ async function submitAddSupplier(event) {
     });
 
     const data = await response.json();
+
     if (data.success) {
       alert("Supplier added!");
       closeAddSupplierModal();
@@ -3076,11 +2888,14 @@ async function submitAddSupplier(event) {
 
 async function loadEmployeesForPaymentModal() {
   try {
-    if (!token) throw new Error("Not authenticated");
-    const response = await fetch(`${API_BASE}/users`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const response = await authFetch(`${API_BASE}/users`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
     });
+
     if (!response.ok) throw new Error("Failed to load employees");
+
     // The /api/users endpoint returns a naked array (see server.js)
     employeesList = await response.json();
   } catch (err) {
@@ -3091,11 +2906,14 @@ async function loadEmployeesForPaymentModal() {
 
 async function loadSuppliersForPaymentModal() {
   try {
-    if (!token) throw new Error("Not authenticated");
-    const response = await fetch(`${API_BASE}/suppliers`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const response = await authFetch(`${API_BASE}/suppliers`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
     });
+
     if (!response.ok) throw new Error("Failed to load suppliers");
+
     const data = await response.json();
     suppliersList = data.suppliers || [];
   } catch (err) {
@@ -3106,23 +2924,34 @@ async function loadSuppliersForPaymentModal() {
 
 async function populateRemoveSupplierDropdown() {
   const select = document.getElementById("removeSupplierSelect");
+  select.disabled = true;
   select.innerHTML = "<option value=''>Loading...</option>";
+
   try {
-    const response = await fetch(`${API_BASE}/suppliers`);
+    const response = await authFetch(`${API_BASE}/suppliers`);
     const data = await response.json();
-    if (data.success) {
-      select.innerHTML = "";
+
+    if (
+      data.success &&
+      Array.isArray(data.suppliers) &&
+      data.suppliers.length > 0
+    ) {
+      select.innerHTML = "<option value=''>Select a supplier</option>";
       data.suppliers.forEach((supplier) => {
         const option = document.createElement("option");
         option.value = supplier.id;
-        option.textContent = supplier.name;
+        option.textContent = supplier.company?.trim() || "Unnamed Supplier";
         select.appendChild(option);
       });
+      select.disabled = false;
     } else {
       select.innerHTML = "<option value=''>No suppliers found</option>";
+      select.disabled = true;
     }
-  } catch {
+  } catch (err) {
+    console.error("Error loading suppliers:", err);
     select.innerHTML = "<option value=''>Error loading suppliers</option>";
+    select.disabled = true;
   }
 }
 
@@ -3134,20 +2963,15 @@ async function submitRemoveSupplier(event) {
   if (!confirm("Are you sure you want to remove this supplier?")) return;
 
   try {
-    if (!token) {
-      alert("You must be logged in to remove a supplier.");
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/suppliers/${supplierId}`, {
+    const response = await authFetch(`${API_BASE}/suppliers/${supplierId}`, {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
     });
 
     const data = await response.json();
+
     if (data.success) {
       alert("Supplier removed!");
       closeRemoveSupplierModal();
@@ -3228,11 +3052,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
   const balanceElem = document.getElementById("balanceAmount");
-  const detailsContainer = document.getElementById("transactionDetails");
   const transactionModal = document.getElementById("transactionModal");
   const transactionCloseBtn = document.getElementById("closeTransactionModal");
-  const transactionDetailsContainer =
-    document.getElementById("transactionDetails");
   const editSupplierModal = document.getElementById("editSupplierModal");
   const closeEditSupplierModal = document.getElementById(
     "closeEditSupplierModal",
@@ -3254,9 +3075,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
-  // Initialize global/shared variables here
-  currentMember = null;
-
   // Close modal handler
   closeButton.addEventListener("click", () => {
     editTeamMemberModal.style.display = "none";
@@ -3267,9 +3085,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Form submit handler
   editTeamMemberForm.addEventListener("submit", async (event) => {
-    console.log("Gabba Gool");
     event.preventDefault();
-    if (!currentMember) return;
+
+    if (!currentMember) {
+      return;
+    }
 
     const formData = new FormData(editTeamMemberForm);
     const updatedMember = {};
@@ -3293,15 +3113,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error("Error response from server:", errorData);
         throw new Error(errorData.message || "Failed to update team member");
       }
 
       const savedMember = await response.json();
 
-      // Update local data and UI
       const index = employeesList.findIndex((m) => m.id === savedMember.id);
       if (index !== -1) {
         employeesList[index] = savedMember;
+      } else {
+        console.warn("Saved member not found in employeesList");
       }
 
       editTeamMemberModal.style.display = "none";
@@ -3309,7 +3131,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       inputsContainer.innerHTML = "";
       currentMember = null;
 
-      renderTeamMembersTable(employeesList);
+      await loadTeamMembers();
     } catch (error) {
       console.error("Error saving team member:", error);
       alert(`Error saving changes: ${error.message}`);
@@ -3369,19 +3191,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Attach click handlers to each transaction row
-  document.querySelectorAll("#transactionsTable tbody tr").forEach((row) => {
-    row.addEventListener("click", () => {
-      const txnId = row.getAttribute("data-txn-id");
-      const txn = allTransactions.find((t) => t.id === txnId);
-      if (txn) {
-        showTransactionDetails(txn);
-      } else {
-        console.warn(`Transaction with id ${txnId} not found`);
-      }
-    });
-  });
-
   const removeBtn = document.getElementById("removeDepartmentBtn");
   if (removeBtn) {
     removeBtn.addEventListener("click", async () => {
@@ -3411,18 +3220,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!tr) return;
 
     const supplierId = tr.getAttribute("data-supplier-id");
-    console.log("Clicked supplierId:", supplierId);
 
     if (!supplierId) {
       console.warn("Clicked row has no data-supplier-id");
       return;
     }
-
-    // Log all supplier IDs for comparison
-    console.log(
-      "Available supplier IDs:",
-      suppliersList.map((s) => s.id),
-    );
 
     const supplier = suppliersList.find((s) => s.id === supplierId);
     if (!supplier) {

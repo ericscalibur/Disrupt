@@ -29,10 +29,11 @@
   {
     "id": "sup1749440017541",
     "company": "420Shop",
-    "contact": "Al",
-    "email": "al@420shop.com",
+    "contact": "Jacob",
+    "email": "jacob@420shop.com",
     "lightningAddress": "ericscalibur@walletofsatoshi.com",
     "note": "here's a note for you",
-    "createdAt": "2025-06-09T03:33:37.541Z"
+    "createdAt": "2025-06-09T03:33:37.541Z",
+    "name": "420Shop"
   }
 ]

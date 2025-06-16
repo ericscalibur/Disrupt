@@ -10,7 +10,7 @@
     "id": "00303956d3b6afba911d26734c9f7c3e3ad3123055fad46e2d090181acd84922"
   },
   {
-    "name": "Joe",
+    "name": "Jack",
     "role": "Manager",
     "department": "Engineering",
     "email": "joe@disrupt.com",
@@ -60,7 +60,7 @@
     "id": "2a73b5abd3a5996289a02af48b7cbcd5d47061c687e94c40c59a7296aefed6b0"
   },
   {
-    "name": "Quentin MPB",
+    "name": "Quentin",
     "role": "Manager",
     "email": "quentin@disrupt.com",
     "department": "Accounting",

@@ -415,10 +415,6 @@ app.get(
         console.warn("Invalid JSON in users.json, initializing empty array");
       }
 
-      console.log(
-        `User ${req.user.email} requested users, returning ${users.length} records`,
-      );
-
       if (req.user.role !== "Admin" && req.user.department) {
         users = users.filter((user) => user.department === req.user.department);
       }
@@ -2112,7 +2108,7 @@ app.post("/api/decode-invoice", authenticateToken, (req, res) => {
 });
 
 // Logout route to revoke refresh token
-app.post("/logout", (req, res) => {
+app.post("/api/logout", (req, res) => {
   const refreshToken = req.cookies.refreshToken;
   if (refreshToken) {
     refreshTokensStore.delete(refreshToken);
