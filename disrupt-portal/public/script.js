@@ -3043,11 +3043,23 @@ function setVolcanoMode(isVolcano) {
   }
 }
 
+function isValidEmail(email) {
+  // Basic email regex pattern
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
+
 /////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", async () => {
   const isLoggedIn = token && token.split(".").length === 3;
   const volcanoPref = localStorage.getItem("volcanoMode");
   const body = document.body;
+  const forgotBtn = document.getElementById("forgotPassword");
+  const forgotPasswordModal = document.getElementById("forgotPasswordModal");
+  const closeBtn = document.getElementById("closeForgotPassword");
+  const sendBtn = document.getElementById("sendResetBtn");
+  const msgDiv = document.getElementById("forgotPasswordMessage");
+  const emailInput = document.getElementById("forgotEmail");
   const dashboard = document.getElementById("dashboard");
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
@@ -3099,13 +3111,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     updatedMember.id = currentMember.id;
 
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `http://localhost:3001/api/team-members/${updatedMember.id}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(updatedMember),
         },
@@ -3648,7 +3659,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     loginBtn.addEventListener("click", login);
   }
 
-  const forgotBtn = document.getElementById("forgotPasswordBtn");
   if (forgotBtn) {
     forgotBtn.onclick = async function () {
       const msgDiv = document.getElementById("forgotPasswordMessage");
@@ -3662,6 +3672,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       try {
         const response = await fetch(`${API_BASE}/forgot-password`, {
+          /// ??? ///
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: currentUser.email }),
@@ -3681,6 +3692,84 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     };
   }
+
+  // Open modal on "Forgot Password" click
+  forgotBtn?.addEventListener("click", () => {
+    msgDiv.textContent = "";
+    msgDiv.style.color = "black";
+    emailInput.value = "";
+    forgotPasswordModal.style.display = "flex";
+    emailInput.focus();
+  });
+
+  // Close modal on close button click
+  closeBtn?.addEventListener("click", () => {
+    forgotPasswordModal.style.display = "none";
+  });
+
+  // Close modal if user clicks outside modal content
+  window.addEventListener("click", (event) => {
+    if (event.target === forgotPasswordModal) {
+      forgotPasswordModal.style.display = "none";
+    }
+  });
+
+  // Handle send reset email button click
+  sendBtn?.addEventListener("click", async () => {
+    const email = emailInput.value.trim();
+
+    if (!email) {
+      msgDiv.style.color = "red";
+      msgDiv.textContent = "Please enter your email address.";
+      emailInput.focus();
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      msgDiv.style.color = "red";
+      msgDiv.textContent = "Please enter a valid email address.";
+      emailInput.focus();
+      return;
+    }
+
+    msgDiv.style.color = "black";
+    msgDiv.textContent = "Sending reset email...";
+    sendBtn.disabled = true;
+
+    try {
+      const response = await fetch(`${API_BASE}/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        msgDiv.style.color = "green";
+        msgDiv.textContent =
+          "If that email exists, a reset link has been sent.";
+
+        // Show alert to user
+        alert(
+          "If that email exists, a reset link has been sent to your email.",
+        );
+
+        setTimeout(() => {
+          forgotPasswordModal.style.display = "none";
+        }, 4000);
+      } else {
+        msgDiv.style.color = "red";
+        msgDiv.textContent = data.message || "Failed to send reset email.";
+      }
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      msgDiv.style.color = "red";
+      msgDiv.textContent = "Error sending reset email. Please try again.";
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
 
   setVolcanoMode(localStorage.getItem("volcanoMode") === "on");
   if (volcanoSwitch) {
