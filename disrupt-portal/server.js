@@ -1445,10 +1445,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-app.post("/api/forgot-password", authenticateToken, async (req, res) => {
+app.post("/api/forgot-password", async (req, res) => {
   const { email } = req.body;
-  let users;
 
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email required." });
+  }
+
+  let users;
   try {
     const usersData = await fs.readFile(USERS_FILE, "utf-8");
     users = JSON.parse(usersData);
@@ -1462,33 +1466,40 @@ app.post("/api/forgot-password", authenticateToken, async (req, res) => {
   }
 
   const user = users.find((u) => u.email === email);
-  if (!user)
-    return res.status(404).json({ success: false, message: "User not found" });
+  if (!user) {
+    // Avoid user enumeration by always responding success
+    return res.json({
+      success: true,
+      message: "If that email exists, a reset PIN has been sent.",
+    });
+  }
 
-  // Generate a new 4-digit PIN
+  // Generate a new 4-digit PIN (string with leading zeros if needed)
   const newPin = Math.floor(1000 + Math.random() * 9000).toString();
 
-  // Update the user's password
+  // TODO: Ideally hash the password before storing, but for now storing plaintext as per your choice
   user.password = newPin;
 
-  // Save updated users array back to file
   try {
     await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
   } catch (err) {
     return res
       .status(500)
-      .json({ success: false, message: "Failed to update user." });
+      .json({ success: false, message: "Failed to update user password." });
   }
 
-  // Send the email
   try {
     await transporter.sendMail({
-      from: '"Disrupt Portal" <noreply@company.com>',
+      from: '"Disrupt Portal" <support@disrupt.com>',
       to: user.email,
       subject: "Your New Password",
-      text: `Your new password is: ${newPin}`,
+      text: `Your new password is: ${newPin}\n\nPlease log in.`,
     });
-    res.json({ success: true });
+
+    res.json({
+      success: true,
+      message: "If that email exists, a reset PIN has been sent.",
+    });
   } catch (err) {
     console.error("Failed to send email:", err);
     res.status(500).json({ success: false, message: "Failed to send email." });

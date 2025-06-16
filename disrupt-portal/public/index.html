@@ -38,6 +38,39 @@
                 <div class="error" id="errorMessage">
                     Invalid email or password
                 </div>
+                <div id="forgotPassword">Forgot Password</div>
+            </div>
+        </div>
+        <!-- Forgot Password Modal -->
+        <div id="forgotPasswordModal" class="login-page" style="display: none">
+            <div class="login-container">
+                <div
+                    id="closeForgotPassword"
+                    style="
+                        cursor: pointer;
+                        position: absolute;
+                        top: 10px;
+                        right: 15px;
+                        font-size: 24px;
+                    "
+                >
+                    &times;
+                </div>
+                <div class="company-name">DISRUPT</div>
+                <div class="portal-title">Forgot Password</div>
+
+                <div class="form-group">
+                    <label for="forgotEmail">Email</label>
+                    <input
+                        type="email"
+                        id="forgotEmail"
+                        placeholder="Enter your email"
+                    />
+                </div>
+
+                <button id="sendResetBtn">Send Reset Email</button>
+
+                <div id="forgotPasswordMessage" class="error"></div>
             </div>
         </div>
 
