@@ -27,12 +27,16 @@ let token = sessionStorage.getItem("token");
 let editTeamMemberModal;
 let inputsContainer;
 
+// Token refresh state management
+let isRefreshing = false;
+let refreshPromise = null;
+let tokenRefreshTimer = null;
+
 // Restore currentUser from sessionStorage if available
 if (!currentUser) {
   const userStr = sessionStorage.getItem("user");
   if (userStr) {
     currentUser = JSON.parse(userStr);
-    console.log(currentUser);
     currentUserRole = currentUser.role; // adjust property name if different
   }
 }
@@ -75,6 +79,46 @@ function isTokenExpired(token) {
   return decoded.exp < now;
 }
 
+// Helper to get token expiration time in seconds
+function getTokenExpirationTime(token) {
+  if (!token) return 0;
+  const decoded = decodeJwt(token);
+  if (!decoded || !decoded.exp) return 0;
+  return decoded.exp;
+}
+
+// Schedule proactive token refresh
+function scheduleTokenRefresh(token) {
+  // Clear any existing timer
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+
+  if (!token) return;
+
+  const exp = getTokenExpirationTime(token);
+  if (!exp) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresIn = exp - now;
+
+  // Refresh 2 minutes before expiration (or immediately if less than 2 minutes left)
+  const refreshIn = Math.max(0, expiresIn - 120);
+
+  tokenRefreshTimer = setTimeout(async () => {
+    if (!isRefreshing) {
+      try {
+        const newToken = await refreshToken();
+        scheduleTokenRefresh(newToken);
+      } catch (err) {
+        console.error("Proactive token refresh failed:", err);
+        // Don't logout automatically, let the next request handle it
+      }
+    }
+  }, refreshIn * 1000);
+}
+
 // Centralized fetch helper that includes Authorization header
 function prepareHeaders(optionsHeaders = {}, accessToken) {
   const headers = {
@@ -91,10 +135,12 @@ async function authFetch(url, options = {}) {
   let token = sessionStorage.getItem("token");
 
   if (!token) {
+    console.error("No token found in sessionStorage");
     alert("Session expired or missing. Please log in again.");
     throw new Error("Invalid or missing token");
   }
 
+  console.log("Making authenticated request to:", url);
   let response;
 
   try {
@@ -108,49 +154,127 @@ async function authFetch(url, options = {}) {
     throw networkError;
   }
 
+  console.log("Response status:", response.status);
+
   if (response.status === 401) {
+    console.log("Received 401, attempting token refresh...");
+    // Handle token refresh with race condition protection
+    if (isRefreshing) {
+      console.log("Refresh already in progress, waiting...");
+      // If refresh is already in progress, wait for it
+      try {
+        await refreshPromise;
+        // Retry with the new token
+        const newToken = sessionStorage.getItem("token");
+        if (!newToken) {
+          throw new Error("No token after refresh");
+        }
+        console.log("Retrying request with new token...");
+        response = await fetch(url, {
+          ...options,
+          headers: prepareHeaders(options.headers, newToken),
+          credentials: "include",
+        });
+        return response;
+      } catch (err) {
+        console.error("Error waiting for token refresh:", err);
+        logout();
+        throw err;
+      }
+    }
+
+    // Start refresh process
+    console.log("Starting new token refresh process...");
+    isRefreshing = true;
+    refreshPromise = refreshToken();
+
     try {
-      const refreshResponse = await fetch(`${API_BASE}/refresh`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      if (!refreshResponse.ok) {
-        alert("Session expired. Please log in again.");
-        handleLogout();
-        throw new Error("Refresh token expired or invalid");
-      }
-
-      const data = await refreshResponse.json();
-
-      if (!data.accessToken) {
-        alert("Failed to refresh session. Please log in again.");
-        handleLogout();
-        throw new Error("Failed to refresh access token");
-      }
-
-      sessionStorage.setItem("token", data.accessToken);
+      const newToken = await refreshPromise;
+      console.log("Token refresh successful, retrying original request...");
 
       response = await fetch(url, {
         ...options,
-        headers: prepareHeaders(options.headers, data.accessToken),
+        headers: prepareHeaders(options.headers, newToken),
         credentials: "include",
       });
     } catch (err) {
       console.error("Error during token refresh:", err);
-      alert("Session expired. Please log in again.");
-      handleLogout();
+      logout();
       throw err;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
     }
   }
 
   return response;
 }
 
-function handleLogout() {
+async function refreshToken() {
+  try {
+    console.log("Attempting to refresh token...");
+    const refreshResponse = await fetch(`${API_BASE}/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    console.log("Refresh response status:", refreshResponse.status);
+
+    if (!refreshResponse.ok) {
+      const errorData = await refreshResponse.json().catch(() => ({}));
+      console.error("Refresh failed:", errorData);
+      throw new Error(errorData.message || "Refresh token expired or invalid");
+    }
+
+    const data = await refreshResponse.json();
+    console.log("Refresh response data:", data);
+
+    if (!data.accessToken) {
+      throw new Error("Failed to refresh access token");
+    }
+
+    sessionStorage.setItem("token", data.accessToken);
+    console.log("New token saved to sessionStorage");
+
+    // Schedule the next refresh
+    scheduleTokenRefresh(data.accessToken);
+
+    return data.accessToken;
+  } catch (err) {
+    console.error("Token refresh error:", err);
+    sessionStorage.removeItem("token");
+    throw err;
+  }
+}
+
+async function logout() {
+  try {
+    // Call logout endpoint to clean up server-side tokens
+    await fetch(`${API_BASE}/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (err) {
+    console.error("Error during logout:", err);
+    // Continue with client-side cleanup even if server call fails
+  }
+
+  // Clean up client-side storage
   sessionStorage.removeItem("token");
-  // Redirect or show login UI
-  window.location.href = "/login";
+  sessionStorage.removeItem("user");
+
+  // Reset refresh state
+  isRefreshing = false;
+  refreshPromise = null;
+
+  // Clear token refresh timer
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+
+  // Show login page
+  resetUIAfterLogout();
 }
 
 // Updated login function
@@ -191,7 +315,9 @@ async function login() {
 
     // Store access token immediately
     sessionStorage.setItem("token", accessToken);
-    console.log("Access token saved:", accessToken);
+
+    // Schedule proactive token refresh
+    scheduleTokenRefresh(accessToken);
 
     // Fetch user profile with new token, ensure authFetch uses the stored token
     const profileResp = await authFetch(`${API_BASE}/me`);
@@ -251,21 +377,6 @@ function showDashboard() {
 }
 
 // Logout function
-async function logout() {
-  try {
-    const response = await fetch(`${API_BASE}/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!response.ok) {
-      console.warn("Logout request failed:", response.status);
-    }
-  } catch (err) {
-    console.error("Logout error:", err);
-  } finally {
-    resetUIAfterLogout();
-  }
-}
 
 function resetUIAfterLogout() {
   currentUser = null;
@@ -345,7 +456,12 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     return;
   }
 
-  drafts.forEach((draft) => {
+  // Sort drafts by dateCreated descending (most recent first)
+  const sortedDrafts = [...drafts].sort(
+    (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated),
+  );
+
+  sortedDrafts.forEach((draft) => {
     let actionCell = "";
     let statusText = "";
     let statusClass = "";
@@ -473,42 +589,6 @@ async function loadAccountingPage() {
   } catch (err) {
     console.error("Failed to load accounting data", err);
   }
-}
-
-function renderPendingDraftsTable(drafts) {
-  const tbody = document.querySelector("#pendingDraftsTable tbody");
-  tbody.innerHTML = "";
-
-  if (!drafts || drafts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
-    return;
-  }
-
-  drafts.forEach((draft) => {
-    let statusText = "";
-    let statusClass = "";
-
-    if (draft.status === "paid" || draft.status === "approved") {
-      statusText = "Paid";
-      statusClass = "status-paid";
-    } else if (draft.status === "declined") {
-      statusText = "Declined";
-      statusClass = "status-declined";
-    } else {
-      statusText = "Pending";
-      statusClass = "status-pending";
-    }
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
-      <td>${draft.recipientName || draft.payee || ""}</td>
-      <td>${draft.note || draft.description || ""}</td>
-      <td class="amount-cell">${draft.amount}</td>
-      <td><span class="status-label ${statusClass}">${statusText}</span></td>
-    `;
-    tbody.appendChild(row);
-  });
 }
 
 // LOADS SUPPLIERS IN DROPDOWN
@@ -744,6 +824,8 @@ function setupTeamTableClicks(users) {
 function populateEditForm(member) {
   inputsContainer.innerHTML = ""; // Clear previous inputs
 
+  const roleOptions = ["Admin", "Manager", "Employee", "Bookkeeper"];
+
   for (const [key, value] of Object.entries(member)) {
     if (key === "id") continue;
 
@@ -751,16 +833,43 @@ function populateEditForm(member) {
     label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
     label.setAttribute("for", `input-${key}`);
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.id = `input-${key}`;
-    input.name = key;
-    input.placeholder = value || "";
-    input.value = value || "";
+    let inputElement;
+
+    if (key === "role") {
+      // Create dropdown for role field
+      inputElement = document.createElement("select");
+      inputElement.id = `input-${key}`;
+      inputElement.name = key;
+
+      // Add default option
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Select a role...";
+      inputElement.appendChild(defaultOption);
+
+      // Add role options
+      roleOptions.forEach((role) => {
+        const option = document.createElement("option");
+        option.value = role;
+        option.textContent = role;
+        if (value === role) {
+          option.selected = true;
+        }
+        inputElement.appendChild(option);
+      });
+    } else {
+      // Create regular text input for other fields
+      inputElement = document.createElement("input");
+      inputElement.type = "text";
+      inputElement.id = `input-${key}`;
+      inputElement.name = key;
+      inputElement.placeholder = value || "";
+      inputElement.value = value || "";
+    }
 
     const wrapper = document.createElement("div");
     wrapper.appendChild(label);
-    wrapper.appendChild(input);
+    wrapper.appendChild(inputElement);
 
     inputsContainer.appendChild(wrapper);
   }
@@ -784,7 +893,6 @@ function setupTransactionRowClicks(transactions) {
 
   // Function to populate and show modal
   function showTransactionDetails(txn) {
-    console.log(txn);
     const detailsContainer = document.getElementById("transactionDetails");
     if (!detailsContainer) return;
 
@@ -889,6 +997,11 @@ async function loadPendingDrafts() {
 
     if (data.success) {
       allDrafts = data.drafts || [];
+      // Sort all drafts by dateCreated descending (most recent first)
+      allDrafts.sort(
+        (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated),
+      );
+
       allPendingDrafts = allDrafts.filter((d) => d.status === "pending");
       document.getElementById("pendingDraftsCount").textContent =
         allPendingDrafts.length;
@@ -932,8 +1045,13 @@ async function loadEmployeeDrafts() {
         );
       }
 
+      // Sort drafts by dateCreated descending (most recent first)
+      const sortedDrafts = (data.drafts || []).sort(
+        (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated),
+      );
+
       // Render drafts with suppliersList for lookup
-      renderEmployeeDraftsTable(data.drafts || [], suppliersList || []);
+      renderEmployeeDraftsTable(sortedDrafts, suppliersList || []);
 
       // Initialize sorting handlers if available
       if (typeof addEmployeeDraftsTableSortHandlers === "function") {
@@ -1008,66 +1126,6 @@ function sortEmployeeDraftsByColumn(columnIdx) {
 }
 
 // For managers/admins
-function renderPendingDraftsTable(drafts, showActions = true) {
-  const tbody = document.querySelector("#pendingDraftsTable tbody");
-  tbody.innerHTML = "";
-
-  if (!drafts || drafts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
-    return;
-  }
-
-  drafts.forEach((draft) => {
-    let actionCell = "";
-    let statusText = "";
-    let statusClass = "";
-
-    if (draft.status === "pending") {
-      if (showActions) {
-        actionCell = `
-          <div class="action-buttons">
-            <button class="approve-btn" data-draft-id="${draft.id}">Approve</button>
-            <button class="decline-btn" data-draft-id="${draft.id}">Decline</button>
-          </div>
-        `;
-      } else {
-        actionCell = `<span class="status-label status-pending">Pending</span>`;
-      }
-      statusText = "Pending";
-      statusClass = "status-pending";
-    } else if (draft.status === "paid" || draft.status === "approved") {
-      actionCell = `<span class="status-label status-paid">Paid</span>`;
-      statusText = "Paid";
-      statusClass = "status-paid";
-    } else if (draft.status === "declined") {
-      actionCell = `<span class="status-label status-declined">Declined</span>`;
-      statusText = "Declined";
-      statusClass = "status-declined";
-    } else {
-      actionCell = `<span class="status-label">${draft.status}</span>`;
-      statusText = draft.status;
-      statusClass = "";
-    }
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
-      <td>${draft.company || draft.contact || ""}</td>
-      <td>${draft.note || ""}</td>
-      <td class="amount-cell">${draft.amount}</td>
-      <td>${actionCell}</td>
-    `;
-    tbody.appendChild(row);
-  });
-
-  // Attach event listeners for approve/decline buttons if needed
-  document.querySelectorAll(".approve-btn").forEach((btn) => {
-    btn.addEventListener("click", handleDraftApproval);
-  });
-  document.querySelectorAll(".decline-btn").forEach((btn) => {
-    btn.addEventListener("click", handleDraftDecline);
-  });
-}
 
 function renderEmployeeDraftsTable(drafts, suppliersList) {
   const tbody = document.querySelector("#draftsTable tbody");
@@ -1335,14 +1393,19 @@ async function addDepartment() {
 }
 
 // Remove a department
-async function removeDepartment(department) {
+async function removeDepartment(department, confirmDelete = false) {
+  if (!department || typeof department !== "string" || !department.trim()) {
+    alert("Please provide a valid department name.");
+    return;
+  }
+
   try {
     const response = await authFetch(`${API_BASE}/departments`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ department }),
+      body: JSON.stringify({ department: department.trim(), confirmDelete }),
     });
 
     let data;
@@ -1352,18 +1415,51 @@ async function removeDepartment(department) {
       data = { success: false, message: "Unexpected server response." };
     }
 
+    // Handle confirmation requirement
+    if (data.requiresConfirmation) {
+      if (!data.employees || !Array.isArray(data.employees)) {
+        alert("Error: Invalid employee data received from server.");
+        return;
+      }
+
+      const employeeList = data.employees
+        .map((emp) => `• ${emp.name || "Unknown"} (${emp.email || "No email"})`)
+        .join("\n");
+
+      const confirmMessage = `This department still has ${data.employeeCount} member(s):
+
+${employeeList}
+
+Deleting this department will also delete these employees. Are you sure you want to delete this department and its employees?`;
+
+      if (confirm(confirmMessage)) {
+        // Retry with confirmation
+        await removeDepartment(department, true);
+        return;
+      }
+      return;
+    }
+
     if (response.ok && data.success) {
-      alert(`Department "${department}" removed successfully!`);
-      // Optionally refresh department list here
-      await populateDepartmentsList?.();
+      alert(data.message || `Department "${department}" removed successfully!`);
+      // Refresh department list and team members
+      if (typeof populateDepartmentsList === "function") {
+        await populateDepartmentsList();
+      }
+      if (typeof loadTeamMembers === "function") {
+        await loadTeamMembers();
+      }
+      if (typeof loadDepartments === "function") {
+        await loadDepartments();
+      }
     } else if (response.status === 404) {
       alert(data.message || `Department "${department}" does not exist.`);
     } else if (!response.ok) {
       alert(data.message || "Failed to remove department.");
     }
   } catch (err) {
-    alert("An error occurred while removing the department.");
-    console.error(err);
+    alert("An error occurred while removing the department. Please try again.");
+    console.error("Department removal error:", err);
   }
 }
 
@@ -1518,7 +1614,7 @@ async function loadSuppliers() {
 function populateEditSupplierForm(supplier) {
   currentSupplier = supplier;
   const form = document.getElementById("editSupplierForm");
-  form.elements["name"].value = supplier.company || "";
+  form.elements["name"].value = supplier.company || supplier.name || "";
   form.elements["contact"].value = supplier.contact || "";
   form.elements["email"].value = supplier.email || "";
   form.elements["lightningAddress"].value = supplier.lightningAddress || "";
@@ -1537,7 +1633,7 @@ document
 
     const updatedSupplier = {
       id: currentSupplier.id, // keep from currentSupplier or add hidden input if you prefer
-      name: form.elements["name"].value,
+      company: form.elements["name"].value,
       contact: form.elements["contact"].value,
       email: form.elements["email"].value,
       lightningAddress: form.elements["lightningAddress"].value,
@@ -1589,7 +1685,7 @@ function renderSuppliers(suppliers) {
   const tbody = document.querySelector("#suppliersTable tbody");
   tbody.innerHTML = "";
   suppliers.forEach((supplier) => {
-    const name = supplier.company || "";
+    const company = supplier.company || "";
     const contact = supplier.contact || "";
     const email = supplier.email || "";
     const lightningAddress = supplier.lightningAddress || "";
@@ -1601,7 +1697,7 @@ function renderSuppliers(suppliers) {
     const tr = document.createElement("tr");
     tr.setAttribute("data-supplier-id", supplier.id); // Add this for identification
     tr.innerHTML = `
-      <td>${name}</td>
+      <td>${company}</td>
       <td>${contact}</td>
       <td>${email}</td>
       <td>${lightningAddress}</td>
@@ -1622,7 +1718,7 @@ function renderSuppliers(suppliers) {
   suppliers.forEach((supplier) => {
     const option = document.createElement("option");
     option.value = supplier.id;
-    option.textContent = supplier.name || "Unnamed Supplier";
+    option.textContent = supplier.company || "Unnamed Supplier";
     select.appendChild(option);
   });
 
@@ -2250,7 +2346,6 @@ async function loadTransactions() {
 
     if (data.success) {
       transactions = data.transactions;
-      console.log("Loaded transactions:", transactions);
       renderTransactions(transactions);
     } else {
       console.warn("No transactions returned or success false");
@@ -2804,7 +2899,8 @@ async function populateSupplierSelect() {
       sortedSuppliers.forEach((supplier) => {
         const option = document.createElement("option");
         option.value = supplier.id;
-        option.textContent = supplier.name;
+        option.textContent =
+          supplier.company || supplier.name || "(Unnamed Supplier)";
         select.appendChild(option);
       });
     } else {
@@ -2844,7 +2940,7 @@ function closeRemoveSupplierModal() {
 async function submitAddSupplier(event) {
   event.preventDefault();
 
-  const name = document.getElementById("supplierName").value.trim();
+  const company = document.getElementById("supplierName").value.trim();
   const email = document.getElementById("supplierEmail").value.trim();
   const contact = document.getElementById("supplierContact").value.trim();
   const lightningAddress = document
@@ -2855,6 +2951,23 @@ async function submitAddSupplier(event) {
   // Add createdAt timestamp
   const createdAt = new Date().toISOString();
 
+  // Debug logging
+  console.log("Adding supplier with data:", {
+    company,
+    contact,
+    email,
+    lightningAddress,
+    note,
+    createdAt,
+  });
+
+  // Check if required fields are empty
+  if (!company || !contact || !email || !lightningAddress) {
+    console.log("Validation failed - missing required fields");
+    alert("Company name, contact, email, and lightning address are required.");
+    return;
+  }
+
   try {
     const response = await authFetch(`${API_BASE}/suppliers`, {
       method: "POST",
@@ -2862,7 +2975,7 @@ async function submitAddSupplier(event) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name,
+        company,
         contact,
         email,
         lightningAddress,
@@ -3160,9 +3273,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (token) {
     try {
       // Fetch user profile from backend
-      const response = await fetch(`${API_BASE}/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authFetch(`${API_BASE}/me`);
       const data = await response.json();
       if (data.success) {
         currentUser = data.user;
@@ -3329,32 +3440,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      await fetch(`${API_BASE}/departments`, {
+      await authFetch(`${API_BASE}/departments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ department: dep }),
-      });
-
-      await loadDepartments();
-    }
-  };
-
-  document.getElementById("removeDepartmentBtn").onclick = async function () {
-    const dep = prompt("Enter department name to remove:");
-    if (dep) {
-      if (!token) {
-        alert("You must be logged in to remove a department.");
-        return;
-      }
-
-      await fetch(`${API_BASE}/departments`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ department: dep }),
       });
@@ -3403,11 +3492,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           return;
         }
 
-        const saveResponse = await fetch(`${API_BASE}/users`, {
+        const response = await authFetch(`${API_BASE}/users`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: "remove",
@@ -3415,9 +3503,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           }),
         });
 
-        const result = await saveResponse.json();
+        const result = await response.json();
 
-        if (!saveResponse.ok || !result.success) {
+        if (!response.ok || !result.success) {
           throw new Error(result.message || "Failed to remove member");
         }
 
@@ -3555,16 +3643,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       };
 
       try {
-        if (!token) {
-          alert("You must be logged in to submit a draft payment.");
-          return;
-        }
-
-        const response = await fetch(`${API_BASE}/drafts`, {
+        const response = await authFetch(`${API_BASE}/drafts`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(draftData),
         });
