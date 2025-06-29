@@ -10,24 +10,14 @@
     "id": "00303956d3b6afba911d26734c9f7c3e3ad3123055fad46e2d090181acd84922"
   },
   {
-    "name": "Jack",
-    "role": "Manager",
+    "name": "Jacob",
+    "role": "Employee",
     "department": "Engineering",
     "email": "joe@disrupt.com",
     "lightningAddress": "joe@blink.sv",
     "password": "1234",
     "dateAdded": "2025-05-28",
     "id": "de4575027563c86ca7a03f0cb6cd8a08418ccf44c1f29e2b14f2514c9cd123b9"
-  },
-  {
-    "name": "Stephen",
-    "role": "Employee",
-    "email": "tilcboy44@gmail.com",
-    "department": "Engineering",
-    "lightningAddress": "stephen@blink.sv",
-    "password": "4399",
-    "dateAdded": "2025-05-30",
-    "id": "8a05cdb4c4b27918c49eac9fc83a7199faa423400a6ab7b4eeba071786bae2b2"
   },
   {
     "name": "Emily",
@@ -38,26 +28,6 @@
     "password": "1234",
     "dateAdded": "2025-05-30",
     "id": "ef44822563fc8b45c73129c9559434b7b6089271bc744f036e678dc0496324d9"
-  },
-  {
-    "name": "Jasper",
-    "role": "Employee",
-    "email": "jasper@disrupt.com",
-    "department": "Research",
-    "lightningAddress": "ericscalibur@walletofsatoshi.com",
-    "password": "1234",
-    "dateAdded": "2025-06-07",
-    "id": "253beff153faa1714628c425657a9060edc8a3bd755c5f79e3c4ddf978a76933"
-  },
-  {
-    "name": "Jennifer",
-    "role": "Employee",
-    "email": "jenny@disrupt.com",
-    "department": "Developement",
-    "lightningAddress": "bingbong@bongbing.com",
-    "password": "1234",
-    "dateAdded": "2025-06-07",
-    "id": "2a73b5abd3a5996289a02af48b7cbcd5d47061c687e94c40c59a7296aefed6b0"
   },
   {
     "name": "Quentin",

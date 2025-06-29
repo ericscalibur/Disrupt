@@ -20,11 +20,12 @@
   {
     "id": "sup1749182344672",
     "company": "ChickenFeet",
-    "contact": "Earl",
+    "contact": "McKenzie",
     "email": "earl@chickenfeet.com",
     "lightningAddress": "earl@blink.sv",
     "note": "dont eat the chicken feet",
-    "createdAt": "2025-06-06T03:59:04.672Z"
+    "createdAt": "2025-06-06T03:59:04.672Z",
+    "name": "ChickenFeet"
   },
   {
     "id": "sup1749440017541",
@@ -35,5 +36,23 @@
     "note": "here's a note for you",
     "createdAt": "2025-06-09T03:33:37.541Z",
     "name": "420Shop"
+  },
+  {
+    "id": "sup1751145607785",
+    "company": "BearingsSupply",
+    "contact": "Berry",
+    "email": "berry@bearings.com",
+    "lightningAddress": "berry@blink.sv",
+    "note": "brrrrrr",
+    "createdAt": "2025-06-28T21:20:07.785Z"
+  },
+  {
+    "id": "sup1751151211636",
+    "company": "WallyBarberShop",
+    "contact": "Wally",
+    "email": "wally@barbershop.com",
+    "lightningAddress": "tenseframe21@walletofsatoshi.com",
+    "note": "coffee date",
+    "createdAt": "2025-06-28T22:53:31.636Z"
   }
 ]
