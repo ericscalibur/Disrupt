@@ -3930,7 +3930,12 @@ function parseCsv(csvData) {
 }
 
 function renderBatchTable(data) {
+    console.log("Rendering batch table with data:", data);
     const tbody = document.querySelector("#batchTable tbody");
+    if (!tbody) {
+        console.error("Could not find batch table body.");
+        return;
+    }
     tbody.innerHTML = "";
     data.forEach(row => {
         const tr = document.createElement("tr");
