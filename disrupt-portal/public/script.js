@@ -764,6 +764,9 @@ async function showContent(contentId, event) {
       case "welcome":
         // No data to load for welcome page
         break;
+      case "batch":
+        // No data to load for batch page initially
+        break;
       default:
         console.warn(`No data loader defined for contentId: ${contentId}`);
     }
