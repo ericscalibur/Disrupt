@@ -3977,11 +3977,6 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("An error occurred while sending the batch payment.");
         }
     });
-});
-        const cells = row.querySelectorAll("td");
-        const rowData = {
-            date: cells[0].innerText,
-            name: cells[1].innerText,
             amount: cells[2].innerText,
             lightningAddress: cells[3].innerText,
         };
