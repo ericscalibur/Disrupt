@@ -3942,14 +3942,19 @@ document.addEventListener("DOMContentLoaded", async () => {
             fileInput.onchange = (e) => {
                 const file = e.target.files[0];
                 if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const csvData = event.target.result;
-                        const parsedData = parseCsv(csvData);
-                        renderBatchTable(parsedData);
-                        document.getElementById("sendBatchBtn").style.display = "block";
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js';
+                    script.onload = () => {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            const csvData = event.target.result;
+                            const parsedData = parseCsv(csvData);
+                            renderBatchTable(parsedData);
+                            document.getElementById("sendBatchBtn").style.display = "block";
+                        };
+                        reader.readAsText(file);
                     };
-                    reader.readAsText(file);
+                    document.head.appendChild(script);
                 }
             };
             fileInput.click();
