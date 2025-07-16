@@ -3914,19 +3914,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function parseCsv(csvData) {
-    const lines = csvData.split(/\\r\\n|\\n/);
-    const headers = lines[0].split(',').map(header => header.trim());
-    const result = [];
-    for (let i = 1; i < lines.length; i++) {
-        const obj = {};
-        const currentline = lines[i].split(',');
-        for (let j = 0; j < headers.length; j++) {
-            obj[headers[j]] = currentline[j] ? currentline[j].trim() : '';
-        }
-        result.push(obj);
-    }
-    // filter out empty rows
-    return result.filter(obj => Object.values(obj).some(val => val !== ''));
+    const result = Papa.parse(csvData, {
+        header: true,
+        skipEmptyLines: true
+    });
+    return result.data;
 }
 
 function renderBatchTable(data) {
