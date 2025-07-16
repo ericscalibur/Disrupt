@@ -3914,7 +3914,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function parseCsv(csvData) {
-    const rows = csvData.split('\\n').filter(row => row.trim() !== '');
+    const rows = csvData.replace(/\\r/g, '').split('\\n').filter(row => row.trim() !== '');
     const headers = rows.shift().split(',').map(header => header.trim());
     const data = rows.map(row => {
         const values = row.split(',').map(value => value.trim());
