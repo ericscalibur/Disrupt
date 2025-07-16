@@ -3914,17 +3914,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function parseCsv(csvData) {
-    const rows = csvData.replace(/\\r/g, '').split('\\n').filter(row => row.trim() !== '');
-    const headers = rows.shift().split(',').map(header => header.trim());
-    const data = rows.map(row => {
-        const values = row.split(',').map(value => value.trim());
-        const entry = {};
-        headers.forEach((header, index) => {
-            entry[header] = values[index];
-        });
-        return entry;
-    });
-    return data;
+    const lines = csvData.split(/\\r\\n|\\n/);
+    const headers = lines[0].split(',').map(header => header.trim());
+    const result = [];
+    for (let i = 1; i < lines.length; i++) {
+        const obj = {};
+        const currentline = lines[i].split(',');
+        for (let j = 0; j < headers.length; j++) {
+            obj[headers[j]] = currentline[j] ? currentline[j].trim() : '';
+        }
+        result.push(obj);
+    }
+    // filter out empty rows
+    return result.filter(obj => Object.values(obj).some(val => val !== ''));
 }
 
 function renderBatchTable(data) {
