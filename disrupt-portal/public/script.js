@@ -3945,6 +3945,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const script = document.createElement('script');
                     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js';
                     script.onload = () => {
+                        console.log("Papaparse script loaded.");
                         const reader = new FileReader();
                         reader.onload = (event) => {
                             const csvData = event.target.result;
