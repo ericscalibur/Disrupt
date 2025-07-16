@@ -12,6 +12,17 @@ const lnurlPay = require("lnurl-pay");
 const authorizedRoles = ["Admin", "Manager"];
 const refreshTokensStore = new Set();
 const cookieParser = require("cookie-parser");
+const { helmet } = require("helmet");
+
+app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+    directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+        // Add other directives as needed
+    }
+}));
+
 app.use(cookieParser());
 app.use(express.json());
 require("dotenv").config();
