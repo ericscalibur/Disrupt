@@ -3172,6 +3172,50 @@ function isValidEmail(email) {
   return re.test(email);
 }
 
+function parseCsv(csvData) {
+    const result = Papa.parse(csvData, {
+        header: true,
+        skipEmptyLines: true
+    });
+    return result.data;
+}
+
+function renderBatchTable(data) {
+    console.log("Rendering batch table with data:", data);
+    const tbody = document.querySelector("#batchTable tbody");
+    if (!tbody) {
+        console.error("Could not find batch table body.");
+        return;
+    }
+    tbody.innerHTML = "";
+    data.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${row['Date'] || ''}</td>
+            <td>${row['Name'] || ''}</td>
+            <td>${row['Amount(sats)'] || ''}</td>
+            <td>${row['Lightning-Address'] || ''}</td>
+            <td>${row['Status'] || 'Pending'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function updateBatchTableStatus(statuses) {
+    const tableRows = document.querySelectorAll("#batchTable tbody tr");
+    tableRows.forEach((row, index) => {
+        const statusCell = row.querySelector("td:last-child");
+        if (statuses[index] && statuses[index].status) {
+            statusCell.innerText = statuses[index].status;
+            if (statuses[index].status === 'Success') {
+                statusCell.style.color = 'green';
+            } else {
+                statusCell.style.color = 'red';
+            }
+        }
+    });
+}
+
 /////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", async () => {
   const isLoggedIn = token && token.split(".").length === 3;
@@ -3911,38 +3955,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             fileInput.click();
         });
     }
-});
 
-function parseCsv(csvData) {
-    const result = Papa.parse(csvData, {
-        header: true,
-        skipEmptyLines: true
-    });
-    return result.data;
-}
-
-function renderBatchTable(data) {
-    console.log("Rendering batch table with data:", data);
-    const tbody = document.querySelector("#batchTable tbody");
-    if (!tbody) {
-        console.error("Could not find batch table body.");
-        return;
-    }
-    tbody.innerHTML = "";
-    data.forEach(row => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${row['Date'] || ''}</td>
-            <td>${row['Name'] || ''}</td>
-            <td>${row['Amount(sats)'] || ''}</td>
-            <td>${row['Lightning-Address'] || ''}</td>
-            <td>${row['Status'] || 'Pending'}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("sendBatchBtn").addEventListener("click", async () => {
         const tableRows = document.querySelectorAll("#batchTable tbody tr");
         const batchData = [];
@@ -3977,44 +3990,5 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("An error occurred while sending the batch payment.");
         }
     });
-            amount: cells[2].innerText,
-            lightningAddress: cells[3].innerText,
-        };
-        batchData.push(rowData);
-    });
 
-    try {
-        const response = await authFetch(`${API_BASE}/batch-payment`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ payments: batchData }),
-        });
-
-        const results = await response.json();
-        if (results.success) {
-            updateBatchTableStatus(results.paymentStatuses);
-        } else {
-            alert("Batch payment failed: " + results.message);
-        }
-    } catch (error) {
-        console.error("Error sending batch payment:", error);
-        alert("An error occurred while sending the batch payment.");
-    }
 });
-
-function updateBatchTableStatus(statuses) {
-    const tableRows = document.querySelectorAll("#batchTable tbody tr");
-    tableRows.forEach((row, index) => {
-        const statusCell = row.querySelector("td:last-child");
-        if (statuses[index] && statuses[index].status) {
-            statusCell.innerText = statuses[index].status;
-            if (statuses[index].status === 'Success') {
-                statusCell.style.color = 'green';
-            } else {
-                statusCell.style.color = 'red';
-            }
-        }
-    });
-}
