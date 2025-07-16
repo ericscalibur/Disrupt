@@ -3942,10 +3942,42 @@ function renderBatchTable(data) {
     });
 }
 
-document.getElementById("sendBatchBtn").addEventListener("click", async () => {
-    const tableRows = document.querySelectorAll("#batchTable tbody tr");
-    const batchData = [];
-    tableRows.forEach(row => {
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("sendBatchBtn").addEventListener("click", async () => {
+        const tableRows = document.querySelectorAll("#batchTable tbody tr");
+        const batchData = [];
+        tableRows.forEach(row => {
+            const cells = row.querySelectorAll("td");
+            const rowData = {
+                date: cells[0].innerText,
+                name: cells[1].innerText,
+                amount: cells[2].innerText,
+                lightningAddress: cells[3].innerText,
+            };
+            batchData.push(rowData);
+        });
+
+        try {
+            const response = await authFetch(`${API_BASE}/batch-payment`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ payments: batchData }),
+            });
+
+            const results = await response.json();
+            if (results.success) {
+                updateBatchTableStatus(results.paymentStatuses);
+            } else {
+                alert("Batch payment failed: " + results.message);
+            }
+        } catch (error) {
+            console.error("Error sending batch payment:", error);
+            alert("An error occurred while sending the batch payment.");
+        }
+    });
+});
         const cells = row.querySelectorAll("td");
         const rowData = {
             date: cells[0].innerText,
