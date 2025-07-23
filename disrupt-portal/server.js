@@ -12,6 +12,17 @@ const lnurlPay = require("lnurl-pay");
 const authorizedRoles = ["Admin", "Manager"];
 const refreshTokensStore = new Set();
 const cookieParser = require("cookie-parser");
+const { helmet } = require("helmet");
+
+app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+    directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+        // Add other directives as needed
+    }
+}));
+
 app.use(cookieParser());
 app.use(express.json());
 require("dotenv").config();
@@ -2088,6 +2099,71 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
       .status(500)
       .json({ success: false, message: "Failed to save transaction." });
   }
+});
+
+app.post("/api/batch-payment", authenticateToken, authorizeRoles("Admin", "Manager"), async (req, res) => {
+    const { payments } = req.body;
+    if (!payments || !Array.isArray(payments)) {
+        return res.status(400).json({ success: false, message: "Invalid batch payment data." });
+    }
+
+    const paymentStatuses = [];
+    const apiKey = BLINK_API_KEY;
+    let walletId;
+
+    try {
+        const wallets = await getBlinkWallets();
+        const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+        if (!btcWallet) {
+            return res.status(400).json({ success: false, message: "No BTC wallet found" });
+        }
+        walletId = btcWallet.id;
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Failed to fetch wallet information." });
+    }
+
+    for (const payment of payments) {
+        try {
+            const { lightningAddress, amount } = payment;
+            const query = `
+              mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
+                lnLightningAddressPaymentSend(input: $input) {
+                  status
+                  errors { message }
+                }
+              }
+            `;
+            const variables = {
+                input: {
+                    walletId: walletId,
+                    lnAddress: lightningAddress,
+                    amount: Number(amount),
+                },
+            };
+
+            const response = await axios.post(
+                "https://api.blink.sv/graphql",
+                { query, variables },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-API-KEY": apiKey,
+                    },
+                },
+            );
+
+            const result = response.data.data.lnLightningAddressPaymentSend;
+            if (result.errors && result.errors.length > 0) {
+                paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
+            } else {
+                paymentStatuses.push({ ...payment, status: "Success" });
+            }
+        } catch (error) {
+            paymentStatuses.push({ ...payment, status: "Failed", error: error.message });
+        }
+    }
+
+    res.json({ success: true, paymentStatuses });
 });
 
 app.post("/api/decode-invoice", authenticateToken, (req, res) => {

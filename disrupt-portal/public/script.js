@@ -700,6 +700,7 @@ async function showContent(contentId, event) {
     "settingsContent",
     "suppliersContent",
     "pendingContent",
+    "batchContent",
   ];
 
   // Hide all content sections
@@ -762,6 +763,9 @@ async function showContent(contentId, event) {
         break;
       case "welcome":
         // No data to load for welcome page
+        break;
+      case "batch":
+        // No data to load for batch page initially
         break;
       default:
         console.warn(`No data loader defined for contentId: ${contentId}`);
@@ -2579,6 +2583,15 @@ function updateNavigationForRole() {
     }
   }
 
+  const batchNav = document.getElementById("batchNav");
+  if (batchNav) {
+    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+      batchNav.style.display = "block";
+    } else {
+      batchNav.style.display = "none";
+    }
+  }
+
   const suppliersNav = document.getElementById("suppliersNav");
   if (!suppliersNav) return;
 
@@ -3160,6 +3173,50 @@ function isValidEmail(email) {
   // Basic email regex pattern
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
+}
+
+function parseCsv(csvData) {
+  const result = Papa.parse(csvData, {
+    header: true,
+    skipEmptyLines: true,
+  });
+  return result.data;
+}
+
+function renderBatchTable(data) {
+  console.log("Rendering batch table with data:", data);
+  const tbody = document.querySelector("#batchTable tbody");
+  if (!tbody) {
+    console.error("Could not find batch table body.");
+    return;
+  }
+  tbody.innerHTML = "";
+  data.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+            <td>${row["Date"] || ""}</td>
+            <td>${row["Name"] || ""}</td>
+            <td>${row["Amount(sats)"] || ""}</td>
+            <td>${row["Lightning-Address"] || ""}</td>
+            <td>${row["Status"] || "Pending"}</td>
+        `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateBatchTableStatus(statuses) {
+  const tableRows = document.querySelectorAll("#batchTable tbody tr");
+  tableRows.forEach((row, index) => {
+    const statusCell = row.querySelector("td:last-child");
+    if (statuses[index] && statuses[index].status) {
+      statusCell.innerText = statuses[index].status;
+      if (statuses[index].status === "Success") {
+        statusCell.style.color = "green";
+      } else {
+        statusCell.style.color = "red";
+      }
+    }
+  });
 }
 
 /////// DOM CONTENT LOADED LISTENER ///////
@@ -3877,4 +3934,72 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (toggleText) toggleText.textContent = "🌋 Normal";
     if (volcanoSwitch) volcanoSwitch.checked = true;
   }
+
+  // Batch payment CSV upload
+  const uploadCsvBtn = document.getElementById("uploadCsvBtn");
+  if (uploadCsvBtn) {
+    uploadCsvBtn.addEventListener("click", () => {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".csv";
+      fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const script = document.createElement("script");
+          script.src =
+            "https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js";
+          script.onload = () => {
+            console.log("Papaparse script loaded.");
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const csvData = event.target.result;
+              const parsedData = parseCsv(csvData);
+              renderBatchTable(parsedData);
+              document.getElementById("sendBatchBtn").style.display = "block";
+            };
+            reader.readAsText(file);
+          };
+          document.head.appendChild(script);
+        }
+      };
+      fileInput.click();
+    });
+  }
+
+  document
+    .getElementById("sendBatchBtn")
+    .addEventListener("click", async () => {
+      const tableRows = document.querySelectorAll("#batchTable tbody tr");
+      const batchData = [];
+      tableRows.forEach((row) => {
+        const cells = row.querySelectorAll("td");
+        const rowData = {
+          date: cells[0].innerText,
+          name: cells[1].innerText,
+          amount: cells[2].innerText,
+          lightningAddress: cells[3].innerText,
+        };
+        batchData.push(rowData);
+      });
+
+      try {
+        const response = await authFetch(`${API_BASE}/batch-payment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ payments: batchData }),
+        });
+
+        const results = await response.json();
+        if (results.success) {
+          updateBatchTableStatus(results.paymentStatuses);
+        } else {
+          alert("Batch payment failed: " + results.message);
+        }
+      } catch (error) {
+        console.error("Error sending batch payment:", error);
+        alert("An error occurred while sending the batch payment.");
+      }
+    });
 });
