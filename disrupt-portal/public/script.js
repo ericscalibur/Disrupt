@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3001/api";
+const API_BASE = "http://localhost:3000/api";
 let currentUser = null;
 let currentUserRole = null;
 let currentSupplier = null;
@@ -1886,7 +1886,7 @@ function populateRecipientDetails() {
   let recipient = null;
 
   if (recipientType === "employee") {
-    recipient = employeesList.find((e) => e.id === selectedId);
+    recipient = employeesList.find((e) => e.email === selectedId);
   } else if (recipientType === "supplier") {
     recipient = suppliersList.find((s) => s.id === selectedId);
   }
@@ -2022,6 +2022,21 @@ async function submitNewPayment(event) {
     return;
   }
 
+  // Check if tax withholding is applied (employee payments only)
+  const applyTaxWithholding = document.getElementById(
+    "applyTaxWithholding",
+  ).checked;
+  const isTaxWithholding = applyTaxWithholding && recipientType === "employee";
+
+  let netPaymentAmount = paymentAmount;
+  let taxWithholdingAmount = 0;
+
+  if (isTaxWithholding) {
+    // Calculate tax withholding (15% total)
+    taxWithholdingAmount = Math.floor(paymentAmount * 0.15);
+    netPaymentAmount = paymentAmount - taxWithholdingAmount;
+  }
+
   // Build payload
   const payload = {
     recipientType,
@@ -2030,8 +2045,15 @@ async function submitNewPayment(event) {
     company,
     email,
     lightningAddress,
-    paymentAmount,
+    paymentAmount: netPaymentAmount, // Send net amount to employee
     paymentNote,
+    taxWithholding: {
+      applied: isTaxWithholding,
+      originalAmount: paymentAmount,
+      taxAmount: taxWithholdingAmount,
+      netAmount: netPaymentAmount,
+      taxAddress: "tbhs@blink.sv",
+    },
   };
 
   try {
@@ -2046,7 +2068,13 @@ async function submitNewPayment(event) {
     const data = await response.json();
 
     if (data.success) {
-      alert("Payment sent!");
+      if (isTaxWithholding) {
+        alert(
+          `Payment sent!\nEmployee: ${netPaymentAmount} SATS\nTax Withholding: ${taxWithholdingAmount} SATS sent to tbhs@blink.sv`,
+        );
+      } else {
+        alert("Payment sent!");
+      }
       closeNewPaymentModal();
       await loadTransactions();
       await updateLightningBalance();
@@ -4003,3 +4031,96 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
 });
+
+// Tax Withholding Functions
+function toggleTaxWithholding() {
+  const checkbox = document.getElementById("applyTaxWithholding");
+  const taxSection = document.getElementById("taxDeductionSection");
+  const recipientType = document.getElementById("recipientType").value;
+
+  // Only show tax withholding for employees
+  if (checkbox.checked && recipientType === "employee") {
+    taxSection.style.display = "block";
+    calculateTaxWithholding();
+  } else {
+    taxSection.style.display = "none";
+    // Uncheck if not employee
+    if (recipientType !== "employee") {
+      checkbox.checked = false;
+    }
+  }
+}
+
+function calculateTaxWithholding() {
+  const amountInput = document.getElementById("paymentAmount");
+  const amount = parseFloat(amountInput.value) || 0;
+
+  // Calculate 5% for each deduction type
+  const insuranceDeduction = Math.floor(amount * 0.05);
+  const educationDeduction = Math.floor(amount * 0.05);
+  const administrationDeduction = Math.floor(amount * 0.05);
+
+  // Total deductions (15%)
+  const totalDeducted =
+    insuranceDeduction + educationDeduction + administrationDeduction;
+
+  // Net payment to employee (85%)
+  const netPayment = amount - totalDeducted;
+
+  // Update display
+  document.getElementById("insuranceAmount").textContent =
+    insuranceDeduction.toLocaleString();
+  document.getElementById("educationAmount").textContent =
+    educationDeduction.toLocaleString();
+  document.getElementById("administrationAmount").textContent =
+    administrationDeduction.toLocaleString();
+  document.getElementById("totalDeducted").textContent =
+    totalDeducted.toLocaleString();
+  document.getElementById("netPayment").textContent =
+    netPayment.toLocaleString();
+}
+
+// Update recipient type change handler
+function updateRecipientDropdown() {
+  const recipientType = document.getElementById("recipientType").value;
+  const recipientSelect = document.getElementById("recipientSelect");
+  const taxCheckbox = document.getElementById("applyTaxWithholding");
+  const taxSection = document.getElementById("taxDeductionSection");
+  const taxCheckboxContainer = document.getElementById(
+    "taxWithholdingCheckbox",
+  );
+
+  // Show/hide tax withholding checkbox based on recipient type
+  if (recipientType === "employee") {
+    taxCheckboxContainer.style.display = "block";
+  } else {
+    taxCheckboxContainer.style.display = "none";
+    taxCheckbox.checked = false;
+    taxSection.style.display = "none";
+  }
+
+  // Clear the recipient dropdown
+  recipientSelect.innerHTML = '<option value="">Select a recipient</option>';
+
+  if (recipientType === "employee") {
+    // Populate with employees
+    if (employeesList && employeesList.length > 0) {
+      employeesList.forEach((employee) => {
+        const option = document.createElement("option");
+        option.value = employee.email;
+        option.textContent = `${employee.name} (${employee.email})`;
+        recipientSelect.appendChild(option);
+      });
+    }
+  } else if (recipientType === "supplier") {
+    // Populate with suppliers
+    if (suppliersList && suppliersList.length > 0) {
+      suppliersList.forEach((supplier) => {
+        const option = document.createElement("option");
+        option.value = supplier.id;
+        option.textContent = supplier.company;
+        recipientSelect.appendChild(option);
+      });
+    }
+  }
+}

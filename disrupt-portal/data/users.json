@@ -40,16 +40,6 @@
     "id": "14418a27c66a4d4a581af429ca8d10a3c1559373c6337f656ba4f90f1f5d1cf6"
   },
   {
-    "name": "David McKee",
-    "role": "Employee",
-    "email": "dave@disrupt.com",
-    "department": "Accounting",
-    "lightningAddress": "david@company.com",
-    "password": "1234",
-    "dateAdded": "2025-06-11",
-    "id": "6261c42005e6254654292863271698ba9fc1fd51f8dcec4e5f08c2b310167abd"
-  },
-  {
     "name": "Big John",
     "role": "Employee",
     "department": "Accounting",
@@ -68,5 +58,15 @@
     "password": "1234",
     "dateAdded": "2025-06-12",
     "id": "29ec830af09bf9c45f04162524f0bec238c695b14d16444fc32b2d07a86b15d7"
+  },
+  {
+    "name": "Ronny",
+    "role": "Employee",
+    "department": "Engineering",
+    "lightningAddress": "ronny@blink.sv",
+    "email": "ronny@tbhs.sv",
+    "password": "1234",
+    "dateAdded": "2025-09-18",
+    "id": "89f3ee282edcc9fe98e2a35ee61ce27eee49629eb5aee5a0a56f178cb2f733d9"
   }
 ]
