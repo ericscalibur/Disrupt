@@ -118,10 +118,7 @@
                         id="batchNav"
                         onclick="showContent('batch', event)"
                     >
-                        <i
-                            class="fas fa-upload"
-                            style="color: steelblue"
-                        ></i
+                        <i class="fas fa-upload" style="color: steelblue"></i
                         >Batch
                     </div>
                     <div
@@ -415,7 +412,68 @@
                                         min="0.00000001"
                                         step="0.00000001"
                                         required
+                                        oninput="calculateTaxWithholding()"
                                     />
+                                </div>
+
+                                <div
+                                    class="form-group"
+                                    id="taxWithholdingCheckbox"
+                                    style="display: none"
+                                >
+                                    <div class="checkbox-container">
+                                        <input
+                                            type="checkbox"
+                                            id="applyTaxWithholding"
+                                            onchange="toggleTaxWithholding()"
+                                        />
+                                        <label for="applyTaxWithholding">
+                                            Apply Tax Withholding
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div
+                                    id="taxDeductionSection"
+                                    class="tax-deduction-section"
+                                    style="display: none"
+                                >
+                                    <div class="deduction-breakdown">
+                                        <h4>Tax Deductions (15% Total)</h4>
+                                        <div class="deduction-item">
+                                            <span>Insurance (5%):</span>
+                                            <span id="insuranceAmount">0</span>
+                                            SATS
+                                        </div>
+                                        <div class="deduction-item">
+                                            <span>Education (5%):</span>
+                                            <span id="educationAmount">0</span>
+                                            SATS
+                                        </div>
+                                        <div class="deduction-item">
+                                            <span>Administration (5%):</span>
+                                            <span id="administrationAmount"
+                                                >0</span
+                                            >
+                                            SATS
+                                        </div>
+                                        <div class="deduction-total">
+                                            <strong
+                                                >Total Deducted:
+                                                <span id="totalDeducted"
+                                                    >0</span
+                                                >
+                                                SATS</strong
+                                            >
+                                        </div>
+                                        <div class="net-payment">
+                                            <strong
+                                                >Net Payment to Employee:
+                                                <span id="netPayment">0</span>
+                                                SATS</strong
+                                            >
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="form-group">
@@ -630,8 +688,14 @@
                         style="display: none"
                     >
                         <h2>Batch Payment</h2>
-                        <button id="uploadCsvBtn" class="new-btn">+ Upload CSV</button>
-                        <table class="transactions-table" id="batchTable" style="margin-top: 20px;">
+                        <button id="uploadCsvBtn" class="new-btn">
+                            + Upload CSV
+                        </button>
+                        <table
+                            class="transactions-table"
+                            id="batchTable"
+                            style="margin-top: 20px"
+                        >
                             <thead>
                                 <tr>
                                     <th>Date</th>
@@ -645,7 +709,13 @@
                                 <!-- CSV data will be populated here -->
                             </tbody>
                         </table>
-                        <button id="sendBatchBtn" class="submit-btn" style="margin-top: 20px; display: none;">Send</button>
+                        <button
+                            id="sendBatchBtn"
+                            class="submit-btn"
+                            style="margin-top: 20px; display: none"
+                        >
+                            Send
+                        </button>
                     </div>
 
                     <div

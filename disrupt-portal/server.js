@@ -12,20 +12,41 @@ const lnurlPay = require("lnurl-pay");
 const authorizedRoles = ["Admin", "Manager"];
 const refreshTokensStore = new Set();
 const cookieParser = require("cookie-parser");
-const { helmet } = require("helmet");
+const helmet = require("helmet");
 
 app.use(helmet());
-app.use(helmet.contentSecurityPolicy({
+app.use(
+  helmet.contentSecurityPolicy({
     directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://cdnjs.cloudflare.com"],
-        // Add other directives as needed
-    }
-}));
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://cdnjs.cloudflare.com",
+      ],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://cdnjs.cloudflare.com",
+        "https://use.fontawesome.com",
+      ],
+      fontSrc: [
+        "'self'",
+        "https://cdnjs.cloudflare.com",
+        "https://use.fontawesome.com",
+      ],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      // Add other directives as needed
+    },
+  }),
+);
 
 app.use(cookieParser());
 app.use(express.json());
-require("dotenv").config();
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -60,7 +81,7 @@ const fetch = require("node-fetch");
 const BLINK_API_KEY = process.env.BLINK_API_KEY;
 
 // Path configuration
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
@@ -1701,6 +1722,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       lightningAddress,
       paymentAmount,
       paymentNote,
+      taxWithholding,
     } = req.body;
 
     // Validate required fields
@@ -1755,24 +1777,55 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       });
     }
 
-    // Resolve Lightning Address to invoice via LNURL-pay
-    let invoice;
+    // Handle tax withholding logic
+    const isTaxWithholding = taxWithholding && taxWithholding.applied;
+    let employeeInvoice, taxInvoice;
+    let employeeAmount = amount;
+    let taxAmount = 0;
+
+    if (isTaxWithholding) {
+      employeeAmount = taxWithholding.netAmount;
+      taxAmount = taxWithholding.taxAmount;
+    }
+
+    // Resolve Lightning Address to invoice for employee payment
     try {
       const lnurlResp = await lnurlPay.requestInvoice({
         lnUrlOrAddress: lightningAddress,
-        tokens: amount,
+        tokens: employeeAmount,
         comment: note,
       });
-      invoice = lnurlResp.invoice;
-      if (!invoice) {
+      employeeInvoice = lnurlResp.invoice;
+      if (!employeeInvoice) {
         throw new Error("Could not resolve invoice from Lightning Address.");
       }
     } catch (err) {
-      console.error("LNURL-pay error:", err);
+      console.error("LNURL-pay error for employee:", err);
       return res.status(500).json({
         success: false,
-        message: "Failed to resolve Lightning Address: " + err.message,
+        message: "Failed to resolve employee Lightning Address: " + err.message,
       });
+    }
+
+    // If tax withholding, resolve tax invoice
+    if (isTaxWithholding && taxAmount > 0) {
+      try {
+        const taxLnurlResp = await lnurlPay.requestInvoice({
+          lnUrlOrAddress: taxWithholding.taxAddress,
+          tokens: taxAmount,
+          comment: `Tax withholding for ${contact} - ${note}`,
+        });
+        taxInvoice = taxLnurlResp.invoice;
+        if (!taxInvoice) {
+          throw new Error("Could not resolve tax withholding invoice.");
+        }
+      } catch (err) {
+        console.error("LNURL-pay error for tax:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to resolve tax Lightning Address: " + err.message,
+        });
+      }
     }
 
     // Fetch BTC wallet ID from Blink
@@ -1812,19 +1865,19 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       });
     }
 
-    // Decode invoice to get payment_hash
-    let paymentHash = null;
+    // Decode employee invoice to get payment_hash
+    let employeePaymentHash = null;
     try {
-      const decodedInvoice = bolt11.decode(invoice);
-      paymentHash =
+      const decodedInvoice = bolt11.decode(employeeInvoice);
+      employeePaymentHash =
         decodedInvoice.tags.find((t) => t.tagName === "payment_hash")?.data ||
         null;
     } catch (err) {
-      console.warn("Failed to decode invoice:", err);
+      console.warn("Failed to decode employee invoice:", err);
     }
 
-    // Pay the invoice via Blink
-    let paymentResult;
+    // Pay the employee invoice via Blink
+    let employeePaymentResult;
     try {
       const mutation = `
         mutation payInvoice($input: LnInvoicePaymentInput!) {
@@ -1837,7 +1890,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       const variables = {
         input: {
           walletId,
-          paymentRequest: invoice,
+          paymentRequest: employeeInvoice,
         },
       };
       const payResp = await axios.post(
@@ -1855,17 +1908,70 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       if (result.errors && result.errors.length > 0) {
         return res.json({ success: false, message: result.errors[0].message });
       }
-      paymentResult = result;
+      employeePaymentResult = result;
     } catch (err) {
       let blinkError = "";
       if (err.response && err.response.data) {
         blinkError = JSON.stringify(err.response.data);
       }
-      console.error("Payment failed:", err);
+      console.error("Employee payment failed:", err);
       return res.status(500).json({
         success: false,
-        message: "Payment failed: " + err.message + " " + blinkError,
+        message: "Employee payment failed: " + err.message + " " + blinkError,
       });
+    }
+
+    // Handle tax payment if withholding is applied
+    let taxPaymentResult = null;
+    let taxPaymentHash = null;
+
+    if (isTaxWithholding && taxInvoice) {
+      try {
+        const decodedTaxInvoice = bolt11.decode(taxInvoice);
+        taxPaymentHash =
+          decodedTaxInvoice.tags.find((t) => t.tagName === "payment_hash")
+            ?.data || null;
+      } catch (err) {
+        console.warn("Failed to decode tax invoice:", err);
+      }
+
+      try {
+        const mutation = `
+          mutation payInvoice($input: LnInvoicePaymentInput!) {
+            lnInvoicePaymentSend(input: $input) {
+              status
+              errors { message }
+            }
+          }
+        `;
+        const variables = {
+          input: {
+            walletId,
+            paymentRequest: taxInvoice,
+          },
+        };
+        const taxPayResp = await axios.post(
+          "https://api.blink.sv/graphql",
+          { query: mutation, variables },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-KEY": BLINK_API_KEY,
+            },
+          },
+        );
+
+        const taxResult = taxPayResp.data.data.lnInvoicePaymentSend;
+        if (taxResult.errors && taxResult.errors.length > 0) {
+          console.error("Tax payment failed:", taxResult.errors[0].message);
+          // Continue with employee payment success even if tax fails
+        } else {
+          taxPaymentResult = taxResult;
+        }
+      } catch (err) {
+        console.error("Tax withholding payment failed:", err);
+        // Continue with employee payment success even if tax fails
+      }
     }
 
     // Read existing transactions
@@ -1883,9 +1989,9 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       }
     }
 
-    // Create new transaction record
-    const transaction = {
-      id: paymentHash || Date.now(),
+    // Create employee transaction record
+    const employeeTransaction = {
+      id: employeePaymentHash || Date.now(),
       date: new Date().toISOString(),
       type: "payment",
       recipientType,
@@ -1893,17 +1999,50 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       contact,
       company,
       lightningAddress,
-      invoice,
-      amount,
+      invoice: employeeInvoice,
+      amount: employeeAmount,
       currency: "SATS",
-      note,
+      note: isTaxWithholding ? `${note} (Net after tax withholding)` : note,
       direction: "SENT",
-      status: (paymentResult?.status || "SUCCESS").toUpperCase(),
-      paymentHash,
+      status: (employeePaymentResult?.status || "SUCCESS").toUpperCase(),
+      paymentHash: employeePaymentHash,
+      taxWithholding: isTaxWithholding
+        ? {
+            originalAmount: taxWithholding.originalAmount,
+            taxAmount: taxAmount,
+            netAmount: employeeAmount,
+          }
+        : null,
     };
 
+    // Create tax transaction record if applicable
+    let taxTransaction = null;
+    if (isTaxWithholding && taxPaymentResult) {
+      taxTransaction = {
+        id: taxPaymentHash || `tax_${Date.now()}`,
+        date: new Date().toISOString(),
+        type: "tax_withholding",
+        recipientType: "government",
+        recipientId: "tax_authority",
+        contact: "Tax Authority",
+        company: "Government",
+        lightningAddress: taxWithholding.taxAddress,
+        invoice: taxInvoice,
+        amount: taxAmount,
+        currency: "SATS",
+        note: `Tax withholding for ${contact} - ${note}`,
+        direction: "SENT",
+        status: (taxPaymentResult?.status || "SUCCESS").toUpperCase(),
+        paymentHash: taxPaymentHash,
+        relatedEmployeePayment: employeePaymentHash,
+      };
+    }
+
     // Save transactions
-    transactions.unshift(transaction);
+    transactions.unshift(employeeTransaction);
+    if (taxTransaction) {
+      transactions.unshift(taxTransaction);
+    }
     try {
       await fs.writeFile(
         TRANSACTIONS_FILE,
@@ -1918,7 +2057,22 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
     }
 
     // Respond success
-    return res.json({ success: true, transaction });
+    const response = {
+      success: true,
+      employeeTransaction,
+      taxTransaction: taxTransaction || null,
+      taxWithholding: isTaxWithholding
+        ? {
+            applied: true,
+            originalAmount: taxWithholding.originalAmount,
+            employeeAmount: employeeAmount,
+            taxAmount: taxAmount,
+            taxPaymentSuccess: !!taxPaymentResult,
+          }
+        : null,
+    };
+
+    return res.json(response);
   } catch (err) {
     console.error("Internal server error in /api/pay:", err);
     return res.status(500).json({
@@ -2101,10 +2255,16 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/batch-payment", authenticateToken, authorizeRoles("Admin", "Manager"), async (req, res) => {
+app.post(
+  "/api/batch-payment",
+  authenticateToken,
+  authorizeRoles("Admin", "Manager"),
+  async (req, res) => {
     const { payments } = req.body;
     if (!payments || !Array.isArray(payments)) {
-        return res.status(400).json({ success: false, message: "Invalid batch payment data." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid batch payment data." });
     }
 
     const paymentStatuses = [];
@@ -2112,20 +2272,25 @@ app.post("/api/batch-payment", authenticateToken, authorizeRoles("Admin", "Manag
     let walletId;
 
     try {
-        const wallets = await getBlinkWallets();
-        const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
-        if (!btcWallet) {
-            return res.status(400).json({ success: false, message: "No BTC wallet found" });
-        }
-        walletId = btcWallet.id;
+      const wallets = await getBlinkWallets();
+      const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+      if (!btcWallet) {
+        return res
+          .status(400)
+          .json({ success: false, message: "No BTC wallet found" });
+      }
+      walletId = btcWallet.id;
     } catch (error) {
-        return res.status(500).json({ success: false, message: "Failed to fetch wallet information." });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch wallet information.",
+      });
     }
 
     for (const payment of payments) {
-        try {
-            const { lightningAddress, amount } = payment;
-            const query = `
+      try {
+        const { lightningAddress, amount } = payment;
+        const query = `
               mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
                 lnLightningAddressPaymentSend(input: $input) {
                   status
@@ -2133,38 +2298,47 @@ app.post("/api/batch-payment", authenticateToken, authorizeRoles("Admin", "Manag
                 }
               }
             `;
-            const variables = {
-                input: {
-                    walletId: walletId,
-                    lnAddress: lightningAddress,
-                    amount: Number(amount),
-                },
-            };
+        const variables = {
+          input: {
+            walletId: walletId,
+            lnAddress: lightningAddress,
+            amount: Number(amount),
+          },
+        };
 
-            const response = await axios.post(
-                "https://api.blink.sv/graphql",
-                { query, variables },
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-API-KEY": apiKey,
-                    },
-                },
-            );
+        const response = await axios.post(
+          "https://api.blink.sv/graphql",
+          { query, variables },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-KEY": apiKey,
+            },
+          },
+        );
 
-            const result = response.data.data.lnLightningAddressPaymentSend;
-            if (result.errors && result.errors.length > 0) {
-                paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
-            } else {
-                paymentStatuses.push({ ...payment, status: "Success" });
-            }
-        } catch (error) {
-            paymentStatuses.push({ ...payment, status: "Failed", error: error.message });
+        const result = response.data.data.lnLightningAddressPaymentSend;
+        if (result.errors && result.errors.length > 0) {
+          paymentStatuses.push({
+            ...payment,
+            status: "Failed",
+            error: result.errors[0].message,
+          });
+        } else {
+          paymentStatuses.push({ ...payment, status: "Success" });
         }
+      } catch (error) {
+        paymentStatuses.push({
+          ...payment,
+          status: "Failed",
+          error: error.message,
+        });
+      }
     }
 
     res.json({ success: true, paymentStatuses });
-});
+  },
+);
 
 app.post("/api/decode-invoice", authenticateToken, (req, res) => {
   const { invoice } = req.body;
