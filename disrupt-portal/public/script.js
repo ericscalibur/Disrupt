@@ -3243,7 +3243,11 @@ function parseCsv(csvData) {
 
     const data = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(",").map((value) => value.trim());
+      // Handle quoted CSV fields and trim whitespace
+      const values = lines[i].split(",").map((value) => {
+        // Remove quotes if present and trim whitespace
+        return value.replace(/^["']|["']$/g, "").trim();
+      });
       if (values.length === headers.length) {
         const row = {};
         headers.forEach((header, index) => {
@@ -4297,10 +4301,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       tableRows.forEach((row) => {
         const cells = row.querySelectorAll("td");
         const rowData = {
-          date: cells[0].innerText,
-          name: cells[1].innerText,
-          amount: cells[2].innerText,
-          lightningAddress: cells[3].innerText,
+          date: cells[0].innerText.trim(),
+          name: cells[1].innerText.trim(),
+          amount: cells[2].innerText.trim(),
+          lightningAddress: cells[3].innerText.trim(),
         };
         batchData.push(rowData);
       });

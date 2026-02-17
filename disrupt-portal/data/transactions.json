@@ -1,5 +1,23 @@
 [
   {
+    "id": "b1f171eb6b47e1bf1419f2a812535aae30398cdd1673c8acdc984ce05301a138",
+    "date": "2026-02-17T06:23:37.264Z",
+    "type": "payment",
+    "recipientType": "employee",
+    "recipientId": "charlie@disrupt.com",
+    "contact": "Charlie (charlie@disrupt.com)",
+    "company": "disrupt",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc500n1p5egztgpp5k8chr6mtglsm79qe725py5664ccrnrxazeeu3txunpxwq5cp5yuqhp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp54uta3ln4udphgasxj7hz7umhu4wvt8gra5ugnre3xh4k09xchx5s9qxpqysgqvhs8r4v3ls62v9kur66rkn0frjwxh848dlce9s2g2mdjj2tmwejrsg5tf6la6tgw7ku9s7030p5arejr4jg8adyft62jzqn7feslfsgq7f6mf0",
+    "amount": 50,
+    "currency": "SATS",
+    "note": "",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "b1f171eb6b47e1bf1419f2a812535aae30398cdd1673c8acdc984ce05301a138",
+    "taxWithholding": null
+  },
+  {
     "id": "16bd9118f627220d03d03a3e401d4d054a53e24e8dd819a172465f3e410c6ceb",
     "date": "2026-02-17T01:06:10.064Z",
     "type": "lightning",

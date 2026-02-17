@@ -2287,6 +2287,8 @@ app.post(
   authorizeRoles("Admin", "Manager"),
   async (req, res) => {
     const { payments } = req.body;
+    console.log("Batch payment request received with payments:", payments);
+
     if (!payments || !Array.isArray(payments)) {
       return res
         .status(400)
@@ -2295,18 +2297,23 @@ app.post(
 
     const paymentStatuses = [];
     const apiKey = BLINK_API_KEY;
+    console.log("Using API key:", apiKey ? "Present" : "MISSING");
     let walletId;
 
     try {
       const wallets = await getBlinkWallets();
+      console.log("Retrieved wallets:", wallets);
       const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
       if (!btcWallet) {
+        console.log("No BTC wallet found in wallets:", wallets);
         return res
           .status(400)
           .json({ success: false, message: "No BTC wallet found" });
       }
       walletId = btcWallet.id;
+      console.log("Using wallet ID:", walletId);
     } catch (error) {
+      console.error("Failed to fetch wallet information:", error);
       return res.status(500).json({
         success: false,
         message: "Failed to fetch wallet information.",
@@ -2314,27 +2321,58 @@ app.post(
     }
 
     for (const payment of payments) {
+      console.log("Processing payment:", payment);
       try {
         const { lightningAddress, amount } = payment;
-        const query = `
-              mutation lnLightningAddressPaymentSend($input: LnLightningAddressPaymentInput!) {
-                lnLightningAddressPaymentSend(input: $input) {
-                  status
-                  errors { message }
-                }
-              }
-            `;
+        console.log(`Sending ${amount} sats to ${lightningAddress}`);
+
+        // Step 1: Convert Lightning address to invoice using LNURL-pay
+        let invoice;
+        try {
+          const lnurlResp = await lnurlPay.requestInvoice({
+            lnUrlOrAddress: lightningAddress,
+            tokens: Number(amount),
+            comment: payment.note || "",
+          });
+          invoice = lnurlResp.invoice;
+          if (!invoice) {
+            throw new Error(
+              "Could not resolve invoice from Lightning Address.",
+            );
+          }
+          console.log("Resolved invoice for", lightningAddress);
+        } catch (err) {
+          console.error("LNURL-pay error:", err);
+          paymentStatuses.push({
+            ...payment,
+            status: "Failed",
+            error: "Failed to resolve Lightning Address: " + err.message,
+          });
+          continue;
+        }
+
+        // Step 2: Pay the invoice using lnInvoicePaymentSend
+        const mutation = `
+          mutation payInvoice($input: LnInvoicePaymentInput!) {
+            lnInvoicePaymentSend(input: $input) {
+              status
+              errors { message }
+            }
+          }
+        `;
+
         const variables = {
           input: {
             walletId: walletId,
-            lnAddress: lightningAddress,
-            amount: Number(amount),
+            paymentRequest: invoice,
           },
         };
 
+        console.log("Paying invoice for", lightningAddress);
+
         const response = await axios.post(
           "https://api.blink.sv/graphql",
-          { query, variables },
+          { query: mutation, variables },
           {
             headers: {
               "Content-Type": "application/json",
@@ -2343,17 +2381,22 @@ app.post(
           },
         );
 
-        const result = response.data.data.lnLightningAddressPaymentSend;
+        const result = response.data.data.lnInvoicePaymentSend;
+        console.log("Payment result:", JSON.stringify(result, null, 2));
+
         if (result.errors && result.errors.length > 0) {
+          console.log("Payment failed with errors:", result.errors);
           paymentStatuses.push({
             ...payment,
             status: "Failed",
             error: result.errors[0].message,
           });
         } else {
+          console.log("Payment succeeded");
           paymentStatuses.push({ ...payment, status: "Success" });
         }
       } catch (error) {
+        console.error("Error processing payment:", error.message);
         paymentStatuses.push({
           ...payment,
           status: "Failed",
@@ -2362,6 +2405,7 @@ app.post(
       }
     }
 
+    console.log("Final payment statuses:", paymentStatuses);
     res.json({ success: true, paymentStatuses });
   },
 );
