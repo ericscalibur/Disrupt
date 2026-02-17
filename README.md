@@ -42,7 +42,7 @@ REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here
 # Blink API Configuration
 BLINK_API_KEY=your-blink-api-key-here
 
-# Tax Lightning Address (El Salvador)
+# Tax Lightning Address
 TAX_LIGHTNING_ADDRESS=example@blink.sv
 
 # Email Configuration (Optional - for password reset)
