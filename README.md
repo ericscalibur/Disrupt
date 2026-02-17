@@ -77,23 +77,16 @@ Copy the generated strings and replace the placeholders in your `.env` file.
 3. Generate an API key
 4. Add the API key to your `.env` file as `BLINK_API_KEY`
 
-### Step 6: Start the Server
+### Step 6: Start the Local Server
 
 ```bash
 npm start
 ```
 
-The application will be available at **http://localhost:3000**
+**🚀 The server will start and the application will be available at:**
+**http://localhost:3000**
 
-## 👤 Default Login Accounts
-
-The system comes with pre-configured test accounts:
-
-| Role | Email | Password | Department |
-|------|-------|----------|------------|
-| **Admin** | ericscalibur@disrupt.com | 9555 | Executive |
-| **Manager** | quentin@disrupt.com | 1234 | Accounting |
-| **Employee** | joe@disrupt.com | 1234 | Engineering |
+Open your web browser and navigate to `http://localhost:3000` to access the Disrupt Portal interface.
 
 ## 🇸🇻 El Salvador Tax Withholding
 

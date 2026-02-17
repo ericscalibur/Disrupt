@@ -207,18 +207,6 @@ Whether you're a 5-person startup or a 500-employee company, Disrupt Portal grow
 
 ---
 
-## 🌟 **What Users Say**
-
-*"Finally, a business management system that understands Bitcoin. The tax compliance features alone save us hours every payroll cycle."* - **Tech Startup CEO**
-
-*"Lightning payments transformed our international supplier relationships. What used to take days now happens instantly."* - **Import/Export Company**
-
-*"Having our own private instance means our financial data never touches another company's servers. That's the sovereignty we need for our Bitcoin business."* - **Digital-First Company Owner**
-
-*"We run separate instances for our three divisions. Complete data isolation with zero interference - exactly what enterprise security requires."* - **Multi-Division Corporation**
-
----
-
 ## 📞 **Ready to Transform Your Business?**
 
 ### 🎯 **Perfect For:**
