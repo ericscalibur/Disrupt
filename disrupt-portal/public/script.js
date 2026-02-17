@@ -27,6 +27,7 @@ const authorizedRoles = ["Admin", "Manager"];
 let token = sessionStorage.getItem("token");
 let editTeamMemberModal;
 let inputsContainer;
+let batchPaymentData = []; // store batch payment data for editing
 
 // Token refresh state management
 let isRefreshing = false;
@@ -397,7 +398,7 @@ function resetUIAfterLogout() {
 
   const toggleText = document.getElementById("volcanoToggleText");
   const volcanoSwitch = document.getElementById("volcanoSwitch");
-  if (toggleText) toggleText.textContent = "🌋 Volcano";
+  if (toggleText) toggleText.textContent = "⛰️ Volcano";
   if (volcanoSwitch) volcanoSwitch.checked = false;
 }
 
@@ -564,7 +565,11 @@ async function loadAccountingPage() {
       return;
     }
 
-    if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+    if (
+      currentUser.role === "Admin" ||
+      currentUser.role === "Manager" ||
+      currentUser.role === "Bookkeeper"
+    ) {
       // Show transactions, hide drafts
       transactionsTable.style.display = "";
       transactionsTitle.style.display = "";
@@ -1345,8 +1350,13 @@ async function loadDepartments() {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+
       if (response.status === 401) {
         throw new Error("Unauthorized access. Please log in again.");
+      }
+      if (response.status === 403) {
+        throw new Error("Access denied: insufficient permissions");
       }
       throw new Error(
         `Failed to fetch departments. Status: ${response.status}`,
@@ -2720,6 +2730,7 @@ async function addTeamMember() {
       email: document.getElementById("memberEmail").value.trim(),
       department: document.getElementById("memberDepartment").value.trim(),
       lightningAddress: document.getElementById("memberLightning").value.trim(),
+      password: document.getElementById("memberPassword").value.trim(),
     };
 
     // Validation
@@ -2728,7 +2739,8 @@ async function addTeamMember() {
       !newMember.role ||
       !newMember.email ||
       !newMember.department ||
-      !newMember.lightningAddress
+      !newMember.lightningAddress ||
+      !newMember.password
     ) {
       throw new Error("Please fill in all required fields");
     }
@@ -2761,6 +2773,7 @@ async function addTeamMember() {
     document.getElementById("successMessage").textContent =
       `${newMember.name} added successfully!`;
     document.getElementById("addMemberModal").style.display = "none";
+    resetAddMemberModal();
     document.getElementById("successModal").style.display = "flex";
 
     await loadTeamMembers();
@@ -2783,6 +2796,15 @@ async function addTeamMember() {
     btn.disabled = false;
     btn.textContent = originalText;
   }
+}
+
+function resetAddMemberModal() {
+  document.getElementById("memberName").value = "";
+  document.getElementById("memberRole").value = "";
+  document.getElementById("memberEmail").value = "";
+  document.getElementById("memberDepartment").value = "";
+  document.getElementById("memberLightning").value = "";
+  document.getElementById("memberPassword").value = "1234";
 }
 
 async function removeTeamMember() {
@@ -3162,7 +3184,7 @@ function toggleVolcanoMode() {
     body.classList.remove("volcano-mode");
     if (dashboard) dashboard.classList.remove("volcano-mode");
     localStorage.removeItem("volcanoMode");
-    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (toggleText) toggleText.textContent = "⛰️ Volcano";
     if (volcanoSwitch) volcanoSwitch.checked = false;
     return;
   }
@@ -3173,7 +3195,7 @@ function toggleVolcanoMode() {
     if (volcanoSwitch) volcanoSwitch.checked = true;
     localStorage.setItem("volcanoMode", "on");
   } else {
-    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (toggleText) toggleText.textContent = "⛰️ Volcano";
     if (volcanoSwitch) volcanoSwitch.checked = false;
     localStorage.setItem("volcanoMode", "off");
   }
@@ -3195,7 +3217,7 @@ function setVolcanoMode(isVolcano) {
   } else {
     body.classList.remove("volcano-mode");
     if (dashboard) dashboard.classList.remove("volcano-mode");
-    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (toggleText) toggleText.textContent = "⛰️ Volcano";
     if (volcanoSwitch) volcanoSwitch.checked = false;
     localStorage.setItem("volcanoMode", "off");
   }
@@ -3208,23 +3230,73 @@ function isValidEmail(email) {
 }
 
 function parseCsv(csvData) {
-  const result = Papa.parse(csvData, {
-    header: true,
-    skipEmptyLines: true,
-  });
-  return result.data;
+  console.log("Parsing CSV data...");
+  try {
+    const lines = csvData.split("\n").filter((line) => line.trim() !== "");
+    if (lines.length < 2) {
+      console.error("CSV must have at least a header and one data row");
+      return [];
+    }
+
+    const headers = lines[0].split(",").map((header) => header.trim());
+    console.log("CSV headers:", headers);
+
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(",").map((value) => value.trim());
+      if (values.length === headers.length) {
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index];
+        });
+        data.push(row);
+      }
+    }
+
+    console.log("Parsed data length:", data.length);
+    console.log("Sample parsed row:", data[0]);
+    return data;
+  } catch (error) {
+    console.error("Error in parseCsv:", error);
+    return [];
+  }
 }
 
 function renderBatchTable(data) {
   console.log("Rendering batch table with data:", data);
+  console.log("Data length:", data.length);
+
+  // Store the data globally for editing
+  batchPaymentData = data;
+
   const tbody = document.querySelector("#batchTable tbody");
   if (!tbody) {
     console.error("Could not find batch table body.");
     return;
   }
+
+  console.log("Found tbody element");
   tbody.innerHTML = "";
-  data.forEach((row) => {
+
+  if (!data || data.length === 0) {
+    console.warn("No data to render in batch table");
+    // Hide Clear and Send buttons when no data
+    const clearBtn = document.getElementById("clearBatchBtn");
+    const sendBtn = document.getElementById("sendBatchBtn");
+    if (clearBtn) clearBtn.style.display = "none";
+    if (sendBtn) sendBtn.style.display = "none";
+    return;
+  }
+
+  data.forEach((row, index) => {
+    console.log(`Processing row ${index}:`, row);
+    console.log("Row keys:", Object.keys(row));
+
     const tr = document.createElement("tr");
+    tr.style.cursor = "pointer";
+    tr.style.transition = "all 0.15s ease";
+    tr.setAttribute("data-row-index", index);
+    tr.title = "Click to edit this payment";
     tr.innerHTML = `
             <td>${row["Date"] || ""}</td>
             <td>${row["Name"] || ""}</td>
@@ -3232,8 +3304,185 @@ function renderBatchTable(data) {
             <td>${row["Lightning-Address"] || ""}</td>
             <td>${row["Status"] || "Pending"}</td>
         `;
+
+    // Add click event listener to open edit modal
+    tr.addEventListener("click", (event) => {
+      // Add visual feedback
+      tr.style.transform = "scale(0.98)";
+      setTimeout(() => {
+        tr.style.transform = "scale(1)";
+      }, 150);
+
+      openBatchEditModal(index);
+    });
+
     tbody.appendChild(tr);
   });
+
+  // Show Clear and Send buttons when there's data
+  const clearBtn = document.getElementById("clearBatchBtn");
+  const sendBtn = document.getElementById("sendBatchBtn");
+  if (data.length > 0) {
+    if (clearBtn) clearBtn.style.display = "block";
+    if (sendBtn) sendBtn.style.display = "block";
+  }
+
+  console.log("Finished rendering batch table");
+}
+
+// Function to open the batch edit modal
+function openBatchEditModal(rowIndex) {
+  const modal = document.getElementById("batchEditModal");
+  const row = batchPaymentData[rowIndex];
+
+  if (!row) {
+    console.error("No data found for row index:", rowIndex);
+    return;
+  }
+
+  // Update modal title to show which row is being edited
+  const modalTitle = modal.querySelector(".modal-title");
+  modalTitle.textContent = `Edit Payment - ${row["Name"] || "Row " + (rowIndex + 1)}`;
+
+  // Populate form fields with current row data
+  document.getElementById("batchEditDate").value = row["Date"] || "";
+  document.getElementById("batchEditName").value = row["Name"] || "";
+  document.getElementById("batchEditAmount").value = row["Amount(sats)"] || "";
+  document.getElementById("batchEditLightningAddress").value =
+    row["Lightning-Address"] || "";
+
+  // Store the row index for later use
+  modal.setAttribute("data-editing-row", rowIndex);
+
+  modal.style.display = "flex";
+}
+
+// Function to close the batch edit modal (global scope for HTML onclick)
+window.closeBatchEditModal = function closeBatchEditModal() {
+  const modal = document.getElementById("batchEditModal");
+  modal.style.display = "none";
+
+  // Clear form
+  document.getElementById("batchEditForm").reset();
+
+  // Reset modal title
+  const modalTitle = modal.querySelector(".modal-title");
+  if (modalTitle) {
+    modalTitle.textContent = "Edit Batch Payment";
+  }
+};
+
+// Function to handle batch edit form submission
+function handleBatchEditSubmit(event) {
+  event.preventDefault();
+
+  const modal = document.getElementById("batchEditModal");
+  const rowIndex = parseInt(modal.getAttribute("data-editing-row"));
+
+  if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= batchPaymentData.length) {
+    console.error("Invalid row index:", rowIndex);
+    alert("Error: Invalid payment row selected");
+    return;
+  }
+
+  // Get form data
+  const formData = new FormData(event.target);
+  const date = formData.get("date");
+  const name = formData.get("name").trim();
+  const amount = formData.get("amount");
+  const lightningAddress = formData.get("lightningAddress").trim();
+
+  // Validation
+  if (!date || !name || !amount || !lightningAddress) {
+    alert("Error: All fields are required");
+    return;
+  }
+
+  if (isNaN(amount) || parseInt(amount) <= 0) {
+    alert("Error: Amount must be a positive number");
+    return;
+  }
+
+  // Basic Lightning address validation
+  if (!isValidEmail(lightningAddress)) {
+    alert("Error: Please enter a valid Lightning address");
+    return;
+  }
+
+  const updatedData = {
+    Date: date,
+    Name: name,
+    "Amount(sats)": amount,
+    "Lightning-Address": lightningAddress,
+    Status: batchPaymentData[rowIndex]["Status"] || "Pending",
+  };
+
+  // Update the data array
+  batchPaymentData[rowIndex] = updatedData;
+
+  // Re-render the table with updated data
+  renderBatchTable(batchPaymentData);
+
+  // Close modal
+  closeBatchEditModal();
+
+  console.log("Updated batch payment row:", rowIndex, updatedData);
+
+  // Show success feedback
+  const originalRow = document.querySelector(
+    `#batchTable tbody tr[data-row-index="${rowIndex}"]`,
+  );
+  if (originalRow) {
+    originalRow.style.backgroundColor = "#d4edda";
+    setTimeout(() => {
+      originalRow.style.backgroundColor = "";
+    }, 2000);
+  }
+}
+
+// Function to clear the batch table
+function clearBatchTable() {
+  const tbody = document.querySelector("#batchTable tbody");
+  const rows = tbody ? tbody.querySelectorAll("tr") : [];
+
+  if (rows.length > 0) {
+    // Add fade out animation to rows
+    rows.forEach((row, index) => {
+      setTimeout(() => {
+        row.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+        row.style.opacity = "0";
+        row.style.transform = "translateX(-20px)";
+      }, index * 50);
+    });
+
+    // Clear the table after animation completes
+    setTimeout(
+      () => {
+        if (tbody) {
+          tbody.innerHTML = "";
+        }
+
+        // Clear the stored data
+        batchPaymentData = [];
+
+        // Hide Clear and Send buttons
+        const clearBtn = document.getElementById("clearBatchBtn");
+        const sendBtn = document.getElementById("sendBatchBtn");
+        if (clearBtn) clearBtn.style.display = "none";
+        if (sendBtn) sendBtn.style.display = "none";
+
+        console.log("Batch table cleared");
+      },
+      rows.length * 50 + 300,
+    );
+  } else {
+    // No rows to animate, just clear immediately
+    batchPaymentData = [];
+    const clearBtn = document.getElementById("clearBatchBtn");
+    const sendBtn = document.getElementById("sendBatchBtn");
+    if (clearBtn) clearBtn.style.display = "none";
+    if (sendBtn) sendBtn.style.display = "none";
+  }
 }
 
 function updateBatchTableStatus(statuses) {
@@ -3314,7 +3563,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       const response = await authFetch(
-        `http://localhost:3001/api/team-members/${updatedMember.id}`,
+        `${API_BASE}/team-members/${updatedMember.id}`,
         {
           method: "PUT",
           headers: {
@@ -3385,7 +3634,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     body.classList.remove("volcano-mode");
     if (dashboard) dashboard.classList.remove("volcano-mode");
-    if (toggleText) toggleText.textContent = "🌋 Volcano";
+    if (toggleText) toggleText.textContent = "⛰️ Volcano";
     if (volcanoSwitch) volcanoSwitch.checked = false;
   }
 
@@ -3545,6 +3794,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const addMemberBtn = document.getElementById("addMemberBtn");
   if (addMemberBtn) {
     addMemberBtn.addEventListener("click", async () => {
+      // Reset the form
+      resetAddMemberModal();
+
       // Show the modal
       document.getElementById("addMemberModal").style.display = "flex";
 
@@ -3770,6 +4022,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (closeMemberModalBtn) {
     closeMemberModalBtn.addEventListener("click", () => {
       document.getElementById("addMemberModal").style.display = "none";
+      resetAddMemberModal();
     });
   }
 
@@ -3784,6 +4037,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("click", (event) => {
     if (event.target === document.getElementById("addMemberModal")) {
       document.getElementById("addMemberModal").style.display = "none";
+      resetAddMemberModal();
     }
     if (event.target === document.getElementById("successModal")) {
       document.getElementById("successModal").style.display = "none";
@@ -3967,31 +4221,68 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (volcanoSwitch) volcanoSwitch.checked = true;
   }
 
+  // Batch edit modal event listeners
+  const batchEditModal = document.getElementById("batchEditModal");
+  const closeBatchEditModalBtn = document.getElementById("closeBatchEditModal");
+  const batchEditForm = document.getElementById("batchEditForm");
+
+  if (closeBatchEditModalBtn) {
+    closeBatchEditModalBtn.addEventListener("click", closeBatchEditModal);
+  }
+
+  if (batchEditForm) {
+    batchEditForm.addEventListener("submit", handleBatchEditSubmit);
+  }
+
+  // Close modal when clicking outside of it
+  if (batchEditModal) {
+    batchEditModal.addEventListener("click", (event) => {
+      if (event.target === batchEditModal) {
+        closeBatchEditModal();
+      }
+    });
+  }
+
+  // Clear batch table button
+  const clearBatchBtn = document.getElementById("clearBatchBtn");
+  if (clearBatchBtn) {
+    clearBatchBtn.addEventListener("click", () => {
+      if (confirm("Are you sure you want to clear all batch payment data?")) {
+        clearBatchTable();
+      }
+    });
+  }
+
   // Batch payment CSV upload
   const uploadCsvBtn = document.getElementById("uploadCsvBtn");
   if (uploadCsvBtn) {
     uploadCsvBtn.addEventListener("click", () => {
+      console.log("CSV upload button clicked");
       const fileInput = document.createElement("input");
       fileInput.type = "file";
       fileInput.accept = ".csv";
       fileInput.onchange = (e) => {
+        console.log("File selected:", e.target.files[0]);
         const file = e.target.files[0];
         if (file) {
-          const script = document.createElement("script");
-          script.src =
-            "https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js";
-          script.onload = () => {
-            console.log("Papaparse script loaded.");
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              const csvData = event.target.result;
-              const parsedData = parseCsv(csvData);
-              renderBatchTable(parsedData);
-              document.getElementById("sendBatchBtn").style.display = "block";
-            };
-            reader.readAsText(file);
+          console.log("File name:", file.name, "Size:", file.size);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            console.log(
+              "File read successfully, length:",
+              event.target.result.length,
+            );
+            const csvData = event.target.result;
+            console.log("CSV Data preview:", csvData.substring(0, 200));
+            const parsedData = parseCsv(csvData);
+            console.log("Parsed data:", parsedData);
+            renderBatchTable(parsedData);
           };
-          document.head.appendChild(script);
+          reader.onerror = () => {
+            console.error("Error reading file");
+            alert("Error reading file. Please try again.");
+          };
+          reader.readAsText(file);
         }
       };
       fileInput.click();

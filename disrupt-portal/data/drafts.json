@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "mlpwgur0fpexxe4s8nf",
+    "title": "Super unique title",
+    "recipientEmail": "jacob@420shop.com",
+    "company": "420Shop",
+    "contact": "Jacob",
+    "recipientLightningAddress": "ericscalibur@walletofsatoshi.com",
+    "amount": 300,
+    "note": "hello",
+    "createdBy": "charlie@disrupt.com",
+    "department": "Accounting",
+    "dateCreated": "2026-02-17T01:03:47.628Z",
+    "status": "approved",
+    "approvedAt": "2026-02-17T01:06:10.060Z",
+    "approvedBy": "ericscalibur@disrupt.com"
+  }
+]

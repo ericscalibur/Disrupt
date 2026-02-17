@@ -151,7 +151,7 @@
                         🚪 Logout
                     </div>
                     <div class="nav-item" id="volcanoToggle">
-                        <span id="volcanoToggleText">🌋 Volcano</span>
+                        <span id="volcanoToggleText">⛰️ Volcano</span>
                         <label class="switch">
                             <input type="checkbox" id="volcanoSwitch" />
                             <span class="slider round"></span>
@@ -713,10 +713,38 @@
                         class="content-card"
                         style="display: none"
                     >
-                        <h2>Batch Payment</h2>
-                        <button id="uploadCsvBtn" class="new-btn">
-                            + Upload CSV
-                        </button>
+                        <div
+                            style="
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                margin-bottom: 20px;
+                            "
+                        >
+                            <h2>Batch Payment</h2>
+                            <div
+                                id="batchBtnRow"
+                                style="display: flex; gap: 10px"
+                            >
+                                <button id="uploadCsvBtn" class="new-btn">
+                                    + Upload CSV
+                                </button>
+                                <button
+                                    id="clearBatchBtn"
+                                    class="danger-btn"
+                                    style="display: none"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    id="sendBatchBtn"
+                                    class="submit-btn"
+                                    style="display: none"
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        </div>
                         <table
                             class="transactions-table"
                             id="batchTable"
@@ -735,13 +763,6 @@
                                 <!-- CSV data will be populated here -->
                             </tbody>
                         </table>
-                        <button
-                            id="sendBatchBtn"
-                            class="submit-btn"
-                            style="margin-top: 20px; display: none"
-                        >
-                            Send
-                        </button>
                     </div>
 
                     <div
@@ -905,7 +926,15 @@
                                 />
                             </div>
                             <div class="form-group">
-                                <label>Default Password: 1234</label>
+                                <label for="memberPassword"
+                                    >Password (Default: 1234)</label
+                                >
+                                <input
+                                    type="password"
+                                    id="memberPassword"
+                                    value="1234"
+                                    required
+                                />
                             </div>
                             <div class="modal-footer">
                                 <button class="submit-btn" id="submitMemberBtn">
@@ -1208,6 +1237,80 @@
                                 <div class="modal-footer">
                                     <button type="submit" class="danger-btn">
                                         Remove
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Batch Payment Edit Modal -->
+                    <div id="batchEditModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <span class="modal-title"
+                                    >Edit Batch Payment</span
+                                >
+                                <button
+                                    id="closeBatchEditModal"
+                                    class="close-btn"
+                                    aria-label="Close modal"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <form id="batchEditForm">
+                                <div class="form-group">
+                                    <label for="batchEditDate">Date</label>
+                                    <input
+                                        type="date"
+                                        id="batchEditDate"
+                                        name="date"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="batchEditName">Name</label>
+                                    <input
+                                        type="text"
+                                        id="batchEditName"
+                                        name="name"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="batchEditAmount"
+                                        >Amount (sats)</label
+                                    >
+                                    <input
+                                        type="number"
+                                        id="batchEditAmount"
+                                        name="amount"
+                                        min="1"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="batchEditLightningAddress"
+                                        >Lightning Address</label
+                                    >
+                                    <input
+                                        type="email"
+                                        id="batchEditLightningAddress"
+                                        name="lightningAddress"
+                                        placeholder="example@blink.sv"
+                                        required
+                                    />
+                                </div>
+                                <div class="modal-footer">
+                                    <button
+                                        type="button"
+                                        class="cancel-btn"
+                                        onclick="closeBatchEditModal()"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button type="submit" class="submit-btn">
+                                        Update Payment
                                     </button>
                                 </div>
                             </form>

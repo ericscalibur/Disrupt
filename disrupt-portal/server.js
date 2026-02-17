@@ -25,6 +25,7 @@ app.use(
         "'unsafe-eval'",
         "https://cdnjs.cloudflare.com",
       ],
+      scriptSrcElem: ["'self'", "https://cdnjs.cloudflare.com"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: [
         "'self'",
@@ -38,7 +39,11 @@ app.use(
         "https://use.fontawesome.com",
       ],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
+      connectSrc: [
+        "'self'",
+        "https://api.coingecko.com",
+        "https://cdnjs.cloudflare.com",
+      ],
       // Add other directives as needed
     },
   }),
@@ -453,7 +458,7 @@ app.post("/api/refresh", (req, res) => {
 app.get(
   "/api/users",
   authenticateToken,
-  authorizeRoles("Admin", "Manager", "Employee"),
+  authorizeRoles("Admin", "Manager", "Employee", "Bookkeeper"),
   async (req, res) => {
     try {
       const data = await fs.readFile(USERS_FILE, "utf8");
@@ -486,7 +491,7 @@ app.get(
 app.get(
   "/api/departments",
   authenticateToken,
-  authorizeRoles("Admin", "Manager", "Employee"),
+  authorizeRoles("Admin", "Manager", "Employee", "Bookkeeper"),
   async (req, res) => {
     try {
       const data = await fs.readFile(DEPARTMENTS_FILE, "utf8");

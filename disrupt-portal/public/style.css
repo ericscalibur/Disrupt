@@ -178,6 +178,30 @@ br {
     font-size: 0.9em;
 }
 
+/* Batch table row hover effect for clickable rows */
+#batchTable tbody tr:hover {
+    background-color: #f8f9fa;
+    transition: background-color 0.2s ease;
+}
+
+#batchTable tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#batchTable tbody tr:hover td {
+    background-color: #f8f9fa;
+}
+
+/* Volcano mode batch table hover effect */
+.volcano-mode #batchTable tbody tr:hover {
+    background-color: #444;
+}
+
+.volcano-mode #batchTable tbody tr:hover td {
+    background-color: #444;
+}
+
 /* Modal Styles */
 .modal {
     display: none;
@@ -762,6 +786,13 @@ input:checked + .slider:before {
 
 .danger-btn {
     background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
 }
 
 .danger-btn:hover {
@@ -815,13 +846,23 @@ body.volcano-mode,
 }
 
 .volcano-mode .submit-btn {
-    background: linear-gradient(90deg, #ff512f 0%, #dd2476 100%);
+    background-color: #3498db;
     color: #fff;
     border: none;
 }
 
 .volcano-mode .submit-btn:hover {
-    background: linear-gradient(90deg, #a020f0 0%, #ff512f 100%);
+    background-color: #2980b9;
+}
+
+.volcano-mode .danger-btn {
+    background: linear-gradient(90deg, #ff512f 0%, #dd2476 100%);
+    color: #fff;
+    border: none;
+}
+
+.volcano-mode .danger-btn:hover {
+    background: linear-gradient(90deg, #dd2476 0%, #a020f0 100%);
 }
 
 .volcano-mode .nav-item {

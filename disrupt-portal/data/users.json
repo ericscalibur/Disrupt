@@ -68,5 +68,25 @@
     "password": "1234",
     "dateAdded": "2025-09-18",
     "id": "89f3ee282edcc9fe98e2a35ee61ce27eee49629eb5aee5a0a56f178cb2f733d9"
+  },
+  {
+    "name": "Stephanie",
+    "role": "Employee",
+    "department": "Engineering",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "password": "1234",
+    "email": "steph@disrupt.com",
+    "dateAdded": "2026-02-17",
+    "id": "f0af5297ee09334acd0dd861ca89386669e298311537953f42ba28e294cc4e46"
+  },
+  {
+    "name": "Roger Rabbit",
+    "role": "Bookkeeper",
+    "department": "Accounting",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "password": "1234",
+    "email": "roger@disrupt.com",
+    "dateAdded": "2026-02-17",
+    "id": "c71aa67917ee93544d9db61cbdcf9b007f53f18f16c7427d58106f2a5b651cda"
   }
 ]

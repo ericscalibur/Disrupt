@@ -1,1 +1,59 @@
-[]
+[
+  {
+    "id": "16bd9118f627220d03d03a3e401d4d054a53e24e8dd819a172465f3e410c6ceb",
+    "date": "2026-02-17T01:06:10.064Z",
+    "type": "lightning",
+    "receiver": "420Shop",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc3u1p5e80cqpp5z67ezx8kyu3q6q7s8glyq82dq4998cjw3hvpngtjge0nusgvdn4shp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp5x60stz60tkfazdve2dzf57kvf8j6m93lp57aepjdzs4fwsl4c3nq9qxpqysgqsta75vgf2skq235588z6x4cf425yav9m965n3xvvm6tdw3cs0vsn89wlc694s58s65k6ymfn4lxv424vjw6z2hyuthm94auzfxlhv8qpz85rw5",
+    "amount": 300,
+    "currency": "SATS",
+    "note": "hello",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "16bd9118f627220d03d03a3e401d4d054a53e24e8dd819a172465f3e410c6ceb",
+    "approvedStatus": "approved",
+    "approvedAt": "2026-02-17T01:06:10.060Z",
+    "approvedBy": "ericscalibur@disrupt.com"
+  },
+  {
+    "id": "862d9db0a5e58d1c911783a5257a106e4303d9f1e0109d09a65eafdd56023459",
+    "date": "2026-02-17T00:57:10.445Z",
+    "type": "tax_withholding",
+    "recipientType": "government",
+    "recipientId": "tax_authority",
+    "contact": "Tax Authority",
+    "company": "Government",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc2610n1p5e808rpp5sckemv99ukx3eyghswjj27ssdeps8k03uqgf6zdxt6ha64szx3vshp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp5pw7l5w0jahe9a2wp4sknnp8eu4vjrmv5zzc6w0vt5kcwx8xur0gq9qxpqysgqjdg3l46rq4e9rl2pgh8ym4h47a075tnv30zn26j3fyccxfqglt9pky99hend8nclz77nft3p24fj3qvc57lmch0ts5m7nyy4xkvyjdcqjm89zs",
+    "amount": 261,
+    "currency": "SATS",
+    "note": "Tax withholding for Charlie (charlie@disrupt.com) - sparticus",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "862d9db0a5e58d1c911783a5257a106e4303d9f1e0109d09a65eafdd56023459",
+    "relatedEmployeePayment": "4bf688c87baa659b5a8878ad75600ea0494ca3e16d79b11b8617a04e4a7287b5"
+  },
+  {
+    "id": "4bf688c87baa659b5a8878ad75600ea0494ca3e16d79b11b8617a04e4a7287b5",
+    "date": "2026-02-17T00:57:10.445Z",
+    "type": "payment",
+    "recipientType": "employee",
+    "recipientId": "charlie@disrupt.com",
+    "contact": "Charlie (charlie@disrupt.com)",
+    "company": "disrupt",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc7260n1p5e808rpp5f0mg3jrm4fjekk5g0zkh2cqw5py5eglpd4umzxuxz7syujnjs76shp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp5pvv87vjkw0pqav79mn4c2xd66axd34v6r7lhqyvjl6h0vgnzwg4s9qxpqysgqzewz0my4gskx3juxmul4ruc2nmv8zv3eprrjshwx47g3jchumu73z0863cgjp2smmfq07ycraxcpc8a9p7wqg4ga5dq3kr5qk49fx8qpjh6cfh",
+    "amount": 726,
+    "currency": "SATS",
+    "note": "sparticus (Net after tax withholding)",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "4bf688c87baa659b5a8878ad75600ea0494ca3e16d79b11b8617a04e4a7287b5",
+    "taxWithholding": {
+      "originalAmount": 987,
+      "taxAmount": 261,
+      "netAmount": 726
+    }
+  }
+]
