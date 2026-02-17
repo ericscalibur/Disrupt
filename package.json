@@ -1,15 +1,30 @@
 {
-  "name": "disprupt",
+  "name": "disrupt-portal",
   "version": "1.0.0",
-  "main": "server.js",
+  "description": "Lightning Network-enabled business management platform with El Salvador tax withholding support",
+  "main": "disrupt-portal/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node disrupt-portal/server.js"
+    "start": "node disrupt-portal/server.js",
+    "dev": "NODE_ENV=development node disrupt-portal/server.js",
+    "install-setup": "./install.sh",
+    "generate-jwt": "node -e \"console.log('ACCESS_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex')); console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'));\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "lightning-network",
+    "bitcoin",
+    "payroll",
+    "el-salvador",
+    "business-management",
+    "tax-withholding",
+    "blink-api"
+  ],
+  "author": "Eric Scalibur",
   "license": "ISC",
-  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ericscalibur/Disrupt.git"
+  },
   "dependencies": {
     "@getalby/sdk": "^5.1.0",
     "axios": "^1.9.0",

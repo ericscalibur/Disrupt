@@ -1,107 +1,54 @@
-# Disrupt Portal
+# Disrupt Portal - Lightning Network Business Management Platform
 
-A comprehensive Lightning Network-enabled business management platform for handling payments, team management, supplier relationships, and financial operations.
+A comprehensive Lightning Network-enabled business management platform for handling payments, team management, supplier relationships, and financial operations with built-in El Salvador tax withholding support.
 
-## 🚀 Features
+## 🚀 Quick Start Guide
 
-### 🔐 Authentication & Authorization
-- **JWT-based authentication** with access and refresh tokens
-- **Role-based access control** (Admin, Manager, Employee)
-- **Department-based permissions** for data access
-- **Secure session management** with automatic token refresh
-- **Password reset functionality** via email
+### Prerequisites
 
-### ⚡ Lightning Network Integration
-- **Bitcoin Lightning payments** via Blink API
-- **Real-time balance tracking** in satoshis
-- **Lightning address support** for easy payments
-- **Invoice generation and payment** processing
-- **Transaction history** with local and remote data
-- **Batch payment processing** for multiple recipients
+Before you begin, ensure you have:
+- **Node.js** (v14 or higher) - [Download here](https://nodejs.org/)
+- **Git** - [Download here](https://git-scm.com/)
+- **Blink API account** - [Sign up at blink.sv](https://blink.sv)
 
-### 👥 Team Management
-- **User management** with role assignments
-- **Department organization** and access control
-- **Team member profiles** with Lightning addresses
-- **Employee onboarding** and offboarding workflows
+### Step 1: Clone the Repository
 
-### 🏢 Supplier Management
-- **Supplier database** with contact information
-- **Lightning address integration** for payments
-- **Supplier payment workflows** with approval processes
-- **Company and contact tracking**
-
-### 📊 Financial Operations
-- **Draft payment system** with approval workflows
-- **Transaction tracking** and history
-- **Real-time BTC/USD exchange rates**
-- **Payment authorization** by role
-- **Batch CSV payment processing**
-- **Financial reporting** and audit trails
-
-### 💼 Business Workflows
-- **Approval workflows** for payments
-- **Department-specific access** to financial data
-- **Audit logging** for all transactions
-- **CSV import/export** for batch operations
-
-## 🛠️ Technology Stack
-
-### Backend
-- **Node.js** with Express.js framework
-- **JWT** for authentication and authorization
-- **Blink API** for Lightning Network integration
-- **File-based JSON storage** for data persistence
-- **Helmet.js** for security headers
-- **CORS** for cross-origin requests
-
-### Frontend
-- **Vanilla JavaScript** with modern ES6+ features
-- **Responsive CSS** with dark/light theme support
-- **PapaParse** for CSV processing (loaded from CDN)
-- **Font Awesome** icons for UI elements
-
-### Security
-- **Content Security Policy** (CSP) headers
-- **HTTP-only cookies** for refresh tokens
-- **Token rotation** for enhanced security
-- **Environment variable** configuration
-- **Input validation** and sanitization
-
-## 📋 Prerequisites
-
-- **Node.js** (v14 or higher)
-- **npm** or **yarn** package manager
-- **Blink API account** with API keys
-- **SMTP server** for email functionality (optional)
-
-## 🚀 Quick Start
-
-### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd disrupt
+git clone https://github.com/ericscalibur/Disrupt.git
+cd Disrupt
 ```
 
-### 2. Install Dependencies
+### Step 2: Install Dependencies
+
 ```bash
 npm install
 ```
 
-### 3. Environment Configuration
+### Step 3: Environment Configuration
+
 Create a `.env` file in the root directory:
+
+```bash
+cp .env.example .env
+```
+
+Edit the `.env` file with your configuration:
+
 ```env
-# JWT Secrets
-ACCESS_TOKEN_SECRET=your-access-token-secret-here
-REFRESH_TOKEN_SECRET=your-refresh-token-secret-here
+# JWT Secrets (Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")
+ACCESS_TOKEN_SECRET=your-64-character-hex-string-here
+REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here
 
 # Blink API Configuration
 BLINK_API_KEY=your-blink-api-key-here
 
-# Email Configuration (Optional)
-EMAIL_USER=your-email@example.com
-EMAIL_PASS=your-email-password
-EMAIL_HOST=smtp.example.com
+# Tax Lightning Address (El Salvador)
+TAX_LIGHTNING_ADDRESS=example@blink.sv
+
+# Email Configuration (Optional - for password reset)
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 
 # Server Configuration
@@ -109,99 +56,125 @@ PORT=3000
 NODE_ENV=development
 ```
 
-### 4. Initialize Data Files
-The application will automatically create the required data files on first run:
-- `data/users.json` - User accounts and profiles
-- `data/drafts.json` - Payment drafts and approvals
-- `data/suppliers.json` - Supplier information
-- `data/transactions.json` - Local transaction history
-- `data/departments.json` - Department structure
-- `data/refresh_tokens.json` - Secure token storage
+### Step 4: Generate Secure JWT Secrets
 
-### 5. Start the Server
+Run these commands to generate secure secrets:
+
+```bash
+# Generate ACCESS_TOKEN_SECRET
+node -e "console.log('ACCESS_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
+
+# Generate REFRESH_TOKEN_SECRET
+node -e "console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
+```
+
+Copy the generated strings and replace the placeholders in your `.env` file.
+
+### Step 5: Get Your Blink API Key
+
+1. Visit [blink.sv](https://blink.sv) and create an account
+2. Navigate to your dashboard
+3. Generate an API key
+4. Add the API key to your `.env` file as `BLINK_API_KEY`
+
+### Step 6: Start the Server
+
 ```bash
 npm start
 ```
 
-The application will be available at `http://localhost:3000`
+The application will be available at **http://localhost:3000**
 
-## 👤 Default User Accounts
+## 👤 Default Login Accounts
 
 The system comes with pre-configured test accounts:
 
 | Role | Email | Password | Department |
 |------|-------|----------|------------|
-| Admin | ericscalibur@disrupt.com | 9555 | Executive |
-| Manager | quentin@disrupt.com | 1234 | Accounting |
-| Employee | joe@disrupt.com | 1234 | Engineering |
+| **Admin** | ericscalibur@disrupt.com | 9555 | Executive |
+| **Manager** | quentin@disrupt.com | 1234 | Accounting |
+| **Employee** | joe@disrupt.com | 1234 | Engineering |
 
-## 🎯 Usage Guide
+## 🇸🇻 El Salvador Tax Withholding
 
-### For Administrators
-1. **Login** with admin credentials
-2. **Manage team members** - add, edit, remove users
-3. **Configure departments** and role assignments
-4. **Approve payment drafts** from all departments
-5. **Process batch payments** via CSV upload
-6. **Monitor Lightning wallet balance** and transactions
+The system includes built-in support for El Salvador's payroll tax structure:
 
-### For Managers
-1. **Access department-specific** payment drafts
-2. **Approve payments** within your department
-3. **Manage supplier relationships**
-4. **Process individual payments** to suppliers
-5. **View transaction history** for your department
+### Employee Deductions (10.25%):
+- **ISSS Employee**: 3%
+- **AFP Employee**: 7.25%
 
-### For Employees
-1. **Create payment drafts** for approval
-2. **View approved transactions**
-3. **Access supplier directory**
-4. **Submit payment requests** with proper documentation
+### Employer Contributions (16.25%):
+- **ISSS Employer**: 7.5%
+- **AFP Employer**: 8.75%
 
-### Payment Workflows
-1. **Draft Creation** - Employee creates payment request
-2. **Manager Review** - Department manager reviews and approves
-3. **Admin Authorization** - Final approval for large amounts
-4. **Lightning Payment** - Automatic processing via Blink API
-5. **Transaction Logging** - Complete audit trail
+**Total Tax Withholding: 26.5%**
 
-## 🔧 API Endpoints
+When processing employee payments with tax withholding:
+- Employee receives 73.5% of the payment
+- 26.5% is automatically sent to the configured tax Lightning address
+- All deductions are properly tracked and logged
 
-### Authentication
-- `POST /api/login` - User authentication
-- `POST /api/refresh` - Token refresh
-- `POST /api/logout` - User logout
-- `GET /api/me` - Current user profile
+## 🎯 Key Features
+
+### Lightning Network Payments
+- Send payments via Lightning Network
+- Automatic Lightning address resolution
+- Real-time balance tracking
+- Transaction history and audit trails
+
+### Tax Withholding
+- Automatic El Salvador tax calculations
+- Dual Lightning payments (employee + tax)
+- Detailed tax breakdown display
+- Configurable tax Lightning address
 
 ### Team Management
-- `GET /api/team-members` - List team members
-- `PUT /api/team-members/:id` - Update team member
-- `DELETE /api/team-members/:id` - Remove team member
-
-### Financial Operations
-- `GET /api/drafts` - List payment drafts
-- `POST /api/drafts` - Create payment draft
-- `PUT /api/drafts/:id` - Update draft status
-- `GET /api/transactions` - Transaction history
-- `POST /api/transactions` - Create transaction
-- `POST /api/batch-payment` - Process batch payments
-
-### Lightning Network
-- `GET /api/lightning-balance` - Wallet balance
-- `POST /api/pay` - Send Lightning payment
-- `POST /api/pay-invoice` - Pay Lightning invoice
-- `GET /api/btc-usd-rate` - Current exchange rate
+- Role-based access control (Admin, Manager, Employee)
+- Department-based permissions
+- Employee payment processing
+- Team member profiles with Lightning addresses
 
 ### Supplier Management
-- `GET /api/suppliers` - List suppliers
-- `POST /api/suppliers` - Add supplier
-- `PUT /api/suppliers/:id` - Update supplier
-- `DELETE /api/suppliers/:id` - Remove supplier
+- Supplier database with Lightning addresses
+- Payment workflows
+- Company and contact tracking
+
+### Financial Operations
+- Draft payment system with approval workflows
+- Transaction tracking and history
+- Real-time BTC/USD exchange rates
+- Payment authorization by role
+- CSV batch payment processing
+
+## 🔧 Configuration Options
+
+### Email Setup (Optional)
+
+For password reset functionality, configure email in `.env`:
+
+**Gmail Setup:**
+1. Enable 2-Factor Authentication on your Google account
+2. Generate an App Password: Google Account → Security → 2-Step Verification → App passwords
+3. Use the 16-character app password (not your regular password)
+
+### Tax Lightning Address
+
+Update the tax destination address in `.env`:
+```env
+TAX_LIGHTNING_ADDRESS=your-tax-wallet@blink.sv
+```
+
+### Port Configuration
+
+Change the server port in `.env`:
+```env
+PORT=3000
+```
 
 ## 📁 Project Structure
 
 ```
-disrupt/
+Disrupt/
 ├── disrupt-portal/
 │   ├── server.js              # Main server application
 │   ├── public/                # Frontend assets
@@ -209,7 +182,7 @@ disrupt/
 │   │   ├── script.js          # Frontend JavaScript
 │   │   ├── style.css          # Application styling
 │   │   └── favicon.png        # Application icon
-│   └── data/                  # JSON data storage
+│   └── data/                  # JSON data storage (auto-created)
 │       ├── users.json         # User accounts
 │       ├── drafts.json        # Payment drafts
 │       ├── suppliers.json     # Supplier directory
@@ -218,113 +191,116 @@ disrupt/
 │       └── refresh_tokens.json # Token storage
 ├── package.json               # Dependencies and scripts
 ├── .env                       # Environment configuration
+├── .env.example              # Environment template
 ├── .gitignore                # Git ignore rules
 └── README.md                 # This file
 ```
 
 ## 🔒 Security Features
 
-- **JWT Authentication** with short-lived access tokens
-- **Refresh token rotation** for enhanced security
-- **Role-based access control** throughout the application
-- **Content Security Policy** headers
-- **Input validation** and sanitization
-- **Secure cookie handling** for sensitive data
-- **Environment variable** protection for secrets
-- **Audit logging** for all financial operations
+- JWT Authentication with short-lived access tokens
+- Refresh token rotation for enhanced security
+- Role-based access control throughout the application
+- Content Security Policy headers
+- Input validation and sanitization
+- Secure cookie handling for sensitive data
+- Environment variable protection for secrets
 
-## 🚀 Deployment
-
-### Production Environment
-1. Set `NODE_ENV=production` in your environment
-2. Use secure HTTPS connections only
-3. Configure proper CORS origins
-4. Set strong JWT secrets (256-bit recommended)
-5. Use production-grade SMTP service
-6. Implement proper backup strategies for data files
-7. Monitor Lightning wallet balance regularly
-
-### Docker Deployment (Optional)
-```dockerfile
-FROM node:16-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the ISC License - see the package.json file for details.
-
-## ⚡ Lightning Network Setup
-
-### Blink API Integration
-1. Create account at [blink.sv](https://blink.sv)
-2. Generate API key in dashboard
-3. Add API key to `.env` file
-4. Test connection with small transaction
-
-### Lightning Address Format
-- Standard format: `username@domain.com`
-- Supported providers: Blink, Wallet of Satoshi, Strike, etc.
-- Automatic validation in payment forms
-
-## 🆘 Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Authentication Errors**
-- Check JWT secrets are properly set
-- Verify token expiration settings
-- Clear browser storage and login again
+**"ACCESS_TOKEN_SECRET environment variable is not defined"**
+- Ensure your `.env` file exists in the root directory
+- Verify JWT secrets are properly generated and set
+- Restart the server after updating `.env`
 
-**Lightning Payment Failures**
-- Verify Blink API key is valid
+**"Cannot find module" errors**
+- Run `npm install` to install dependencies
+- Ensure you're in the correct directory
+
+**Login fails**
+- Check if the server is running on the correct port
+- Verify default accounts haven't been modified
+- Clear browser storage and try again
+
+**Lightning payments fail**
+- Verify Blink API key is valid and properly set
 - Check Lightning address format
-- Ensure sufficient wallet balance
+- Ensure sufficient wallet balance in your Blink account
 
-**File Permission Errors**
-- Ensure write permissions to `data/` directory
-- Check file ownership and permissions
-- Verify disk space availability
-
-**CORS Issues**
-- Update allowed origins in server.js
-- Check protocol (HTTP vs HTTPS)
-- Verify port configuration
+**Tax payments not working**
+- Verify `TAX_LIGHTNING_ADDRESS` is set in `.env`
+- Ensure the tax Lightning address is valid
+- Check server logs for detailed error messages
 
 ### Debug Mode
-Set `NODE_ENV=development` for detailed error logging and enhanced debugging information.
 
-## 📊 Monitoring
+Set detailed logging in `.env`:
+```env
+NODE_ENV=development
+```
 
-- Monitor `data/refresh_tokens.json` file size for cleanup
-- Track Lightning wallet balance regularly
-- Review transaction logs for anomalies
-- Monitor server logs for authentication failures
+## 🚀 Deployment to Production
 
-## 🔮 Roadmap
+### Environment Variables
+1. Set `NODE_ENV=production`
+2. Use secure HTTPS connections only
+3. Generate new, secure JWT secrets (256-bit recommended)
+4. Use production-grade SMTP service
+5. Monitor Lightning wallet balance regularly
 
-- [ ] PostgreSQL database integration
-- [ ] Real-time notifications
-- [ ] Advanced reporting dashboard
-- [ ] Mobile app support
-- [ ] Multi-currency support
-- [ ] Advanced audit logging
-- [ ] Automated backup system
-- [ ] Integration with accounting software
+### Security Checklist
+- [ ] Strong JWT secrets generated
+- [ ] HTTPS enabled
+- [ ] Proper CORS origins configured
+- [ ] Regular backups of data files
+- [ ] Monitor server logs
+- [ ] Update dependencies regularly
+
+## 📊 Usage Guide
+
+### For Administrators
+1. Login with admin credentials
+2. Manage team members and departments
+3. Approve payment drafts from all departments
+4. Process batch payments via CSV upload
+5. Monitor Lightning wallet balance and transactions
+
+### For Managers
+1. Access department-specific payment drafts
+2. Approve payments within your department
+3. Manage supplier relationships
+4. Process individual payments to suppliers
+
+### For Employees
+1. Create payment drafts for approval
+2. View approved transactions
+3. Submit payment requests with proper documentation
+
+### Payment Workflow
+1. **Draft Creation** - Employee creates payment request
+2. **Manager Review** - Department manager reviews and approves
+3. **Admin Authorization** - Final approval for large amounts
+4. **Lightning Payment** - Automatic processing via Blink API
+5. **Tax Withholding** - Automatic calculation and separate payment (if applicable)
+6. **Transaction Logging** - Complete audit trail
+
+## 🤝 Support
+
+If you encounter issues:
+
+1. **Check the logs** - Server logs provide detailed error information
+2. **Verify configuration** - Ensure all environment variables are properly set
+3. **Test with default accounts** - Use the provided test accounts first
+4. **Check Lightning balance** - Ensure sufficient funds in your Blink wallet
+
+## 📝 License
+
+This project is licensed under the ISC License.
 
 ---
 
-**Built with ⚡ Lightning Network technology for the future of business payments.**
+**Built with ⚡ Lightning Network technology for modern business payments in El Salvador.**
+
+For questions or support, please open an issue on GitHub.

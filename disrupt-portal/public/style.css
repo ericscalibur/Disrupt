@@ -879,43 +879,62 @@ body.volcano-mode,
     background-color: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: 6px;
-    padding: 16px 16px 0px 16px;
-    margin-top: 10px;
-    margin-bottom: 10px;
+    padding: 12px 12px 0px 12px;
+    margin-top: 8px;
+    margin-bottom: 8px;
 }
 
 .deduction-breakdown h4 {
-    margin: 0 0 12px 0;
+    margin: 0 0 8px 0;
     color: #495057;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
+}
+
+.deduction-section {
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.deduction-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 4px;
+}
+
+.deduction-section h5 {
+    margin: 0 0 3px 0;
+    color: #6c757d;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
 }
 
 .deduction-item {
     display: flex;
     justify-content: space-between;
-    padding: 4px 0;
+    padding: 2px 0;
     color: #6c757d;
-    font-size: 13px;
+    font-size: 11px;
 }
 
 .deduction-total {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0 4px 0;
+    padding: 6px 0 2px 0;
     border-top: 1px solid #dee2e6;
-    margin-top: 8px;
+    margin-top: 4px;
     color: #495057;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 .net-payment {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 6px 0;
     border-top: 1px solid #dee2e6;
     color: #28a745;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 .tax-payment {
@@ -938,6 +957,14 @@ body.volcano-mode,
 
 .volcano-mode .deduction-breakdown h4 {
     color: #f37c19;
+}
+
+.volcano-mode .deduction-section {
+    border-bottom-color: #444;
+}
+
+.volcano-mode .deduction-section h5 {
+    color: #999;
 }
 
 .volcano-mode .deduction-item {
@@ -967,7 +994,7 @@ body.volcano-mode,
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 6px;
     width: auto;
 }
 
@@ -981,6 +1008,6 @@ body.volcano-mode,
 .checkbox-container label {
     margin: 0;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     flex: none;
 }

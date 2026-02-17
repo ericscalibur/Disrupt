@@ -18,6 +18,7 @@ let employeeDraftsSort = { column: null, asc: true };
 let currentBalanceBTC = 0.0;
 let currentBalanceSATS = 0;
 let btcToUsdRate = 70000; // fallback value
+let taxLightningAddress = null;
 const balanceDisplayModes = ["BTC", "SATS", "USD"];
 let currentBalanceMode = 0;
 let currentMember = null;
@@ -584,6 +585,9 @@ async function loadAccountingPage() {
 
     // Load and display lightning balance here
     await updateLightningBalance();
+
+    // Fetch tax lightning address
+    await fetchTaxLightningAddress();
 
     updateAccountingActionsVisibility();
   } catch (err) {
@@ -2032,8 +2036,8 @@ async function submitNewPayment(event) {
   let taxWithholdingAmount = 0;
 
   if (isTaxWithholding) {
-    // Calculate tax withholding (15% total)
-    taxWithholdingAmount = Math.floor(paymentAmount * 0.15);
+    // Calculate tax withholding (26.5% total - El Salvador structure)
+    taxWithholdingAmount = Math.floor(paymentAmount * 0.265);
     netPaymentAmount = paymentAmount - taxWithholdingAmount;
   }
 
@@ -2052,7 +2056,7 @@ async function submitNewPayment(event) {
       originalAmount: paymentAmount,
       taxAmount: taxWithholdingAmount,
       netAmount: netPaymentAmount,
-      taxAddress: "tbhs@blink.sv",
+      taxAddress: taxLightningAddress,
     },
   };
 
@@ -2070,7 +2074,7 @@ async function submitNewPayment(event) {
     if (data.success) {
       if (isTaxWithholding) {
         alert(
-          `Payment sent!\nEmployee: ${netPaymentAmount} SATS\nTax Withholding: ${taxWithholdingAmount} SATS sent to tbhs@blink.sv`,
+          `Payment sent!\nEmployee: ${netPaymentAmount} SATS\nTax Withholding: ${taxWithholdingAmount} SATS sent to ${taxLightningAddress}`,
         );
       } else {
         alert("Payment sent!");
@@ -4032,6 +4036,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
+// Fetch tax lightning address from server
+async function fetchTaxLightningAddress() {
+  try {
+    const response = await authFetch(`${API_BASE}/tax-address`);
+    if (response.ok) {
+      const data = await response.json();
+      taxLightningAddress = data.taxLightningAddress;
+    }
+  } catch (error) {
+    console.error("Failed to fetch tax lightning address");
+    throw error;
+  }
+}
+
 // Tax Withholding Functions
 function toggleTaxWithholding() {
   const checkbox = document.getElementById("applyTaxWithholding");
@@ -4055,25 +4073,29 @@ function calculateTaxWithholding() {
   const amountInput = document.getElementById("paymentAmount");
   const amount = parseFloat(amountInput.value) || 0;
 
-  // Calculate 5% for each deduction type
-  const insuranceDeduction = Math.floor(amount * 0.05);
-  const educationDeduction = Math.floor(amount * 0.05);
-  const administrationDeduction = Math.floor(amount * 0.05);
+  // El Salvador Employee Deductions
+  const isssEmployee = Math.floor(amount * 0.03); // 3%
+  const afpEmployee = Math.floor(amount * 0.0725); // 7.25%
 
-  // Total deductions (15%)
-  const totalDeducted =
-    insuranceDeduction + educationDeduction + administrationDeduction;
+  // El Salvador Employer Contributions
+  const isssEmployer = Math.floor(amount * 0.075); // 7.5%
+  const afpEmployer = Math.floor(amount * 0.0875); // 8.75%
 
-  // Net payment to employee (85%)
+  // Total deductions (26.5%)
+  const totalDeducted = isssEmployee + afpEmployee + isssEmployer + afpEmployer;
+
+  // Net payment to employee (73.5%)
   const netPayment = amount - totalDeducted;
 
   // Update display
-  document.getElementById("insuranceAmount").textContent =
-    insuranceDeduction.toLocaleString();
-  document.getElementById("educationAmount").textContent =
-    educationDeduction.toLocaleString();
-  document.getElementById("administrationAmount").textContent =
-    administrationDeduction.toLocaleString();
+  document.getElementById("isssEmployeeAmount").textContent =
+    isssEmployee.toLocaleString();
+  document.getElementById("afpEmployeeAmount").textContent =
+    afpEmployee.toLocaleString();
+  document.getElementById("isssEmployerAmount").textContent =
+    isssEmployer.toLocaleString();
+  document.getElementById("afpEmployerAmount").textContent =
+    afpEmployer.toLocaleString();
   document.getElementById("totalDeducted").textContent =
     totalDeducted.toLocaleString();
   document.getElementById("netPayment").textContent =

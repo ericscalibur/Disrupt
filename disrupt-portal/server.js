@@ -79,6 +79,7 @@ app.use((req, res, next) => {
 
 const fetch = require("node-fetch");
 const BLINK_API_KEY = process.env.BLINK_API_KEY;
+const TAX_LIGHTNING_ADDRESS = process.env.TAX_LIGHTNING_ADDRESS;
 
 // Path configuration
 const PORT = process.env.PORT || 3000;
@@ -226,6 +227,17 @@ async function getEmployeeById(id) {
     const data = await fs.readFile(USERS_FILE, "utf8");
     const users = JSON.parse(data);
     return users.find((user) => String(user.id) === String(id)) || null;
+  } catch (err) {
+    console.error("Error reading users.json:", err);
+    return null;
+  }
+}
+
+async function getEmployeeByEmail(email) {
+  try {
+    const data = await fs.readFile(USERS_FILE, "utf8");
+    const users = JSON.parse(data);
+    return users.find((user) => user.email === email) || null;
   } catch (err) {
     console.error("Error reading users.json:", err);
     return null;
@@ -1760,7 +1772,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
     // Lookup recipient for validation (optional but recommended)
     let recipient;
     if (recipientType === "employee") {
-      recipient = await getEmployeeById(recipientId);
+      recipient = await getEmployeeByEmail(recipientId);
     } else if (recipientType === "supplier") {
       recipient = await getSupplierById(recipientId);
     } else {
@@ -1811,7 +1823,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
     if (isTaxWithholding && taxAmount > 0) {
       try {
         const taxLnurlResp = await lnurlPay.requestInvoice({
-          lnUrlOrAddress: taxWithholding.taxAddress,
+          lnUrlOrAddress: TAX_LIGHTNING_ADDRESS,
           tokens: taxAmount,
           comment: `Tax withholding for ${contact} - ${note}`,
         });
@@ -2026,7 +2038,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
         recipientId: "tax_authority",
         contact: "Tax Authority",
         company: "Government",
-        lightningAddress: taxWithholding.taxAddress,
+        lightningAddress: TAX_LIGHTNING_ADDRESS,
         invoice: taxInvoice,
         amount: taxAmount,
         currency: "SATS",
@@ -2068,6 +2080,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
             employeeAmount: employeeAmount,
             taxAmount: taxAmount,
             taxPaymentSuccess: !!taxPaymentResult,
+            taxLightningAddress: TAX_LIGHTNING_ADDRESS,
           }
         : null,
     };
@@ -2080,6 +2093,14 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       message: "Internal server error.",
     });
   }
+});
+
+// API endpoint to get tax lightning address
+app.get("/api/tax-address", authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    taxLightningAddress: TAX_LIGHTNING_ADDRESS,
+  });
 });
 
 // PAY INVOICE
