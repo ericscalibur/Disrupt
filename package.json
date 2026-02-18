@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node disrupt-portal/server.js",
     "dev": "NODE_ENV=development node disrupt-portal/server.js",
+    "setup": "node setup.js",
     "install-setup": "./install.sh",
     "generate-jwt": "node -e \"console.log('ACCESS_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex')); console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'));\"",
     "test": "echo \"Error: no test specified\" && exit 1"

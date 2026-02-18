@@ -74,6 +74,11 @@ fi
 echo "✅ JWT secrets generated and configured"
 
 echo ""
+echo "👤 Creating your Admin account..."
+echo ""
+node setup.js
+
+echo ""
 echo "🎉 Installation Complete!"
 echo "========================"
 echo ""
@@ -83,11 +88,6 @@ echo "2. Edit .env file and add your BLINK_API_KEY"
 echo "3. Optionally configure email settings for password reset"
 echo "4. Run: npm start"
 echo "5. Open: http://localhost:3000"
-echo ""
-echo "👤 Default login accounts:"
-echo "Admin:    ericscalibur@disrupt.com / 9555"
-echo "Manager:  quentin@disrupt.com / 1234"
-echo "Employee: joe@disrupt.com / 1234"
 echo ""
 echo "🔧 To configure Blink API:"
 echo "   nano .env"

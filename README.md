@@ -24,7 +24,24 @@ cd Disrupt
 npm install
 ```
 
-### Step 3: Environment Configuration
+### Step 3: Run First-Time Setup
+
+This interactive wizard creates your Admin account and initializes all data files:
+
+```bash
+npm run setup
+```
+
+You will be prompted for:
+- Your full name
+- Email address
+- Password
+- Lightning address (optional)
+- Department name
+
+> **Note:** This only needs to be run once. If you run it again on an existing installation it will warn you before overwriting any data.
+
+### Step 4: Environment Configuration
 
 Create a `.env` file in the root directory:
 
@@ -56,7 +73,7 @@ PORT=3000
 NODE_ENV=development
 ```
 
-### Step 4: Generate Secure JWT Secrets
+### Step 5: Generate Secure JWT Secrets
 
 Run these commands to generate secure secrets:
 
@@ -70,14 +87,14 @@ node -e "console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64)
 
 Copy the generated strings and replace the placeholders in your `.env` file.
 
-### Step 5: Get Your Blink API Key
+### Step 6: Get Your Blink API Key
 
 1. Visit [blink.sv](https://blink.sv) and create an account
 2. Navigate to your dashboard
 3. Generate an API key
 4. Add the API key to your `.env` file as `BLINK_API_KEY`
 
-### Step 6: Start the Local Server
+### Step 7: Start the Local Server
 
 ```bash
 npm start
