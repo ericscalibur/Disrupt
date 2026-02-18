@@ -964,6 +964,9 @@ function setupTransactionRowClicks(transactions) {
 
   // Event delegation: attach one listener to tbody
   tbody.addEventListener("click", (event) => {
+    // Ignore clicks on the checkbox itself so checking doesn't open the modal
+    if (event.target.type === "checkbox") return;
+
     const row = event.target.closest("tr");
     if (!row) return;
 
@@ -1789,6 +1792,11 @@ function renderTransactions(transactions) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
 
+  // Reset select-all checkbox and hide export button when re-rendering
+  const selectAll = document.getElementById("selectAllTxns");
+  if (selectAll) selectAll.checked = false;
+  updateExportButton();
+
   const filteredTransactions = transactions.filter((txn) => {
     return (
       txn.receiver &&
@@ -1803,6 +1811,27 @@ function renderTransactions(transactions) {
   filteredTransactions.forEach((txn) => {
     const row = document.createElement("tr");
     row.setAttribute("data-txn-id", txn.id);
+
+    // Checkbox cell
+    const checkboxCell = document.createElement("td");
+    checkboxCell.classList.add("txn-checkbox-col");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.classList.add("txn-export-checkbox");
+    checkbox.setAttribute("data-txn-id", txn.id);
+    checkbox.addEventListener("change", () => {
+      updateExportButton();
+      // Sync select-all state
+      const all = document.querySelectorAll(".txn-export-checkbox");
+      const checked = document.querySelectorAll(".txn-export-checkbox:checked");
+      const selectAll = document.getElementById("selectAllTxns");
+      if (selectAll) {
+        selectAll.checked = all.length > 0 && checked.length === all.length;
+        selectAll.indeterminate =
+          checked.length > 0 && checked.length < all.length;
+      }
+    });
+    checkboxCell.appendChild(checkbox);
 
     // Date cell
     const dateCell = document.createElement("td");
@@ -1840,6 +1869,7 @@ function renderTransactions(transactions) {
     statusCell.innerHTML = renderStatus(txn.status);
 
     // Append cells
+    row.appendChild(checkboxCell);
     row.appendChild(dateCell);
     row.appendChild(receiverCell);
     row.appendChild(amountCell);
@@ -1858,7 +1888,111 @@ function closeNewPaymentModal() {
   document.getElementById("newPaymentModal").style.display = "none";
 }
 
-// employ or supplier
+// ─── Transaction Export ───────────────────────────────────────────────────────
+
+function updateExportButton() {
+  const checked = document.querySelectorAll(".txn-export-checkbox:checked");
+  const wrapper = document.getElementById("exportWrapper");
+  if (!wrapper) return;
+  if (checked.length > 0) {
+    wrapper.style.display = "";
+  } else {
+    wrapper.style.display = "none";
+    // Also close the dropdown if it was open
+    const dropdown = document.getElementById("exportDropdown");
+    if (dropdown) dropdown.style.display = "none";
+  }
+}
+
+function toggleSelectAllTransactions(selectAllCheckbox) {
+  const checkboxes = document.querySelectorAll(".txn-export-checkbox");
+  checkboxes.forEach((cb) => {
+    cb.checked = selectAllCheckbox.checked;
+  });
+  updateExportButton();
+}
+
+function toggleExportDropdown() {
+  const dropdown = document.getElementById("exportDropdown");
+  if (!dropdown) return;
+  dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+}
+
+// Close export dropdown when clicking outside of it
+document.addEventListener("click", (e) => {
+  const wrapper = document.getElementById("exportWrapper");
+  if (wrapper && !wrapper.contains(e.target)) {
+    const dropdown = document.getElementById("exportDropdown");
+    if (dropdown) dropdown.style.display = "none";
+  }
+});
+
+function exportTransactions(format) {
+  const checked = document.querySelectorAll(".txn-export-checkbox:checked");
+  const ids = Array.from(checked).map((cb) => cb.getAttribute("data-txn-id"));
+  const selectedTxns = transactions.filter((t) => ids.includes(String(t.id)));
+
+  if (selectedTxns.length === 0) return;
+
+  let content, mimeType, filename;
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, "-");
+
+  if (format === "csv") {
+    const headers = [
+      "Date",
+      "Receiver",
+      "Amount",
+      "Currency",
+      "Transaction ID",
+      "Note",
+      "Status",
+      "Lightning Address",
+      "Payment Hash",
+    ];
+    const escapeCell = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
+    const rows = selectedTxns.map((t) =>
+      [
+        t.date ? new Date(t.date).toLocaleDateString() : "",
+        cleanReceiverName(t.receiver) || "",
+        t.amount ?? "",
+        t.currency || "SATS",
+        t.id || "",
+        t.note || "",
+        t.status || "",
+        t.lightningAddress || "",
+        t.paymentHash || "",
+      ]
+        .map(escapeCell)
+        .join(","),
+    );
+    content = [headers.join(","), ...rows].join("\n");
+    mimeType = "text/csv";
+    filename = `transactions_${timestamp}.csv`;
+  } else if (format === "json") {
+    content = JSON.stringify(selectedTxns, null, 2);
+    mimeType = "application/json";
+    filename = `transactions_${timestamp}.json`;
+  } else {
+    return;
+  }
+
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  // Close the dropdown after export
+  const dropdown = document.getElementById("exportDropdown");
+  if (dropdown) dropdown.style.display = "none";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function updateRecipientDropdown() {
   const type = document.getElementById("recipientType").value; // "employee" or "supplier"
   const select = document.getElementById("recipientSelect");
@@ -4611,3 +4745,147 @@ function setupTaxCalculationListeners() {
     });
   }
 }
+
+// QR Scanner Functions (Global scope)
+let qrScanner = null;
+
+window.openQrScanner = async function openQrScanner() {
+  console.log("openQrScanner called");
+  const modal = document.getElementById("qrScannerModal");
+  const video = document.getElementById("qrScannerVideo");
+  const status = document.getElementById("qrScannerStatus");
+
+  // Check if jsQR library is available
+  console.log("jsQR available:", typeof jsQR !== "undefined");
+
+  if (typeof jsQR === "undefined") {
+    console.error("jsQR library not loaded");
+    alert(
+      "QR Scanner library not loaded. Please refresh the page and try again.",
+    );
+    return;
+  }
+
+  try {
+    // Show modal
+    modal.style.display = "flex";
+
+    // Update status
+    status.textContent = "Starting camera...";
+    status.style.color = "#666";
+
+    // Get camera stream
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+    });
+
+    video.srcObject = stream;
+    video.play();
+
+    status.textContent = "Position the QR code in front of your camera";
+    status.style.color = "#666";
+
+    // Start scanning
+    startScanning(video);
+  } catch (error) {
+    console.error("Error starting QR scanner:", error);
+    status.textContent = "Camera access denied or not available";
+    status.style.color = "#e74c3c";
+  }
+};
+
+window.closeQrScanner = function closeQrScanner() {
+  const modal = document.getElementById("qrScannerModal");
+  const video = document.getElementById("qrScannerVideo");
+
+  // Stop camera stream
+  if (video.srcObject) {
+    const tracks = video.srcObject.getTracks();
+    tracks.forEach((track) => track.stop());
+    video.srcObject = null;
+  }
+
+  // Stop scanning loop
+  if (qrScanner) {
+    clearInterval(qrScanner);
+    qrScanner = null;
+  }
+
+  // Hide modal
+  modal.style.display = "none";
+};
+
+function startScanning(video) {
+  const canvas = document.createElement("canvas");
+  const canvasContext = canvas.getContext("2d");
+
+  qrScanner = setInterval(() => {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth;
+      canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = canvasContext.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+      if (code) {
+        console.log("QR Code detected:", code.data);
+        handleQrScanResult(code.data);
+      }
+    }
+  }, 100);
+}
+
+function handleQrScanResult(data) {
+  const status = document.getElementById("qrScannerStatus");
+
+  // Check if it's a Lightning invoice
+  if (
+    data.toLowerCase().startsWith("lnbc") ||
+    data.toLowerCase().startsWith("lightning:")
+  ) {
+    // Extract invoice if it has lightning: prefix
+    let invoice = data;
+    if (data.toLowerCase().startsWith("lightning:")) {
+      invoice = data.substring(10); // Remove 'lightning:' prefix
+    }
+
+    // Update status to success
+    status.textContent = "Lightning invoice detected! Processing...";
+    status.style.color = "#28a745";
+
+    // Populate the invoice field
+    document.getElementById("invoiceString").value = invoice;
+
+    // Trigger the existing invoice processing
+    onInvoiceInputChange();
+
+    // Close scanner after short delay
+    setTimeout(() => {
+      closeQrScanner();
+    }, 1000);
+  } else {
+    // Not a Lightning invoice
+    status.textContent = "Not a Lightning invoice QR code. Please try again.";
+    status.style.color = "#e74c3c";
+
+    // Reset status after 3 seconds
+    setTimeout(() => {
+      status.textContent = "Position the QR code in front of your camera";
+      status.style.color = "#666";
+    }, 3000);
+  }
+}
+
+// Close QR scanner when clicking outside
+document.addEventListener("click", function (event) {
+  const modal = document.getElementById("qrScannerModal");
+  if (event.target === modal) {
+    closeQrScanner();
+  }
+});

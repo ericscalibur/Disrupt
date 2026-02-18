@@ -72,8 +72,15 @@ br {
     height: 5vh;
 }
 .history-title {
-    margin: 30px 0 15px 0;
+    margin: 0;
     color: #7f8c8d;
+}
+
+.history-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 30px 0 15px 0;
 }
 
 #transactionDetails {
@@ -1108,4 +1115,221 @@ body.volcano-mode,
 #batchTable th:nth-child(6), /* Status */
 #batchTable td:nth-child(6) {
     width: 8%;
+}
+
+/* QR Scanner Icon Styles */
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon input {
+    flex: 1;
+    padding-right: 45px;
+}
+
+.qr-scanner-icon {
+    position: absolute;
+    right: 12px;
+    top: 5px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    opacity: 0.6;
+}
+
+.qr-scanner-icon:hover {
+    opacity: 1;
+}
+
+.qr-grid {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+}
+
+.qr-square {
+    background-color: #666;
+    border-radius: 1px;
+}
+
+.qr-square-small {
+    transform: scale(0.7);
+    justify-self: center;
+    align-self: center;
+    background-color: #ff0000;
+}
+
+.qr-corners {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.qr-corner {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border: 1px solid #666;
+}
+
+.qr-corner.top-left {
+    top: -4px;
+    left: -4px;
+    border-right: none;
+    border-bottom: none;
+    border-top-left-radius: 2px;
+}
+
+.qr-corner.top-right {
+    top: -4px;
+    right: -4px;
+    border-left: none;
+    border-bottom: none;
+    border-top-right-radius: 2px;
+}
+
+.qr-corner.bottom-left {
+    bottom: -4px;
+    left: -4px;
+    border-right: none;
+    border-top: none;
+    border-bottom-left-radius: 2px;
+}
+
+.qr-corner.bottom-right {
+    bottom: -4px;
+    right: -4px;
+    border-left: none;
+    border-top: none;
+    border-bottom-right-radius: 2px;
+}
+
+/* Volcano mode QR scanner icon */
+.volcano-mode .qr-square {
+    background-color: #ff6b35;
+}
+
+.volcano-mode .qr-corner {
+    border-color: #ff6b35;
+}
+
+/* ── Transaction Export ───────────────────────────────────────────────────── */
+
+/* Narrow checkbox column */
+.txn-checkbox-col {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    text-align: center;
+    padding: 12px 6px !important;
+}
+
+.txn-checkbox-col input[type="checkbox"] {
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    accent-color: #2ecc71;
+}
+
+/* Export wrapper keeps the dropdown anchored to the button */
+.export-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Export button — amber/orange to stand out from the green/blue buttons */
+.export-btn {
+    width: 100px;
+    background-color: #f39c12;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+
+.export-btn:hover {
+    background-color: #d68910;
+}
+
+/* Dropdown panel — opens upward so it doesn't overlap the table */
+.export-dropdown {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.12);
+    min-width: 120px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.export-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.15s;
+}
+
+.export-dropdown-item:hover {
+    background-color: #f5f5f5;
+}
+
+.export-dropdown-item i {
+    width: 14px;
+    text-align: center;
+    color: #777;
+}
+
+/* ── Volcano mode overrides ───────────────────────────────────────────────── */
+
+.volcano-mode .export-btn {
+    background-color: #e67e22;
+    color: #fff;
+}
+
+.volcano-mode .export-btn:hover {
+    background-color: #ca6f1e;
+}
+
+.volcano-mode .export-dropdown {
+    background: #1a1a1a;
+    border-color: #3a3a3a;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.volcano-mode .export-dropdown-item {
+    color: #f37c19;
+}
+
+.volcano-mode .export-dropdown-item:hover {
+    background-color: #2c2c2c;
+}
+
+.volcano-mode .export-dropdown-item i {
+    color: #f37c19;
+}
+
+.volcano-mode .txn-checkbox-col input[type="checkbox"] {
+    accent-color: #f37c19;
 }

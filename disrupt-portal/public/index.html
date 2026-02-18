@@ -10,6 +10,7 @@
             rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         />
+        <script src="jsqr.min.js"></script>
     </head>
     <body class="volcano-mode">
         <!-- Login Page -->
@@ -280,15 +281,61 @@
                         </table>
 
                         <!-- Transaction History (Employee/Bookkeeper only) -->
-                        <h3 class="history-title" id="transactionsHistoryTitle">
-                            Transaction History
-                        </h3>
+                        <div class="history-title-row">
+                            <h3
+                                class="history-title"
+                                id="transactionsHistoryTitle"
+                            >
+                                Transaction History
+                            </h3>
+                            <div
+                                class="export-wrapper"
+                                id="exportWrapper"
+                                style="display: none; position: relative"
+                            >
+                                <button
+                                    class="export-btn"
+                                    id="exportBtn"
+                                    onclick="toggleExportDropdown()"
+                                >
+                                    &#8595; Export
+                                </button>
+                                <div
+                                    class="export-dropdown"
+                                    id="exportDropdown"
+                                    style="display: none"
+                                >
+                                    <div
+                                        class="export-dropdown-item"
+                                        onclick="exportTransactions('csv')"
+                                    >
+                                        <i class="fa fa-file-text-o"></i>
+                                        CSV
+                                    </div>
+                                    <div
+                                        class="export-dropdown-item"
+                                        onclick="exportTransactions('json')"
+                                    >
+                                        <i class="fa fa-file-code-o"></i>
+                                        JSON
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <table
                             class="transactions-table"
                             id="transactionsTable"
                         >
                             <thead>
                                 <tr>
+                                    <th class="txn-checkbox-col">
+                                        <input
+                                            type="checkbox"
+                                            id="selectAllTxns"
+                                            title="Select all"
+                                            onclick="toggleSelectAllTransactions(this)"
+                                        />
+                                    </th>
                                     <th>Date</th>
                                     <th>Receiver</th>
                                     <th>Amount</th>
@@ -604,13 +651,44 @@
                                     <label for="invoiceString"
                                         >Lightning Invoice</label
                                     >
-                                    <input
-                                        type="text"
-                                        id="invoiceString"
-                                        oninput="onInvoiceInputChange()"
-                                        autocomplete="off"
-                                        required
-                                    />
+                                    <div class="input-with-icon">
+                                        <input
+                                            type="text"
+                                            id="invoiceString"
+                                            oninput="onInvoiceInputChange()"
+                                            autocomplete="off"
+                                            required
+                                        />
+                                        <div
+                                            class="qr-scanner-icon"
+                                            id="qrScannerIcon"
+                                            onclick="openQrScanner()"
+                                            title="Scan QR Code"
+                                        >
+                                            <div class="qr-grid">
+                                                <div class="qr-square"></div>
+                                                <div class="qr-square"></div>
+                                                <div class="qr-square"></div>
+                                                <div
+                                                    class="qr-square qr-square-small"
+                                                ></div>
+                                            </div>
+                                            <div class="qr-corners">
+                                                <div
+                                                    class="qr-corner top-left"
+                                                ></div>
+                                                <div
+                                                    class="qr-corner top-right"
+                                                ></div>
+                                                <div
+                                                    class="qr-corner bottom-left"
+                                                ></div>
+                                                <div
+                                                    class="qr-corner bottom-right"
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div
                                         id="invoiceDetails"
                                         style="
@@ -670,6 +748,129 @@
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+
+                    <!-- QR Scanner Modal -->
+                    <div
+                        id="qrScannerModal"
+                        class="modal"
+                        style="display: none"
+                    >
+                        <div
+                            class="modal-content"
+                            style="
+                                width: 1200px;
+                                max-width: 90vw;
+                                height: 1000px;
+                                max-height: 90vh;
+                            "
+                        >
+                            <div class="modal-header">
+                                <span class="modal-title">Scan QR Code</span>
+                                <button
+                                    class="close-btn"
+                                    onclick="closeQrScanner()"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <div
+                                class="qr-scanner-content"
+                                style="padding: 20px; text-align: center"
+                            >
+                                <div
+                                    id="qrScannerStatus"
+                                    style="margin-bottom: 15px; color: #666"
+                                >
+                                    Position the QR code in front of your camera
+                                </div>
+                                <div
+                                    class="camera-container"
+                                    style="
+                                        position: relative;
+                                        display: inline-block;
+                                    "
+                                >
+                                    <video
+                                        id="qrScannerVideo"
+                                        style="
+                                            width: 100%;
+                                            max-width: 600px;
+                                            border-radius: 8px;
+                                            background: #000;
+                                        "
+                                        autoplay
+                                        muted
+                                        playsinline
+                                    ></video>
+                                    <div
+                                        class="qr-scanner-overlay"
+                                        style="
+                                            position: absolute;
+                                            top: 50%;
+                                            left: 50%;
+                                            transform: translate(-50%, -50%);
+                                            width: 200px;
+                                            height: 200px;
+                                            border: 2px solid #fff;
+                                            border-radius: 12px;
+                                            box-shadow: 0 0 0 9999px
+                                                rgba(0, 0, 0, 0.3);
+                                            pointer-events: none;
+                                        "
+                                    >
+                                        <div
+                                            style="
+                                                position: absolute;
+                                                top: -8px;
+                                                left: -8px;
+                                                width: 24px;
+                                                height: 24px;
+                                                border-top: 3px solid #00ff00;
+                                                border-left: 3px solid #00ff00;
+                                                border-radius: 4px 0 0 0;
+                                            "
+                                        ></div>
+                                        <div
+                                            style="
+                                                position: absolute;
+                                                top: -8px;
+                                                right: -8px;
+                                                width: 24px;
+                                                height: 24px;
+                                                border-top: 3px solid #00ff00;
+                                                border-right: 3px solid #00ff00;
+                                                border-radius: 0 4px 0 0;
+                                            "
+                                        ></div>
+                                        <div
+                                            style="
+                                                position: absolute;
+                                                bottom: -8px;
+                                                left: -8px;
+                                                width: 24px;
+                                                height: 24px;
+                                                border-bottom: 3px solid #00ff00;
+                                                border-left: 3px solid #00ff00;
+                                                border-radius: 0 0 0 4px;
+                                            "
+                                        ></div>
+                                        <div
+                                            style="
+                                                position: absolute;
+                                                bottom: -8px;
+                                                right: -8px;
+                                                width: 24px;
+                                                height: 24px;
+                                                border-bottom: 3px solid #00ff00;
+                                                border-right: 3px solid #00ff00;
+                                                border-radius: 0 0 4px 0;
+                                            "
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
