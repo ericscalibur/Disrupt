@@ -113,13 +113,25 @@ br {
     color: #888;
     font-family: "Fira Mono", "Menlo", "Consolas", monospace;
     font-size: 0.85em;
-    word-break: break-all;
+    width: 200px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.transactions-table th:nth-child(4) {
+    width: 200px;
+    max-width: 200px;
 }
 
 .transactions-table {
     border-collapse: collapse;
     width: 100%;
+    min-width: 800px;
     font-size: 1em;
+    table-layout: fixed;
 }
 .transactions-table th,
 .transactions-table td {
@@ -134,6 +146,7 @@ br {
 
 .transactions-table {
     width: 100%;
+    min-width: 800px;
     border-collapse: collapse;
     background-color: white;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -141,6 +154,7 @@ br {
     overflow: hidden;
     margin-top: 20px;
     position: relative;
+    table-layout: fixed;
 }
 
 .transactions-table th {
@@ -221,6 +235,8 @@ br {
     padding: 25px;
     border-radius: 8px;
     width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
@@ -307,6 +323,8 @@ br {
     padding: 24px; /* or 25px */
     margin-bottom: 0; /* add if needed */
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.125); /* unified box-shadow */
+    overflow-x: auto;
+    max-width: 100%;
 }
 
 .departments-section {
@@ -900,6 +918,8 @@ body.volcano-mode,
     background: linear-gradient(180deg, black 0%, #3b3b3b 100%);
     color: #f4f4f4; /* Light text for contrast */
     border-radius: 8px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3);
 }
 
@@ -1051,4 +1071,41 @@ body.volcano-mode,
     cursor: pointer;
     font-size: 12px;
     flex: none;
+}
+
+/* Batch Table Column Widths */
+#batchTable {
+    table-layout: fixed;
+}
+
+#batchTable th:nth-child(1), /* Date */
+#batchTable td:nth-child(1) {
+    width: 12%;
+}
+
+#batchTable th:nth-child(2), /* Name */
+#batchTable td:nth-child(2) {
+    width: 18%;
+}
+
+#batchTable th:nth-child(3), /* Amount */
+#batchTable td:nth-child(3) {
+    width: 12%;
+}
+
+#batchTable th:nth-child(4), /* Lightning Address */
+#batchTable td:nth-child(4) {
+    width: 25%;
+    word-break: break-all;
+}
+
+#batchTable th:nth-child(5), /* Note */
+#batchTable td:nth-child(5) {
+    width: 25%;
+    word-wrap: break-word;
+}
+
+#batchTable th:nth-child(6), /* Status */
+#batchTable td:nth-child(6) {
+    width: 8%;
 }

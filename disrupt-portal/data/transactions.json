@@ -1,5 +1,23 @@
 [
   {
+    "id": "86cc31200b21c65a17149d75c843fefa40588a9f2ea2fcc1c8f8ffb24b4d9ef6",
+    "date": "2026-02-18T04:06:23.619Z",
+    "type": "payment",
+    "recipientType": "supplier",
+    "recipientId": "sup1749440017541",
+    "contact": "Jacob",
+    "company": "420Shop",
+    "lightningAddress": "ericscalibur@walletofsatoshi.com",
+    "invoice": "lnbc880n1p5e2w47pp5smxrzgqty8r959c5n46ussl7lfq93z5l9630eswglrlmyj6dnmmqhp5hf35tq4z8lf7vf5ut6c2wh0wnn7ddsqxl2f0tsu7a2kkegtqsgkqcqzzsxqyz5vqsp5dqkfz03t62c87ar4l8mmj6z25z5s2z6n8jja3nxsmz73exmc0h3s9qxpqysgqqyzksk53p3rayjvfutehnrqzcgwuafvqtdu00j8azjug9xwj7q0rddx89sur68tpnxnymx8juyx7qxs80p57u90p2tvf6c6x3gt9pmgp2mtsf5",
+    "amount": 88,
+    "currency": "SATS",
+    "note": "meet you there",
+    "direction": "SENT",
+    "status": "SUCCESS",
+    "paymentHash": "86cc31200b21c65a17149d75c843fefa40588a9f2ea2fcc1c8f8ffb24b4d9ef6",
+    "taxWithholding": null
+  },
+  {
     "id": "b1f171eb6b47e1bf1419f2a812535aae30398cdd1673c8acdc984ce05301a138",
     "date": "2026-02-17T06:23:37.264Z",
     "type": "payment",

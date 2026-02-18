@@ -35,7 +35,7 @@ cp .env.example .env
 Edit the `.env` file with your configuration:
 
 ```env
-# JWT Secrets (Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")
+# JWT Secrets - Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ACCESS_TOKEN_SECRET=your-64-character-hex-string-here
 REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here
 

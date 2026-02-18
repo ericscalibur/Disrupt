@@ -2047,11 +2047,12 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
         invoice: taxInvoice,
         amount: taxAmount,
         currency: "SATS",
-        note: `Tax withholding for ${contact} - ${note}`,
+        note: `${taxWithholding.type || "employee"} tax withholding for ${contact} - ${note}`,
         direction: "SENT",
         status: (taxPaymentResult?.status || "SUCCESS").toUpperCase(),
         paymentHash: taxPaymentHash,
         relatedEmployeePayment: employeePaymentHash,
+        taxType: taxWithholding.type || "employee",
       };
     }
 

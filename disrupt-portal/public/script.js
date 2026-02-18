@@ -89,6 +89,41 @@ function getTokenExpirationTime(token) {
   return decoded.exp;
 }
 
+// Helper to truncate string from middle, showing start and end
+function truncateFromMiddle(str, maxLength) {
+  if (!str || str.length <= maxLength) return str;
+
+  const ellipsis = "...";
+  const charsToShow = maxLength - ellipsis.length;
+  const frontChars = Math.ceil(charsToShow / 2);
+  const backChars = Math.floor(charsToShow / 2);
+
+  return (
+    str.substring(0, frontChars) +
+    ellipsis +
+    str.substring(str.length - backChars)
+  );
+}
+
+// Helper to clean receiver name by removing email portion
+function cleanReceiverName(receiver) {
+  if (!receiver) return "";
+
+  // Handle formats like "John Doe (john@example.com)" or "John Doe john@example.com"
+  if (receiver.includes("(") && receiver.includes("@")) {
+    return receiver.split("(")[0].trim();
+  }
+
+  // Handle format "John Doe john@example.com" (space separated)
+  const parts = receiver.split(" ");
+  const emailIndex = parts.findIndex((part) => part.includes("@"));
+  if (emailIndex > 0) {
+    return parts.slice(0, emailIndex).join(" ").trim();
+  }
+
+  return receiver.trim();
+}
+
 // Schedule proactive token refresh
 function scheduleTokenRefresh(token) {
   // Clear any existing timer
@@ -793,7 +828,7 @@ function showTransactionDetails(txn) {
   }
 
   const details = `
-<span class="label">Receiver:</span> <span class="data">${txn.receiver}</span>
+<span class="label">Receiver:</span> <span class="data">${cleanReceiverName(txn.receiver)}</span>
 <span class="label">Amount:</span> <span class="data">${txn.amount} ${txn.currency}</span>
 <span class="label">Date:</span> <span class="data">${new Date(txn.date).toLocaleString()}</span>
 <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span>
@@ -910,7 +945,7 @@ function setupTransactionRowClicks(transactions) {
     if (!detailsContainer) return;
 
     const details = `
-      <span class="label">Receiver:</span> <span class="data">${txn.receiver || "N/A"}</span><br>
+      <span class="label">Receiver:</span> <span class="data">${cleanReceiverName(txn.receiver) || "N/A"}</span><br>
       <span class="label">Amount:</span> <span class="data">${txn.amount || "N/A"} ${txn.currency || "SATS"}</span><br>
       <span class="label">Date:</span> <span class="data">${txn.date ? new Date(txn.date).toLocaleString() : "N/A"}</span><br>
       <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span><br>
@@ -1776,7 +1811,7 @@ function renderTransactions(transactions) {
 
     // Receiver cell
     const receiverCell = document.createElement("td");
-    receiverCell.textContent = txn.receiver;
+    receiverCell.textContent = cleanReceiverName(txn.receiver);
 
     // Amount cell
     const amountCell = document.createElement("td");
@@ -1791,7 +1826,10 @@ function renderTransactions(transactions) {
 
     // ID cell
     const idCell = document.createElement("td");
-    idCell.textContent = txn.id || "";
+    idCell.classList.add("txid");
+    const fullId = txn.id || "";
+    idCell.textContent = truncateFromMiddle(fullId, 24);
+    idCell.title = fullId; // Show full ID on hover
 
     // Note cell
     const noteCell = document.createElement("td");
@@ -2036,19 +2074,33 @@ async function submitNewPayment(event) {
     return;
   }
 
-  // Check if tax withholding is applied (employee payments only)
-  const applyTaxWithholding = document.getElementById(
-    "applyTaxWithholding",
+  // Check which type of tax withholding is applied (employee payments only)
+  const applyEmployeeTaxWithholding = document.getElementById(
+    "applyEmployeeTaxWithholding",
   ).checked;
-  const isTaxWithholding = applyTaxWithholding && recipientType === "employee";
+  const applyContractorTaxWithholding = document.getElementById(
+    "applyContractorTaxWithholding",
+  ).checked;
+
+  const isEmployeeTaxWithholding =
+    applyEmployeeTaxWithholding && recipientType === "employee";
+  const isContractorTaxWithholding =
+    applyContractorTaxWithholding && recipientType === "employee";
 
   let netPaymentAmount = paymentAmount;
   let taxWithholdingAmount = 0;
+  let taxType = "none";
 
-  if (isTaxWithholding) {
-    // Calculate tax withholding (26.5% total - El Salvador structure)
+  if (isEmployeeTaxWithholding) {
+    // Calculate employee tax withholding (26.5% total - El Salvador structure)
     taxWithholdingAmount = Math.floor(paymentAmount * 0.265);
     netPaymentAmount = paymentAmount - taxWithholdingAmount;
+    taxType = "employee";
+  } else if (isContractorTaxWithholding) {
+    // Calculate contractor tax withholding (10% total)
+    taxWithholdingAmount = Math.floor(paymentAmount * 0.1);
+    netPaymentAmount = paymentAmount - taxWithholdingAmount;
+    taxType = "contractor";
   }
 
   // Build payload
@@ -2062,7 +2114,8 @@ async function submitNewPayment(event) {
     paymentAmount: netPaymentAmount, // Send net amount to employee
     paymentNote,
     taxWithholding: {
-      applied: isTaxWithholding,
+      applied: isEmployeeTaxWithholding || isContractorTaxWithholding,
+      type: taxType,
       originalAmount: paymentAmount,
       taxAmount: taxWithholdingAmount,
       netAmount: netPaymentAmount,
@@ -2082,9 +2135,13 @@ async function submitNewPayment(event) {
     const data = await response.json();
 
     if (data.success) {
-      if (isTaxWithholding) {
+      if (isEmployeeTaxWithholding) {
         alert(
-          `Payment sent!\nEmployee: ${netPaymentAmount} SATS\nTax Withholding: ${taxWithholdingAmount} SATS sent to ${taxLightningAddress}`,
+          `Payment sent!\nEmployee: ${netPaymentAmount} SATS\nEmployee Tax Withholding: ${taxWithholdingAmount} SATS sent to ${taxLightningAddress}`,
+        );
+      } else if (isContractorTaxWithholding) {
+        alert(
+          `Payment sent!\nContractor: ${netPaymentAmount} SATS\nContractor Tax Withholding: ${taxWithholdingAmount} SATS sent to ${taxLightningAddress}`,
         );
       } else {
         alert("Payment sent!");
@@ -3301,11 +3358,16 @@ function renderBatchTable(data) {
     tr.style.transition = "all 0.15s ease";
     tr.setAttribute("data-row-index", index);
     tr.title = "Click to edit this payment";
+    // Generate default note if not present
+    const defaultNote = `${row["Name"] || "Unknown"} - ${row["Date"] || "No Date"}`;
+    const note = row["Note"] || defaultNote;
+
     tr.innerHTML = `
             <td>${row["Date"] || ""}</td>
             <td>${row["Name"] || ""}</td>
             <td>${row["Amount(sats)"] || ""}</td>
             <td>${row["Lightning-Address"] || ""}</td>
+            <td>${note}</td>
             <td>${row["Status"] || "Pending"}</td>
         `;
 
@@ -3355,6 +3417,10 @@ function openBatchEditModal(rowIndex) {
   document.getElementById("batchEditLightningAddress").value =
     row["Lightning-Address"] || "";
 
+  // Populate note field with existing note or generate default
+  const defaultNote = `${row["Name"] || "Unknown"} - ${row["Date"] || "No Date"}`;
+  document.getElementById("batchEditNote").value = row["Note"] || defaultNote;
+
   // Store the row index for later use
   modal.setAttribute("data-editing-row", rowIndex);
 
@@ -3395,6 +3461,7 @@ function handleBatchEditSubmit(event) {
   const name = formData.get("name").trim();
   const amount = formData.get("amount");
   const lightningAddress = formData.get("lightningAddress").trim();
+  const note = formData.get("note").trim();
 
   // Validation
   if (!date || !name || !amount || !lightningAddress) {
@@ -3418,6 +3485,7 @@ function handleBatchEditSubmit(event) {
     Name: name,
     "Amount(sats)": amount,
     "Lightning-Address": lightningAddress,
+    Note: note || `${name} - ${date}`,
     Status: batchPaymentData[rowIndex]["Status"] || "Pending",
   };
 
@@ -4247,6 +4315,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  // Setup tax calculation listeners
+  setupTaxCalculationListeners();
+
   // Clear batch table button
   const clearBatchBtn = document.getElementById("clearBatchBtn");
   if (clearBatchBtn) {
@@ -4305,6 +4376,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           name: cells[1].innerText.trim(),
           amount: cells[2].innerText.trim(),
           lightningAddress: cells[3].innerText.trim(),
+          note: cells[4].innerText.trim(),
         };
         batchData.push(rowData);
       });
@@ -4346,15 +4418,26 @@ async function fetchTaxLightningAddress() {
 }
 
 // Tax Withholding Functions
-function toggleTaxWithholding() {
-  const checkbox = document.getElementById("applyTaxWithholding");
-  const taxSection = document.getElementById("taxDeductionSection");
+function toggleEmployeeTaxWithholding() {
+  const checkbox = document.getElementById("applyEmployeeTaxWithholding");
+  const taxSection = document.getElementById("employeeTaxDeductionSection");
   const recipientType = document.getElementById("recipientType").value;
 
-  // Only show tax withholding for employees
+  // Only show employee tax withholding for employees
   if (checkbox.checked && recipientType === "employee") {
     taxSection.style.display = "block";
-    calculateTaxWithholding();
+    calculateEmployeeTaxWithholding();
+    // Ensure mutual exclusion - uncheck contractor tax if employee tax is selected
+    const contractorCheckbox = document.getElementById(
+      "applyContractorTaxWithholding",
+    );
+    const contractorSection = document.getElementById(
+      "contractorTaxDeductionSection",
+    );
+    if (contractorCheckbox.checked) {
+      contractorCheckbox.checked = false;
+      contractorSection.style.display = "none";
+    }
   } else {
     taxSection.style.display = "none";
     // Uncheck if not employee
@@ -4364,7 +4447,36 @@ function toggleTaxWithholding() {
   }
 }
 
-function calculateTaxWithholding() {
+function toggleContractorTaxWithholding() {
+  const checkbox = document.getElementById("applyContractorTaxWithholding");
+  const taxSection = document.getElementById("contractorTaxDeductionSection");
+  const recipientType = document.getElementById("recipientType").value;
+
+  // Only show contractor tax withholding for employees (contractors are also paid as employees in system)
+  if (checkbox.checked && recipientType === "employee") {
+    taxSection.style.display = "block";
+    calculateContractorTaxWithholding();
+    // Ensure mutual exclusion - uncheck employee tax if contractor tax is selected
+    const employeeCheckbox = document.getElementById(
+      "applyEmployeeTaxWithholding",
+    );
+    const employeeSection = document.getElementById(
+      "employeeTaxDeductionSection",
+    );
+    if (employeeCheckbox.checked) {
+      employeeCheckbox.checked = false;
+      employeeSection.style.display = "none";
+    }
+  } else {
+    taxSection.style.display = "none";
+    // Uncheck if not employee
+    if (recipientType !== "employee") {
+      checkbox.checked = false;
+    }
+  }
+}
+
+function calculateEmployeeTaxWithholding() {
   const amountInput = document.getElementById("paymentAmount");
   const amount = parseFloat(amountInput.value) || 0;
 
@@ -4397,23 +4509,58 @@ function calculateTaxWithholding() {
     netPayment.toLocaleString();
 }
 
+function calculateContractorTaxWithholding() {
+  const amountInput = document.getElementById("paymentAmount");
+  const amount = parseFloat(amountInput.value) || 0;
+
+  // Contractor tax withholding (10%)
+  const contractorTax = Math.floor(amount * 0.1);
+
+  // Net payment to contractor (90%)
+  const netPayment = amount - contractorTax;
+
+  // Update display
+  document.getElementById("contractorTaxAmount").textContent =
+    contractorTax.toLocaleString() + " SATS";
+  document.getElementById("contractorNetPayment").textContent =
+    netPayment.toLocaleString() + " SATS";
+  document.getElementById("contractorTotalTax").textContent =
+    contractorTax.toLocaleString() + " SATS";
+}
+
 // Update recipient type change handler
 function updateRecipientDropdown() {
   const recipientType = document.getElementById("recipientType").value;
   const recipientSelect = document.getElementById("recipientSelect");
-  const taxCheckbox = document.getElementById("applyTaxWithholding");
-  const taxSection = document.getElementById("taxDeductionSection");
-  const taxCheckboxContainer = document.getElementById(
+  const employeeTaxCheckbox = document.getElementById(
+    "applyEmployeeTaxWithholding",
+  );
+  const contractorTaxCheckbox = document.getElementById(
+    "applyContractorTaxWithholding",
+  );
+  const employeeTaxSection = document.getElementById(
+    "employeeTaxDeductionSection",
+  );
+  const contractorTaxSection = document.getElementById(
+    "contractorTaxDeductionSection",
+  );
+  const taxWithholdingContainer = document.getElementById(
     "taxWithholdingCheckbox",
   );
 
-  // Show/hide tax withholding checkbox based on recipient type
+  // Show/hide tax withholding checkboxes based on recipient type
   if (recipientType === "employee") {
-    taxCheckboxContainer.style.display = "block";
+    if (taxWithholdingContainer) {
+      taxWithholdingContainer.style.display = "block";
+    }
   } else {
-    taxCheckboxContainer.style.display = "none";
-    taxCheckbox.checked = false;
-    taxSection.style.display = "none";
+    if (taxWithholdingContainer) {
+      taxWithholdingContainer.style.display = "none";
+    }
+    if (employeeTaxCheckbox) employeeTaxCheckbox.checked = false;
+    if (contractorTaxCheckbox) contractorTaxCheckbox.checked = false;
+    if (employeeTaxSection) employeeTaxSection.style.display = "none";
+    if (contractorTaxSection) contractorTaxSection.style.display = "none";
   }
 
   // Clear the recipient dropdown
@@ -4439,5 +4586,28 @@ function updateRecipientDropdown() {
         recipientSelect.appendChild(option);
       });
     }
+  }
+}
+
+// Add event listeners for payment amount changes to recalculate tax
+function setupTaxCalculationListeners() {
+  const paymentAmountInput = document.getElementById("paymentAmount");
+  if (paymentAmountInput) {
+    paymentAmountInput.addEventListener("input", () => {
+      const employeeTaxCheckbox = document.getElementById(
+        "applyEmployeeTaxWithholding",
+      );
+      const contractorTaxCheckbox = document.getElementById(
+        "applyContractorTaxWithholding",
+      );
+
+      if (employeeTaxCheckbox && employeeTaxCheckbox.checked) {
+        calculateEmployeeTaxWithholding();
+      }
+
+      if (contractorTaxCheckbox && contractorTaxCheckbox.checked) {
+        calculateContractorTaxWithholding();
+      }
+    });
   }
 }
