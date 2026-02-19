@@ -35,18 +35,9 @@ function ask(question) {
 }
 
 function askHidden(question) {
-  return new Promise((resolve) => {
-    // Suppress readline's echo by swallowing output writes during input
-    const origWrite = rl.output.write.bind(rl.output);
-    rl.output.write = () => true;
-
-    rl.question(question, (answer) => {
-      // Restore output and print a newline in place of the suppressed echo
-      rl.output.write = origWrite;
-      process.stdout.write("\n");
-      resolve(answer.trim());
-    });
-  });
+  // Plain input — setup runs once locally so visible input is acceptable
+  // and avoids terminal compatibility issues across Mac, Linux, and Windows
+  return ask(question + " (input visible)");
 }
 
 function isValidEmail(email) {
