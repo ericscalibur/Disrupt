@@ -370,6 +370,7 @@ async function login() {
     }
 
     currentUser = profile.user;
+    currentUserRole = currentUser.role;
 
     // Now that token and user are ready, load protected data in sequence
     await populateDepartmentsList();
@@ -3977,23 +3978,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("addDepartmentBtn").onclick = async function () {
-    const dep = prompt("Enter new department name:");
-    if (dep) {
-      if (!token) {
-        alert("You must be logged in to add a department.");
-        return;
-      }
-
-      await authFetch(`${API_BASE}/departments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ department: dep }),
-      });
-
-      await loadDepartments();
-    }
+    await addDepartment();
   };
 
   // Add Member button

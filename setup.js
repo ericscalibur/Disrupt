@@ -67,7 +67,7 @@ function generateSecret() {
   return crypto.randomBytes(64).toString("hex");
 }
 
-function writeEnvValues({ blinkApiKey }) {
+function writeEnvValues({ blinkApiKey, taxLightningAddress }) {
   const accessSecret = generateSecret();
   const refreshSecret = generateSecret();
 
@@ -119,6 +119,17 @@ function writeEnvValues({ blinkApiKey }) {
     env = env.replace(/^BLINK_API_KEY=.*$/m, `BLINK_API_KEY=${blinkApiKey}`);
     if (!/^BLINK_API_KEY=/m.test(env)) {
       env += `\nBLINK_API_KEY=${blinkApiKey}`;
+    }
+  }
+
+  // Replace TAX_LIGHTNING_ADDRESS
+  if (taxLightningAddress) {
+    env = env.replace(
+      /^TAX_LIGHTNING_ADDRESS=.*$/m,
+      `TAX_LIGHTNING_ADDRESS=${taxLightningAddress}`,
+    );
+    if (!/^TAX_LIGHTNING_ADDRESS=/m.test(env)) {
+      env += `\nTAX_LIGHTNING_ADDRESS=${taxLightningAddress}`;
     }
   }
 
@@ -199,10 +210,13 @@ async function main() {
     break;
   }
 
-  // ── Collect lightning address (optional) ──────────────────────────────────
+  // ── Collect tax lightning address (optional) ──────────────────────────────
 
-  const lightningAddress = await ask(
-    "  Lightning address (optional, press Enter to skip): ",
+  console.log("");
+  console.log("  The Tax Lightning Address is where El Salvador payroll tax");
+  console.log("  withholdings (ISSS + AFP) are automatically sent.");
+  const taxLightningAddress = await ask(
+    "  Tax Lightning Address (optional, press Enter to skip): ",
   );
 
   // ── Collect Blink API key ─────────────────────────────────────────────────
@@ -224,7 +238,9 @@ async function main() {
   console.log(`  Name:              ${name}`);
   console.log(`  Email:             ${email}`);
   console.log(`  Password:          ${"*".repeat(password.length)}`);
-  console.log(`  Lightning address: ${lightningAddress || "(none)"}`);
+  console.log(
+    `  Tax Lightning Address: ${taxLightningAddress || "(none — add to .env later)"}`,
+  );
   console.log(
     `  Blink API key:     ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(none — add to .env later)"}`,
   );
@@ -249,14 +265,17 @@ async function main() {
 
   console.log("");
   console.log("  🔐 Generating JWT secrets and writing .env...");
-  const { accessSecret, refreshSecret } = writeEnvValues({ blinkApiKey });
+  const { accessSecret, refreshSecret } = writeEnvValues({
+    blinkApiKey,
+    taxLightningAddress,
+  });
   console.log("  ✅  .env updated");
 
   // ── Build user object ─────────────────────────────────────────────────────
 
   const id = crypto
     .createHash("sha256")
-    .update(`${name}|${email}|Admin|${department}|${lightningAddress}`)
+    .update(`${name}|${email}|Admin|${department}`)
     .digest("hex");
 
   const adminUser = {
@@ -266,7 +285,7 @@ async function main() {
     password,
     role: "Admin",
     department,
-    lightningAddress: lightningAddress || "",
+    lightningAddress: "",
     dateAdded: new Date().toISOString().split("T")[0],
   };
 
@@ -299,7 +318,10 @@ async function main() {
   console.log(`    • ACCESS_TOKEN_SECRET  = ${accessSecret.slice(0, 12)}...`);
   console.log(`    • REFRESH_TOKEN_SECRET = ${refreshSecret.slice(0, 12)}...`);
   console.log(
-    `    • BLINK_API_KEY        = ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(not set — add manually)"}`,
+    `    • BLINK_API_KEY         = ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(not set — add manually)"}`,
+  );
+  console.log(
+    `    • TAX_LIGHTNING_ADDRESS = ${taxLightningAddress || "(not set — add manually)"}`,
   );
   console.log("");
   console.log("  Data files initialized:");
@@ -310,14 +332,16 @@ async function main() {
   console.log(`    • ${path.relative(process.cwd(), DEPARTMENTS_FILE)}`);
   console.log("");
   console.log("  Next steps:");
-  if (!blinkApiKey) {
-    console.log("    1. Add your BLINK_API_KEY to .env");
-    console.log("    2. Optionally set TAX_LIGHTNING_ADDRESS in .env");
-    console.log("    3. Run: npm start");
-  } else {
-    console.log("    1. Optionally set TAX_LIGHTNING_ADDRESS in .env");
-    console.log("    2. Run: npm start");
-  }
+  const missingEnv = [];
+  if (!blinkApiKey) missingEnv.push("    • Add BLINK_API_KEY to .env");
+  if (!taxLightningAddress)
+    missingEnv.push("    • Optionally add TAX_LIGHTNING_ADDRESS to .env");
+  missingEnv.push(
+    "    • Optionally configure email settings in .env for password reset",
+  );
+
+  missingEnv.forEach((line, i) => console.log(`    ${i + 1}. ${line.trim()}`));
+  console.log(`    ${missingEnv.length + 1}. Run: npm start`);
   console.log(`    4. Login at http://localhost:3000`);
   console.log(`       Email:    ${email}`);
   console.log(`       Password: ${"*".repeat(password.length)}`);
