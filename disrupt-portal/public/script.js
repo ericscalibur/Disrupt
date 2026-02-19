@@ -2769,12 +2769,19 @@ function updateAccountingActionsVisibility() {
 
   switch (currentUser.role) {
     case "Admin":
+      // Show all buttons — Admin can pay directly or create drafts
+      setVisibility(newPaymentBtn, true);
+      setVisibility(payInvoiceBtn, true);
+      setVisibility(draftBtn, true);
+      btnRow.style.display = "flex";
+      break;
+
     case "Manager":
       // Show payment buttons, hide draft button
       setVisibility(newPaymentBtn, true);
       setVisibility(payInvoiceBtn, true);
       setVisibility(draftBtn, false);
-      btnRow.style.display = "flex"; // Show button row
+      btnRow.style.display = "flex";
       break;
 
     case "Employee":
@@ -4194,7 +4201,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           alert("Draft payment submitted successfully!");
           document.getElementById("draftPaymentForm").reset();
           document.getElementById("draftPaymentModal").style.display = "none";
-          await loadEmployeeDrafts();
+          // Admin sees the pending drafts table, Employee sees their own drafts
+          if (currentUser.role === "Admin") {
+            await loadPendingDrafts();
+          } else {
+            await loadEmployeeDrafts();
+          }
         } else {
           alert(
             "Failed to submit draft: " + (result.message || "Unknown error"),
