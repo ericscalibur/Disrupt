@@ -1311,6 +1311,7 @@ app.get("/api/transactions", async (req, res) => {
     const mergedTxns = blinkTxns.map((blinkTxn) => {
       const local = localTxns.find((t) => t.id === blinkTxn.id);
 
+      // Resolve amount/currency from Blink (authoritative settlement values)
       let amount, currency;
       if (blinkTxn.settlementCurrency === "BTC") {
         amount = blinkTxn.settlementAmount; // sats
@@ -1323,29 +1324,41 @@ app.get("/api/transactions", async (req, res) => {
         currency = blinkTxn.settlementCurrency || "";
       }
 
+      if (local) {
+        // Local record exists — use it as the base so all rich fields
+        // (invoice, lightningAddress, paymentHash, preImage, status, etc.)
+        // are preserved. Only override amount/currency/date from Blink
+        // since those are the authoritative settled values.
+        return {
+          ...local,
+          receiver: getReceiver(local),
+          amount,
+          currency,
+          date: blinkTxn.createdAt || local.date,
+        };
+      }
+
+      // No local record — build minimal object from Blink data only
       return {
         id: blinkTxn.id,
         date: blinkTxn.createdAt,
-        receiver: local ? getReceiver(local) : blinkTxn.memo || "Unknown",
+        receiver: blinkTxn.memo || "Unknown",
         amount,
         currency,
         note: blinkTxn.memo || "",
         type: "lightning",
+        status: blinkTxn.status,
+        direction: blinkTxn.direction,
       };
     });
 
-    // Include local transactions not in Blink
+    // Include local transactions not in Blink — keep all fields as-is
     const blinkTxnIds = new Set(blinkTxns.map((txn) => txn.id));
     const uniqueLocalTxns = localTxns.filter((txn) => !blinkTxnIds.has(txn.id));
 
     const formattedLocalTxns = uniqueLocalTxns.map((txn) => ({
-      id: txn.id,
-      date: txn.date,
+      ...txn,
       receiver: getReceiver(txn),
-      amount: txn.amount,
-      currency: txn.currency,
-      note: txn.note || "",
-      type: txn.type || "local",
     }));
 
     const allTxns = [...mergedTxns, ...formattedLocalTxns];
