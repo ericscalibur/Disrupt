@@ -35,12 +35,12 @@ npm run setup
 You will be prompted for:
 - Your full name
 - Email address
-- Password (hidden input)
-- Lightning address (optional)
+- Password
+- Lightning address for Tax withholding
 - Blink API key (optional — can be added to `.env` later)
 
 The setup wizard will automatically:
-- Create and populate your `.env` file from `.env.example`
+- Create and populate your `.env` file
 - Generate secure JWT secrets and write them to `.env`
 - Write your Blink API key to `.env`
 - Initialize all data files with a clean state
