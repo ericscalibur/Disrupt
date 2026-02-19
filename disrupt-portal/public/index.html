@@ -888,21 +888,22 @@
                                 </button>
                             </div>
                             <form id="draftPaymentForm">
-                                <!-- Draft Title added here -->
                                 <div class="form-group">
-                                    <label for="draftPaymentTitle"
-                                        >Draft Title
-                                        <span style="color: #e74c3c"
-                                            >*</span
-                                        ></label
+                                    <label for="draftRecipientType"
+                                        >Recipient Type</label
                                     >
-                                    <input
-                                        type="text"
-                                        id="draftPaymentTitle"
-                                        name="draftPaymentTitle"
-                                        placeholder="Enter draft title"
+                                    <select
+                                        id="draftRecipientType"
                                         required
-                                    />
+                                        onchange="updateDraftRecipientDropdown()"
+                                    >
+                                        <option value="employee">
+                                            Employee
+                                        </option>
+                                        <option value="supplier">
+                                            Supplier
+                                        </option>
+                                    </select>
                                 </div>
 
                                 <div class="form-group">
@@ -915,7 +916,11 @@
                                         onchange="populateDraftRecipientDetails()"
                                     ></select>
                                 </div>
-                                <div class="form-group">
+                                <div
+                                    class="form-group"
+                                    id="draftContactField"
+                                    style="display: none"
+                                >
                                     <label>Contact Name</label>
                                     <input
                                         type="text"
@@ -1042,9 +1047,24 @@
                                 Drafts Pending:
                                 <span id="pendingDraftsCount">0</span>
                             </div>
-                            <button id="togglePendingFilterBtn">
-                                Show All
-                            </button>
+                            <div
+                                style="
+                                    display: flex;
+                                    gap: 10px;
+                                    align-items: center;
+                                "
+                            >
+                                <button
+                                    id="payAllDraftsBtn"
+                                    style="display: none"
+                                    onclick="handlePayAll()"
+                                >
+                                    Pay All
+                                </button>
+                                <button id="togglePendingFilterBtn">
+                                    Show All
+                                </button>
+                            </div>
                         </div>
 
                         <table
@@ -1053,6 +1073,7 @@
                         >
                             <thead>
                                 <tr>
+                                    <th class="txn-checkbox-col"></th>
                                     <th id="th-date">Date</th>
                                     <th id="th-recipient">Receiver</th>
                                     <th id="th-note">Note</th>

@@ -227,6 +227,23 @@ async function getBlinkTransactions() {
   );
 }
 
+// Fetch current BTC/USD rate from CoinGecko — returns a number or null
+async function getBtcUsdRate() {
+  try {
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+    );
+    const result = await response.json();
+    if (result.bitcoin && typeof result.bitcoin.usd === "number") {
+      return result.bitcoin.usd;
+    }
+    return null;
+  } catch (err) {
+    console.warn("Could not fetch BTC/USD rate:", err.message);
+    return null;
+  }
+}
+
 // Middleware to authenticate JWT and attach user info to req.user
 function authenticateToken(req, res, next) {
   try {
@@ -945,13 +962,11 @@ app.post("/api/drafts", authenticateToken, async (req, res) => {
       note,
     } = req.body;
 
-    // Basic validation
-    if (!title || typeof title !== "string" || title.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Draft title is required and must be a non-empty string.",
-      });
-    }
+    // Auto-generate title from contact/company if not provided
+    const resolvedTitle =
+      title && title.trim()
+        ? title.trim()
+        : `Payment to ${(contact || company || "Recipient").trim()}`;
 
     if (
       !recipientEmail ||
@@ -1008,7 +1023,7 @@ app.post("/api/drafts", authenticateToken, async (req, res) => {
     // Create new draft object
     const newDraft = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-      title: title.trim(),
+      title: resolvedTitle,
       recipientEmail: recipientEmail.trim(),
       company: company.trim(),
       contact: contact.trim(),
@@ -1207,6 +1222,9 @@ app.post(
         if (err.code !== "ENOENT") throw err;
       }
 
+      // Capture BTC/USD rate at time of approval
+      const btcUsdRate = await getBtcUsdRate();
+
       const transaction = {
         id: paymentHash || Date.now(),
         date: new Date().toISOString(),
@@ -1224,6 +1242,7 @@ app.post(
         approvedStatus: draft.status,
         approvedAt: draft.approvedAt,
         approvedBy: draft.approvedBy,
+        btcUsdRate: btcUsdRate,
       };
 
       transactions.unshift(transaction);
@@ -1449,6 +1468,9 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
       });
     }
 
+    // Capture BTC/USD rate at time of payment
+    const btcUsdRate = await getBtcUsdRate();
+
     // Prepare new transaction object
     const newTxn = {
       id: result.payment.id,
@@ -1460,6 +1482,7 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
       type: "lightning",
       direction: "SENT",
       status: result.payment.status,
+      btcUsdRate: btcUsdRate,
     };
 
     // Read existing transactions
@@ -1545,11 +1568,15 @@ app.post("/api/transactions/local", authenticateToken, async (req, res) => {
       }
     }
 
+    // Capture BTC/USD rate at time of save
+    const btcUsdRate = await getBtcUsdRate();
+
     // Add new transaction with ID and timestamp
     const transactionWithId = {
       id: `txn_${Date.now()}`,
       date: new Date().toISOString().split("T")[0],
       ...newTransaction,
+      btcUsdRate: newTransaction.btcUsdRate ?? btcUsdRate,
     };
 
     // Add to beginning of array (newest first)
@@ -1811,6 +1838,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       paymentAmount,
       paymentNote,
       taxWithholding,
+      btcUsdRate: clientBtcUsdRate,
     } = req.body;
 
     // Validate required fields
@@ -2062,6 +2090,12 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       }
     }
 
+    // Use client-provided rate if available, otherwise fetch from CoinGecko
+    const btcUsdRate =
+      typeof clientBtcUsdRate === "number" && clientBtcUsdRate > 0
+        ? clientBtcUsdRate
+        : await getBtcUsdRate();
+
     // Read existing transactions
     let transactions = [];
     try {
@@ -2095,6 +2129,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       status: (employeePaymentResult?.status || "SUCCESS").toUpperCase(),
       paymentHash: employeePaymentHash,
       preImage: await fetchPreImageFromBlink(employeePaymentHash),
+      btcUsdRate: btcUsdRate,
       taxWithholding: isTaxWithholding
         ? {
             originalAmount: taxWithholding.originalAmount,
@@ -2126,6 +2161,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
         paymentHash: taxPaymentHash,
         relatedEmployeePayment: employeePaymentHash,
         taxType: taxWithholding.type || "employee",
+        btcUsdRate: btcUsdRate,
       };
     }
 
@@ -2184,7 +2220,13 @@ app.get("/api/tax-address", authenticateToken, (req, res) => {
 
 // PAY INVOICE
 app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
-  const { invoice, note, receiverName, lightningAddress } = req.body;
+  const {
+    invoice,
+    note,
+    receiverName,
+    lightningAddress,
+    btcUsdRate: clientBtcUsdRate,
+  } = req.body;
 
   if (!invoice) {
     return res
@@ -2308,7 +2350,13 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
     });
   }
 
-  // Step 4: Read existing transactions
+  // Step 4: Use client-provided rate if available, otherwise fetch from CoinGecko
+  const btcUsdRate =
+    typeof clientBtcUsdRate === "number" && clientBtcUsdRate > 0
+      ? clientBtcUsdRate
+      : await getBtcUsdRate();
+
+  // Step 5: Read existing transactions
   let transactions = [];
   try {
     const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
@@ -2337,6 +2385,7 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
     status: paymentResult?.status || "complete",
     paymentHash,
     preImage: await fetchPreImageFromBlink(paymentHash),
+    btcUsdRate: btcUsdRate,
   };
 
   transactions.unshift(transaction);

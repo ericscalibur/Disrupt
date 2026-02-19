@@ -692,6 +692,37 @@ input:checked + .slider:before {
     background-color: #2980b9;
 }
 
+#payAllDraftsBtn {
+    min-width: 120px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+}
+
+#payAllDraftsBtn:hover {
+    background-color: #27ae60;
+}
+
+#payAllDraftsBtn:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+}
+
+.volcano-mode #payAllDraftsBtn {
+    background: linear-gradient(90deg, #2ecc71 0%, #27ae60 100%);
+    color: #fff;
+}
+
+.volcano-mode #payAllDraftsBtn:hover {
+    background: linear-gradient(90deg, #27ae60 0%, #1e8449 100%);
+}
+
 /* Team Page Styles */
 .team-header {
     display: flex;

@@ -489,8 +489,11 @@ function renderPendingDraftsTable(drafts, showActions = true) {
   const tbody = document.querySelector("#pendingDraftsTable tbody");
   tbody.innerHTML = "";
 
+  // Reset Pay All button whenever the table re-renders
+  updatePayAllButton();
+
   if (!drafts || drafts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-message">No drafts found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-message">No drafts found.</td></tr>`;
     return;
   }
 
@@ -503,7 +506,9 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     let actionCell = "";
     let statusText = "";
     let statusClass = "";
-    if (draft.status === "pending") {
+    const isPending = draft.status === "pending";
+
+    if (isPending) {
       if (showActions) {
         actionCell = `
           <div class="action-buttons">
@@ -541,7 +546,24 @@ function renderPendingDraftsTable(drafts, showActions = true) {
         : "(No Contact)";
 
     const row = document.createElement("tr");
-    row.innerHTML = `
+    row.setAttribute("data-draft-id", draft.id);
+
+    // Checkbox cell — only selectable for pending drafts
+    const checkboxCell = document.createElement("td");
+    checkboxCell.classList.add("txn-checkbox-col");
+    if (isPending && showActions) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.classList.add("draft-select-checkbox");
+      checkbox.setAttribute("data-draft-id", draft.id);
+      checkbox.addEventListener("change", updatePayAllButton);
+      checkboxCell.appendChild(checkbox);
+    }
+    row.appendChild(checkboxCell);
+
+    row.insertAdjacentHTML(
+      "beforeend",
+      `
       <td>${new Date(draft.dateCreated).toLocaleString()}</td>
       <td>
         <div><strong>Company:</strong> ${companyName}</div>
@@ -550,17 +572,95 @@ function renderPendingDraftsTable(drafts, showActions = true) {
       <td>${draft.note || draft.description || ""}</td>
       <td class="amount-cell">${draft.amount}</td>
       <td>${actionCell}</td>
-    `;
+    `,
+    );
+
     tbody.appendChild(row);
   });
 
-  // Attach event listeners to buttons AFTER rendering
+  // Attach event listeners to approve/decline buttons AFTER rendering
   tbody.querySelectorAll(".approve-btn").forEach((btn) => {
     btn.addEventListener("click", handleDraftApproval);
   });
   tbody.querySelectorAll(".decline-btn").forEach((btn) => {
     btn.addEventListener("click", handleDraftDecline);
   });
+}
+
+// Show/hide Pay All button and update its count label
+function updatePayAllButton() {
+  const checked = document.querySelectorAll(".draft-select-checkbox:checked");
+  const payAllBtn = document.getElementById("payAllDraftsBtn");
+  if (!payAllBtn) return;
+  if (checked.length >= 1) {
+    payAllBtn.style.display = "inline-block";
+    payAllBtn.textContent = `Pay All (${checked.length})`;
+  } else {
+    payAllBtn.style.display = "none";
+  }
+}
+
+// Pay all checked pending drafts sequentially
+async function handlePayAll() {
+  const checked = Array.from(
+    document.querySelectorAll(".draft-select-checkbox:checked"),
+  );
+  if (checked.length === 0) return;
+
+  const draftIds = checked.map((cb) => cb.getAttribute("data-draft-id"));
+  const plural = draftIds.length > 1 ? "s" : "";
+
+  if (!confirm(`Pay ${draftIds.length} selected draft${plural}?`)) return;
+
+  const payAllBtn = document.getElementById("payAllDraftsBtn");
+  if (payAllBtn) {
+    payAllBtn.disabled = true;
+    payAllBtn.textContent = `Processing (0 / ${draftIds.length})…`;
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+  const errors = [];
+
+  for (let i = 0; i < draftIds.length; i++) {
+    const draftId = draftIds[i];
+    if (payAllBtn) {
+      payAllBtn.textContent = `Processing (${i + 1} / ${draftIds.length})…`;
+    }
+    try {
+      const response = await authFetch(`${API_BASE}/drafts/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        successCount++;
+      } else {
+        failCount++;
+        errors.push(`• ${result.message || "Unknown error"}`);
+      }
+    } catch (err) {
+      failCount++;
+      errors.push(`• ${err.message}`);
+    }
+  }
+
+  if (payAllBtn) {
+    payAllBtn.disabled = false;
+  }
+
+  let message = `${successCount} payment${successCount !== 1 ? "s" : ""} sent successfully.`;
+  if (failCount > 0) {
+    message += `\n${failCount} failed:\n${errors.join("\n")}`;
+  }
+  alert(message);
+
+  await loadPendingDrafts();
+  if (successCount > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await loadTransactions();
+  }
 }
 
 function showSettingsPage() {
@@ -637,58 +737,91 @@ async function loadAccountingPage() {
 }
 
 // LOADS SUPPLIERS IN DROPDOWN
-async function populateDraftRecipientDropdown() {
+// Called when Recipient Type dropdown changes — repopulates the Recipient select
+function updateDraftRecipientDropdown() {
+  const type = document.getElementById("draftRecipientType").value;
   const select = document.getElementById("draftRecipientSelect");
-  select.innerHTML = '<option value="">Select supplier...</option>';
+  const contactField = document.getElementById("draftContactField");
 
-  try {
-    const response = await authFetch(`${API_BASE}/suppliers`);
+  select.innerHTML = "";
 
-    if (!response.ok) {
-      throw new Error(`Failed to load suppliers: ${response.status}`);
-    }
+  if (type === "employee") {
+    // Hide contact field — employee name IS the contact
+    if (contactField) contactField.style.display = "none";
 
-    const data = await response.json();
-    suppliersList = data.suppliers || [];
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select employee...";
+    select.appendChild(placeholder);
 
-    suppliersList.forEach((supplier) => {
+    (employeesList || []).forEach((emp) => {
       const option = document.createElement("option");
-      option.value = supplier.id;
-      option.textContent = supplier.company; // Use company name for dropdown
+      option.value = emp.id || emp.email;
+      option.textContent = emp.name || emp.email;
       select.appendChild(option);
     });
+  } else {
+    // Show contact field for suppliers
+    if (contactField) contactField.style.display = "block";
 
-    if (suppliersList.length > 0) {
-      select.value = suppliersList[0].id;
-      populateDraftRecipientDetails(); // Populate contact details for first supplier
-    } else {
-      // Clear contact details fields if no suppliers
-      document.getElementById("draftContactName").value = "";
-      document.getElementById("draftRecipientEmail").value = "";
-      document.getElementById("draftRecipientLightningAddress").value = "";
-    }
-  } catch (err) {
-    console.error("Failed to load suppliers:", err);
-    select.innerHTML = '<option value="">Unable to load suppliers</option>';
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select supplier...";
+    select.appendChild(placeholder);
+
+    (suppliersList || []).forEach((supplier) => {
+      const option = document.createElement("option");
+      option.value = supplier.id;
+      option.textContent = supplier.company;
+      select.appendChild(option);
+    });
+  }
+
+  // Auto-select first real item and populate details
+  if (select.options.length > 1) {
+    select.selectedIndex = 1;
+    populateDraftRecipientDetails();
+  } else {
+    document.getElementById("draftContactName").value = "";
+    document.getElementById("draftRecipientEmail").value = "";
+    document.getElementById("draftRecipientLightningAddress").value = "";
   }
 }
 
 // LOADS REMAINING DATA FIELDS AFTER RECIPIENT SELECTED
 function populateDraftRecipientDetails() {
+  const type = document.getElementById("draftRecipientType").value;
   const select = document.getElementById("draftRecipientSelect");
-  const selectedSupplierId = select.value;
+  const selectedId = select.value;
 
-  const supplier = suppliersList.find((s) => s.id === selectedSupplierId);
-
-  if (supplier) {
-    document.getElementById("draftContactName").value = supplier.contact || "";
-    document.getElementById("draftRecipientEmail").value = supplier.email || "";
-    document.getElementById("draftRecipientLightningAddress").value =
-      supplier.lightningAddress || "";
-  } else {
+  if (!selectedId) {
     document.getElementById("draftContactName").value = "";
     document.getElementById("draftRecipientEmail").value = "";
     document.getElementById("draftRecipientLightningAddress").value = "";
+    return;
+  }
+
+  if (type === "employee") {
+    const employee = (employeesList || []).find(
+      (e) => (e.id || e.email) === selectedId,
+    );
+    if (employee) {
+      document.getElementById("draftContactName").value = employee.name || "";
+      document.getElementById("draftRecipientEmail").value =
+        employee.email || "";
+      document.getElementById("draftRecipientLightningAddress").value =
+        employee.lightningAddress || "";
+    }
+  } else {
+    const supplier = (suppliersList || []).find((s) => s.id === selectedId);
+    if (supplier) {
+      document.getElementById("draftContactName").value =
+        supplier.contact || "";
+      document.getElementById("draftRecipientEmail").value =
+        supplier.email || "";
+      document.getElementById("draftRecipientLightningAddress").value =
+        supplier.lightningAddress || "";
+    }
   }
 }
 
@@ -805,6 +938,7 @@ async function showContent(contentId, event) {
         break;
       case "suppliers":
         await loadSuppliers();
+        updateSupplierActionsVisibility();
         break;
       case "welcome":
         // No data to load for welcome page
@@ -821,31 +955,6 @@ async function showContent(contentId, event) {
 }
 
 // Function to format and show transaction details in modal
-function showTransactionDetails(txn) {
-  const detailsContainer = document.getElementById("transactionDetails");
-  if (!detailsContainer) {
-    console.error("Details container element not found");
-    return;
-  }
-
-  const details = `
-<span class="label">Receiver:</span> <span class="data">${cleanReceiverName(txn.receiver)}</span>
-<span class="label">Amount:</span> <span class="data">${txn.amount} ${txn.currency}</span>
-<span class="label">Date:</span> <span class="data">${new Date(txn.date).toLocaleString()}</span>
-<span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span>
-<span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span>
-<span class="label">Approved Status:</span> <span class="data">${txn.approvedStatus || "N/A"}</span>
-<span class="label">Approved At:</span> <span class="data">${txn.approvedAt ? new Date(txn.approvedAt).toLocaleString() : "N/A"}</span>
-<span class="label">Approved By:</span> <span class="data">${txn.approvedBy || "N/A"}</span>
-<span class="label">Lightning Address:</span> <span class="data">${txn.lightningAddress || "N/A"}</span>
-<span class="label">Invoice:</span> <span class="data">${txn.invoice || "N/A"}</span>
-<span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span>
-  `.trim();
-
-  detailsContainer.innerHTML = details;
-  document.getElementById("transactionModal").style.display = "flex";
-}
-
 // Attach click listeners to each team member row
 function setupTeamTableClicks(users) {
   document.querySelectorAll("#teamTable tbody tr").forEach((row) => {
@@ -945,9 +1054,33 @@ function setupTransactionRowClicks(transactions) {
     const detailsContainer = document.getElementById("transactionDetails");
     if (!detailsContainer) return;
 
+    let usdLine = "";
+    if (txn.btcUsdRate && txn.amount) {
+      const usdValue = (Number(txn.amount) / 100_000_000) * txn.btcUsdRate;
+      const formattedUsd = usdValue.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+      });
+      const formattedRate = txn.btcUsdRate.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      usdLine = `
+      <span class="label">USD Value:</span> <span class="data">${formattedUsd}</span><br>
+      <span class="label">BTC/USD Rate:</span> <span class="data">${formattedRate} <span style="opacity:0.6;font-size:0.85em">(at time of payment)</span></span><br>`;
+    } else {
+      usdLine = `
+      <span class="label">USD Value:</span> <span class="data">N/A</span><br>
+      <span class="label">BTC/USD Rate:</span> <span class="data">N/A</span><br>`;
+    }
+
     const details = `
       <span class="label">Receiver:</span> <span class="data">${cleanReceiverName(txn.receiver) || "N/A"}</span><br>
-      <span class="label">Amount:</span> <span class="data">${txn.amount || "N/A"} ${txn.currency || "SATS"}</span><br>
+      <span class="label">Amount:</span> <span class="data">${txn.amount || "N/A"} ${txn.currency || "SATS"}</span><br>${usdLine}
       <span class="label">Date:</span> <span class="data">${txn.date ? new Date(txn.date).toLocaleString() : "N/A"}</span><br>
       <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span><br>
       <span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span><br>
@@ -2246,6 +2379,7 @@ async function submitNewPayment(event) {
     lightningAddress,
     paymentAmount: netPaymentAmount, // Send net amount to employee
     paymentNote,
+    btcUsdRate: btcToUsdRate || null,
     taxWithholding: {
       applied: isEmployeeTaxWithholding || isContractorTaxWithholding,
       type: taxType,
@@ -2329,7 +2463,7 @@ async function submitPayInvoice(event) {
   }
 
   // Prepare payload
-  const payload = { invoice, note };
+  const payload = { invoice, note, btcUsdRate: btcToUsdRate || null };
 
   // Include amount if applicable
   const amountEntryDiv = document.getElementById("amountEntry");
@@ -2637,7 +2771,9 @@ async function loadTeamMembers() {
   try {
     // Determine endpoint based on user role
     const endpoint =
-      currentUser.role === "Admin" || currentUser.role === "Manager"
+      currentUser.role === "Admin" ||
+      currentUser.role === "Manager" ||
+      currentUser.role === "Bookkeeper"
         ? "/employees"
         : "/users"; // Employees use /users endpoint
 
@@ -2834,7 +2970,11 @@ function updateNavigationForRole() {
   const suppliersNav = document.getElementById("suppliersNav");
   if (!suppliersNav) return;
 
-  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+  if (
+    currentUser.role === "Admin" ||
+    currentUser.role === "Manager" ||
+    currentUser.role === "Bookkeeper"
+  ) {
     suppliersNav.style.display = "block";
   } else {
     suppliersNav.style.display = "none";
@@ -2888,6 +3028,21 @@ function updateTeamActionsVisibility() {
     removeBtn.classList.add("d-none");
     return;
   }
+
+  if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+    addBtn.classList.remove("d-none");
+    removeBtn.classList.remove("d-none");
+  } else {
+    addBtn.classList.add("d-none");
+    removeBtn.classList.add("d-none");
+  }
+}
+
+function updateSupplierActionsVisibility() {
+  const addBtn = document.querySelector("#suppliersContent .add-btn");
+  const removeBtn = document.querySelector("#suppliersContent .remove-btn");
+
+  if (!addBtn || !removeBtn) return;
 
   if (currentUser.role === "Admin" || currentUser.role === "Manager") {
     addBtn.classList.remove("d-none");
@@ -3178,9 +3333,16 @@ async function populateSupplierSelect() {
   }
 }
 
-function openDraftPaymentModal() {
+async function openDraftPaymentModal() {
   document.getElementById("draftPaymentModal").style.display = "flex";
-  populateDraftRecipientDropdown();
+  // Load both lists in parallel, then populate the dropdown
+  await Promise.all([
+    loadEmployeesForPaymentModal(),
+    loadSuppliersForPaymentModal(),
+  ]);
+  // Reset type to default and populate
+  document.getElementById("draftRecipientType").value = "employee";
+  updateDraftRecipientDropdown();
 }
 
 function openAddSupplierModal() {
@@ -3891,6 +4053,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tr = event.target.closest("tr");
     if (!tr) return;
 
+    // Bookkeeper and Employee can view but cannot edit suppliers
+    if (currentUser.role === "Bookkeeper" || currentUser.role === "Employee") {
+      return;
+    }
+
     const supplierId = tr.getAttribute("data-supplier-id");
 
     if (!supplierId) {
@@ -4121,14 +4288,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const draftTitle = document
-        .getElementById("draftPaymentTitle")
+      const recipientType = document.getElementById("draftRecipientType").value;
+      const selectedId = document
+        .getElementById("draftRecipientSelect")
         .value.trim();
       const recipientEmail = document
         .getElementById("draftRecipientEmail")
-        .value.trim();
-      const selectedSupplierId = document
-        .getElementById("draftRecipientSelect")
         .value.trim();
       const recipientLightningAddress = document
         .getElementById("draftRecipientLightningAddress")
@@ -4138,25 +4303,37 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
       const note = document.getElementById("draftPaymentNote").value.trim();
 
-      if (!selectedSupplierId) {
-        alert("Please select a supplier.");
+      if (!selectedId) {
+        alert(`Please select a ${recipientType}.`);
         return;
       }
 
-      const selectedSupplier = suppliersList.find(
-        (supplier) => supplier.id === selectedSupplierId,
-      );
+      let company = "";
+      let contact = "";
 
-      if (!selectedSupplier) {
-        alert("Selected supplier not found.");
-        return;
+      if (recipientType === "employee") {
+        const employee = (employeesList || []).find(
+          (e) => (e.id || e.email) === selectedId,
+        );
+        if (!employee) {
+          alert("Selected employee not found.");
+          return;
+        }
+        contact = employee.name || employee.email;
+        company = employee.department || "Employee";
+      } else {
+        const selectedSupplier = (suppliersList || []).find(
+          (s) => s.id === selectedId,
+        );
+        if (!selectedSupplier) {
+          alert("Selected supplier not found.");
+          return;
+        }
+        company = selectedSupplier.company;
+        contact = selectedSupplier.contact;
       }
-
-      const company = selectedSupplier.company;
-      const contact = selectedSupplier.contact;
 
       if (
-        !draftTitle ||
         !recipientEmail ||
         !company ||
         !contact ||
@@ -4170,7 +4347,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const draftData = {
-        title: draftTitle,
         recipientEmail,
         company,
         contact,
