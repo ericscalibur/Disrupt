@@ -1421,10 +1421,8 @@ async function loadDepartments() {
 
 // Add a new department
 async function addDepartment() {
-  const input = document.getElementById("newDepartment");
-  if (!input) return;
-  const dep = input.value.trim();
-  if (!dep) return;
+  const dep = prompt("Enter new department name:");
+  if (!dep || !dep.trim()) return;
 
   try {
     const response = await authFetch(`${API_BASE}/departments`, {
@@ -1432,7 +1430,7 @@ async function addDepartment() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ department: dep }),
+      body: JSON.stringify({ department: dep.trim() }),
     });
 
     if (!response.ok) {
@@ -1441,7 +1439,6 @@ async function addDepartment() {
       return;
     }
 
-    input.value = "";
     await loadDepartments();
     await loadRemoveDepartmentSelect();
   } catch (err) {
