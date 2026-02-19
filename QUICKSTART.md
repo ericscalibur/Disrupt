@@ -1,8 +1,10 @@
 # Quick Start Guide - Disrupt Portal
 
-Get up and running with Disrupt Portal in 5 minutes!
+Get up and running in 5 minutes!
 
-## 🚀 One-Command Setup (Recommended)
+---
+
+## 🚀 Mac / Linux — One Command
 
 ```bash
 git clone https://github.com/ericscalibur/Disrupt.git
@@ -10,99 +12,111 @@ cd Disrupt
 ./install.sh
 ```
 
-## ⚡ Manual Setup
+`install.sh` handles everything: dependencies, Admin account creation, JWT secrets, and `.env` setup.
 
-### 1. Prerequisites
-- Node.js 14+ ([download here](https://nodejs.org/))
-- Git
+---
 
-### 3. Install
+## 🪟 Windows — Manual Setup
+
+```
+git clone https://github.com/ericscalibur/Disrupt.git
+cd Disrupt
+npm install
+npm run setup
+npm start
+```
+
+---
+
+## ⚡ Mac / Linux — Manual Setup
+
+If you prefer not to use `install.sh`:
+
 ```bash
 git clone https://github.com/ericscalibur/Disrupt.git
 cd Disrupt
 npm install
-cp .env.example .env
-```
-
-### 4. Create Your Admin Account
-
-This interactive wizard creates your Admin account and initializes all data files:
-
-```bash
 npm run setup
-```
-
-You will be prompted for your name, email, password, Lightning address (optional), and department.
-
-> **Note:** Only needs to be run once. Running it again on an existing install will warn before overwriting any data.
-
-### 5. Get Blink API Key
-### 3. Generate JWT Secrets
-```bash
-npm run generate-jwt
-```
-Copy the output and replace the JWT secrets in your `.env` file.
-
-*looks like this*
-ACCESS_TOKEN_SECRET=your-64-character-hex-string-here
-REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here
-
-### 4. Get Blink API Key
-1. Sign up at [blink.sv](https://blink.sv)
-2. Get your API key from dashboard
-3. Add it to `.env`: `BLINK_API_KEY=your-key-here`
-
-### 6. Start Server
-```bash
 npm start
 ```
 
-Visit: **http://localhost:3000**
+---
+
+## 🧙 What `npm run setup` Does
+
+The interactive wizard will prompt you for:
+
+- **Full name**
+- **Email** — this is your login
+- **Password** — hidden input, min 4 characters
+- **Lightning address** — optional, can be added later
+- **Blink API key** — optional, can be added to `.env` later
+
+It automatically:
+- Creates `.env` from `.env.example`
+- Generates and writes secure JWT secrets to `.env`
+- Writes your Blink API key to `.env`
+- Creates your Admin account in `users.json`
+- Initializes all data files to a clean empty state
+
+> **Note:** Only needs to be run once. Running it again on an existing install will warn you before overwriting anything.
+
+---
 
 ## 👤 Login
 
-Use the email and password you created during `npm run setup`. Additional team members can be added by an Admin from the Team page inside the portal.
+Use the email and password you created during `npm run setup`.
 
-## 🇸🇻 Tax Withholding
+Visit: **http://localhost:3000**
 
-When paying employees, check "Apply Tax Withholding" to automatically:
-- Deduct 26.5% for El Salvador taxes (ISSS + AFP)
-- Send employee 73.5% of payment
-- Send tax portion to configured Lightning address
+Additional team members can be added by the Admin from the Team page inside the portal.
 
-## 🎯 Key Features
+---
 
-- **Lightning Payments**: Send Bitcoin payments via Lightning Network
-- **Tax Compliance**: Automatic El Salvador payroll tax calculations
-- **Team Management**: Role-based access (Admin/Manager/Employee)
-- **Supplier Management**: Track and pay suppliers
-- **Transaction History**: Complete audit trail
+## 🔧 Optional Configuration
 
-## 🔧 Configuration
+Everything critical is handled by `npm run setup`. The only thing you may want to add manually to `.env` afterwards:
 
-All settings are in `.env`:
-- `BLINK_API_KEY`: Your Blink wallet API key
-- `TAX_LIGHTNING_ADDRESS`: Where tax payments go
-- Email settings for password reset (optional)
+**Email (for password reset):**
+```env
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+```
+For Gmail, use an App Password — Google Account → Security → 2-Step Verification → App passwords.
+
+**Tax Lightning Address (for El Salvador payroll tax):**
+```env
+TAX_LIGHTNING_ADDRESS=your-tax-wallet@blink.sv
+```
+
+---
 
 ## 🐛 Troubleshooting
 
+**Setup wizard stalls or behaves oddly?**
+- Make sure you're running Node.js v14 or higher: `node -v`
+- Try running in a standard terminal (not an IDE terminal)
+
 **Server won't start?**
-- Check `.env` file exists with JWT secrets
-- Ensure port 3000 is available
+- Check `.env` exists and has `ACCESS_TOKEN_SECRET` and `REFRESH_TOKEN_SECRET` set
+- Make sure port 3000 is free
 
 **Login fails?**
-- Use exact email/password from table above
-- Clear browser cache
+- Use the exact email and password entered during `npm run setup`
+- Clear browser cache and try again
 
 **Lightning payments fail?**
-- Verify Blink API key in `.env`
-- Check wallet balance on blink.sv
-- Ensure Lightning addresses are valid
+- Verify `BLINK_API_KEY` is set correctly in `.env`
+- Check your wallet balance at blink.sv
+- Make sure Lightning addresses are valid
 
-## 📖 Need More Help?
+---
 
-See the full [README.md](README.md) for detailed documentation.
+## 📖 Full Documentation
+
+See [README.md](README.md) for complete documentation including features, tax withholding details, deployment, and security.
 
 ---
 
