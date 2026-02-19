@@ -184,8 +184,9 @@ async function main() {
 
   // ── Collect admin details ─────────────────────────────────────────────────
   console.log("  The account you create here will be the Admin.");
+  console.log("  Your department will be set to Accounting.");
   console.log(
-    "  Additional team members can be added later from inside the portal.",
+    "  Additional team members and departments can be added later from inside the portal.",
   );
   console.log("");
 
@@ -227,10 +228,7 @@ async function main() {
     "  Lightning address (optional, press Enter to skip): ",
   );
 
-  // ── Collect department ────────────────────────────────────────────────────
-
-  let department = await ask("  Department       (default: Executive): ");
-  if (!department) department = "Executive";
+  const department = "Accounting";
 
   // ── Confirm ───────────────────────────────────────────────────────────────
 
@@ -242,7 +240,9 @@ async function main() {
   console.log(`  Email:             ${email}`);
   console.log(`  Password:          ${"*".repeat(password.length)}`);
   console.log(`  Lightning address: ${lightningAddress || "(none)"}`);
-  console.log(`  Department:        ${department}`);
+  console.log(
+    `  Department:        Accounting  ← fixed, cannot be changed here`,
+  );
   console.log(`  Role:              Admin  ← fixed, cannot be changed here`);
   console.log("");
 
@@ -288,9 +288,7 @@ async function main() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  const departments = [department];
-  // Always include Executive if user chose something else
-  if (department !== "Executive") departments.push("Executive");
+  const departments = ["Accounting"];
 
   fs.writeFileSync(USERS_FILE, JSON.stringify([adminUser], null, 2));
   fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([], null, 2));
