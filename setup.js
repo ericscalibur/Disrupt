@@ -2,7 +2,7 @@
 
 /**
  * Disrupt Portal — First-Time Setup
- * Collects admin credentials, generates JWT secrets, and initializes all data files.
+ * Collects admin credentials, generates JWT secrets, collects Blink API key, and initializes all data files.
  * Run with: node setup.js  (or via: npm run setup)
  */
 
@@ -90,7 +90,8 @@ function printBanner() {
   console.log("  This wizard will:");
   console.log("    1. Create your Admin account");
   console.log("    2. Generate JWT secrets and write them to .env");
-  console.log("    3. Initialize all data files");
+  console.log("    3. Add your Blink API key to .env");
+  console.log("    4. Initialize all data files");
   printLine();
   console.log("");
 }
@@ -101,7 +102,7 @@ function generateSecret() {
   return crypto.randomBytes(64).toString("hex");
 }
 
-function writeJwtSecretsToEnv() {
+function writeEnvValues({ blinkApiKey }) {
   const accessSecret = generateSecret();
   const refreshSecret = generateSecret();
 
@@ -143,6 +144,12 @@ function writeJwtSecretsToEnv() {
   }
   if (!/^REFRESH_TOKEN_SECRET=/m.test(env)) {
     env += `\nREFRESH_TOKEN_SECRET=${refreshSecret}`;
+  }
+
+  // Replace BLINK_API_KEY
+  env = env.replace(/^BLINK_API_KEY=.*$/m, `BLINK_API_KEY=${blinkApiKey}`);
+  if (!/^BLINK_API_KEY=/m.test(env)) {
+    env += `\nBLINK_API_KEY=${blinkApiKey}`;
   }
 
   fs.writeFileSync(ENV_FILE, env);
@@ -228,6 +235,14 @@ async function main() {
     "  Lightning address (optional, press Enter to skip): ",
   );
 
+  // ── Collect Blink API key ─────────────────────────────────────────────────
+
+  console.log("");
+  console.log("  Your Blink API key can be found at https://blink.sv");
+  const blinkApiKey = await askHidden(
+    "  Blink API key    (optional, press Enter to skip): ",
+  );
+
   const department = "Accounting";
 
   // ── Confirm ───────────────────────────────────────────────────────────────
@@ -240,6 +255,9 @@ async function main() {
   console.log(`  Email:             ${email}`);
   console.log(`  Password:          ${"*".repeat(password.length)}`);
   console.log(`  Lightning address: ${lightningAddress || "(none)"}`);
+  console.log(
+    `  Blink API key:     ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(none — add to .env later)"}`,
+  );
   console.log(
     `  Department:        Accounting  ← fixed, cannot be changed here`,
   );
@@ -260,9 +278,9 @@ async function main() {
   // ── Generate JWT secrets and write to .env ────────────────────────────────
 
   console.log("");
-  console.log("  🔐 Generating JWT secrets...");
-  const { accessSecret, refreshSecret } = writeJwtSecretsToEnv();
-  console.log("  ✅  JWT secrets written to .env");
+  console.log("  🔐 Generating JWT secrets and writing .env...");
+  const { accessSecret, refreshSecret } = writeEnvValues({ blinkApiKey });
+  console.log("  ✅  .env updated");
 
   // ── Build user object ─────────────────────────────────────────────────────
 
@@ -310,6 +328,9 @@ async function main() {
   console.log("  .env updated:");
   console.log(`    • ACCESS_TOKEN_SECRET  = ${accessSecret.slice(0, 12)}...`);
   console.log(`    • REFRESH_TOKEN_SECRET = ${refreshSecret.slice(0, 12)}...`);
+  console.log(
+    `    • BLINK_API_KEY        = ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(not set — add manually)"}`,
+  );
   console.log("");
   console.log("  Data files initialized:");
   console.log(`    • ${path.relative(process.cwd(), USERS_FILE)}`);
@@ -319,9 +340,14 @@ async function main() {
   console.log(`    • ${path.relative(process.cwd(), DEPARTMENTS_FILE)}`);
   console.log("");
   console.log("  Next steps:");
-  console.log("    1. Add your BLINK_API_KEY to .env");
-  console.log("    2. Optionally set TAX_LIGHTNING_ADDRESS in .env");
-  console.log("    3. Run: npm start");
+  if (!blinkApiKey) {
+    console.log("    1. Add your BLINK_API_KEY to .env");
+    console.log("    2. Optionally set TAX_LIGHTNING_ADDRESS in .env");
+    console.log("    3. Run: npm start");
+  } else {
+    console.log("    1. Optionally set TAX_LIGHTNING_ADDRESS in .env");
+    console.log("    2. Run: npm start");
+  }
   console.log(`    4. Login at http://localhost:3000`);
   console.log(`       Email:    ${email}`);
   console.log(`       Password: ${"*".repeat(password.length)}`);
