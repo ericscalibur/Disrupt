@@ -1229,7 +1229,7 @@ app.post(
         id: paymentHash || Date.now(),
         date: new Date().toISOString(),
         type: "lightning",
-        receiver: draft.company || draft.contact || "Unknown",
+        receiver: draft.contact || draft.company || "Unknown",
         lightningAddress: lightningAddress || null,
         invoice: invoice || null,
         amount: amount || 0,
