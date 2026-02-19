@@ -48,6 +48,7 @@ app.use(
         "'self'",
         "https://api.coingecko.com",
         "https://cdnjs.cloudflare.com",
+        "https://cdn.jsdelivr.net",
       ],
       // Add other directives as needed
     },
