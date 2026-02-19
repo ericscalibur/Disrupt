@@ -24,8 +24,13 @@ app.use(
         "'unsafe-inline'",
         "'unsafe-eval'",
         "https://cdnjs.cloudflare.com",
+        "https://cdn.jsdelivr.net",
       ],
-      scriptSrcElem: ["'self'", "https://cdnjs.cloudflare.com"],
+      scriptSrcElem: [
+        "'self'",
+        "https://cdnjs.cloudflare.com",
+        "https://cdn.jsdelivr.net",
+      ],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: [
         "'self'",
