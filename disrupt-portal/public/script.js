@@ -956,7 +956,8 @@ function setupTransactionRowClicks(transactions) {
       <span class="label">Approved By:</span> <span class="data">${txn.approvedBy || "N/A"}</span><br>
       <span class="label">Lightning Address:</span> <span class="data">${txn.lightningAddress || "N/A"}</span><br>
       <span class="label">Invoice:</span> <span class="data">${txn.invoice || "N/A"}</span><br>
-      <span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span>
+      <span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span><br>
+      <span class="label">Pre-Image:</span> <span class="data">${txn.preImage || "Not yet available — payment may still be pending"}</span>
     `.trim();
 
     detailsContainer.innerHTML = details;

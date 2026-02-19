@@ -1101,6 +1101,10 @@ app.post(
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
+              payment {
+                paymentHash
+                preImage
+              }
             }
           }
         `;
@@ -1169,6 +1173,7 @@ app.post(
         direction: "SENT",
         status: paymentResult?.status || "complete",
         paymentHash: paymentHash,
+        preImage: paymentResult?.payment?.preImage || null,
         approvedStatus: draft.status,
         approvedAt: draft.approvedAt,
         approvedBy: draft.approvedBy,
@@ -1907,6 +1912,10 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
           lnInvoicePaymentSend(input: $input) {
             status
             errors { message }
+            payment {
+              paymentHash
+              preImage
+            }
           }
         }
       `;
@@ -1964,6 +1973,10 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
+              payment {
+                paymentHash
+                preImage
+              }
             }
           }
         `;
@@ -2029,6 +2042,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       direction: "SENT",
       status: (employeePaymentResult?.status || "SUCCESS").toUpperCase(),
       paymentHash: employeePaymentHash,
+      preImage: employeePaymentResult?.payment?.preImage || null,
       taxWithholding: isTaxWithholding
         ? {
             originalAmount: taxWithholding.originalAmount,
@@ -2052,6 +2066,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
         lightningAddress: TAX_LIGHTNING_ADDRESS,
         invoice: taxInvoice,
         amount: taxAmount,
+        preImage: taxPaymentResult?.payment?.preImage || null,
         currency: "SATS",
         note: `${taxWithholding.type || "employee"} tax withholding for ${contact} - ${note}`,
         direction: "SENT",
@@ -2201,6 +2216,10 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
           lnInvoicePaymentSend(input: $input) {
             status
             errors { message }
+            payment {
+              paymentHash
+              preImage
+            }
           }
         }
       `;
@@ -2269,6 +2288,7 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
     direction: "SENT",
     status: paymentResult?.status || "complete",
     paymentHash,
+    preImage: paymentResult?.payment?.preImage || null,
   };
 
   transactions.unshift(transaction);
@@ -2364,6 +2384,10 @@ app.post(
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
+              payment {
+                paymentHash
+                preImage
+              }
             }
           }
         `;
