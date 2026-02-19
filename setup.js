@@ -2,7 +2,7 @@
 
 /**
  * Disrupt Portal — First-Time Setup
- * Collects admin credentials and initializes all data files.
+ * Collects admin credentials, generates JWT secrets, and initializes all data files.
  * Run with: node setup.js  (or via: npm run setup)
  */
 
@@ -11,7 +11,10 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = path.join(__dirname, "disrupt-portal", "data");
+const ROOT_DIR = __dirname;
+const ENV_FILE = path.join(ROOT_DIR, ".env");
+const ENV_EXAMPLE_FILE = path.join(ROOT_DIR, ".env.example");
+const DATA_DIR = path.join(ROOT_DIR, "disrupt-portal", "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
 const DRAFTS_FILE = path.join(DATA_DIR, "drafts.json");
@@ -84,10 +87,66 @@ function printBanner() {
   console.log("");
   console.log("  ⚡ DISRUPT PORTAL — First-Time Setup");
   printLine();
-  console.log("  This wizard will create your Admin account");
-  console.log("  and initialize your data files.");
+  console.log("  This wizard will:");
+  console.log("    1. Create your Admin account");
+  console.log("    2. Generate JWT secrets and write them to .env");
+  console.log("    3. Initialize all data files");
   printLine();
   console.log("");
+}
+
+// ── JWT / .env helpers ────────────────────────────────────────────────────────
+
+function generateSecret() {
+  return crypto.randomBytes(64).toString("hex");
+}
+
+function writeJwtSecretsToEnv() {
+  const accessSecret = generateSecret();
+  const refreshSecret = generateSecret();
+
+  // Create .env from .env.example if it doesn't exist yet
+  if (!fs.existsSync(ENV_FILE)) {
+    if (fs.existsSync(ENV_EXAMPLE_FILE)) {
+      fs.copyFileSync(ENV_EXAMPLE_FILE, ENV_FILE);
+    } else {
+      // Minimal fallback if .env.example is also missing
+      fs.writeFileSync(
+        ENV_FILE,
+        [
+          "ACCESS_TOKEN_SECRET=your-64-character-hex-string-here",
+          "REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here",
+          "BLINK_API_KEY=your-blink-api-key-here",
+          "TAX_LIGHTNING_ADDRESS=example@blink.sv",
+          "PORT=3000",
+          "NODE_ENV=development",
+        ].join("\n") + "\n",
+      );
+    }
+  }
+
+  let env = fs.readFileSync(ENV_FILE, "utf8");
+
+  // Replace whatever is currently set for these two keys
+  env = env.replace(
+    /^ACCESS_TOKEN_SECRET=.*$/m,
+    `ACCESS_TOKEN_SECRET=${accessSecret}`,
+  );
+  env = env.replace(
+    /^REFRESH_TOKEN_SECRET=.*$/m,
+    `REFRESH_TOKEN_SECRET=${refreshSecret}`,
+  );
+
+  // If lines didn't exist at all, append them
+  if (!/^ACCESS_TOKEN_SECRET=/m.test(env)) {
+    env += `\nACCESS_TOKEN_SECRET=${accessSecret}`;
+  }
+  if (!/^REFRESH_TOKEN_SECRET=/m.test(env)) {
+    env += `\nREFRESH_TOKEN_SECRET=${refreshSecret}`;
+  }
+
+  fs.writeFileSync(ENV_FILE, env);
+  return { accessSecret, refreshSecret };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -123,7 +182,12 @@ async function main() {
     }
   }
 
-  // ── Collect admin name ────────────────────────────────────────────────────
+  // ── Collect admin details ─────────────────────────────────────────────────
+  console.log("  The account you create here will be the Admin.");
+  console.log(
+    "  Additional team members can be added later from inside the portal.",
+  );
+  console.log("");
 
   let name = "";
   while (!name) {
@@ -179,7 +243,7 @@ async function main() {
   console.log(`  Password:          ${"*".repeat(password.length)}`);
   console.log(`  Lightning address: ${lightningAddress || "(none)"}`);
   console.log(`  Department:        ${department}`);
-  console.log(`  Role:              Admin`);
+  console.log(`  Role:              Admin  ← fixed, cannot be changed here`);
   console.log("");
 
   const go = await ask("  Look good? Type YES to create your account: ");
@@ -192,6 +256,13 @@ async function main() {
   }
 
   rl.close();
+
+  // ── Generate JWT secrets and write to .env ────────────────────────────────
+
+  console.log("");
+  console.log("  🔐 Generating JWT secrets...");
+  const { accessSecret, refreshSecret } = writeJwtSecretsToEnv();
+  console.log("  ✅  JWT secrets written to .env");
 
   // ── Build user object ─────────────────────────────────────────────────────
 
@@ -233,6 +304,15 @@ async function main() {
   printLine();
   console.log("  ✅  Setup complete!");
   console.log("");
+  console.log("  Admin account created:");
+  console.log(`    • Name:   ${name}`);
+  console.log(`    • Email:  ${email}`);
+  console.log(`    • Role:   Admin`);
+  console.log("");
+  console.log("  .env updated:");
+  console.log(`    • ACCESS_TOKEN_SECRET  = ${accessSecret.slice(0, 12)}...`);
+  console.log(`    • REFRESH_TOKEN_SECRET = ${refreshSecret.slice(0, 12)}...`);
+  console.log("");
   console.log("  Data files initialized:");
   console.log(`    • ${path.relative(process.cwd(), USERS_FILE)}`);
   console.log(`    • ${path.relative(process.cwd(), TRANSACTIONS_FILE)}`);
@@ -242,8 +322,9 @@ async function main() {
   console.log("");
   console.log("  Next steps:");
   console.log("    1. Add your BLINK_API_KEY to .env");
-  console.log("    2. Run: npm start");
-  console.log(`    3. Login at http://localhost:3000`);
+  console.log("    2. Optionally set TAX_LIGHTNING_ADDRESS in .env");
+  console.log("    3. Run: npm start");
+  console.log(`    4. Login at http://localhost:3000`);
   console.log(`       Email:    ${email}`);
   console.log(`       Password: ${"*".repeat(password.length)}`);
   console.log("");

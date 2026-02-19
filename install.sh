@@ -54,27 +54,8 @@ else
 fi
 
 echo ""
-echo "🔐 Generating JWT secrets..."
-
-# Generate JWT secrets
-ACCESS_SECRET=$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")
-REFRESH_SECRET=$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")
-
-# Update .env file with generated secrets
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    sed -i '' "s/ACCESS_TOKEN_SECRET=your-64-character-hex-string-here/ACCESS_TOKEN_SECRET=$ACCESS_SECRET/" .env
-    sed -i '' "s/REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here/REFRESH_TOKEN_SECRET=$REFRESH_SECRET/" .env
-else
-    # Linux
-    sed -i "s/ACCESS_TOKEN_SECRET=your-64-character-hex-string-here/ACCESS_TOKEN_SECRET=$ACCESS_SECRET/" .env
-    sed -i "s/REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here/REFRESH_TOKEN_SECRET=$REFRESH_SECRET/" .env
-fi
-
-echo "✅ JWT secrets generated and configured"
-
-echo ""
 echo "👤 Creating your Admin account..."
+echo "   (JWT secrets will be generated as part of this step)"
 echo ""
 node setup.js
 
