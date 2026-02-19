@@ -42,20 +42,8 @@ echo "📦 Installing dependencies..."
 npm install
 
 echo ""
-echo "🔧 Setting up configuration..."
-
-# Create .env file if it doesn't exist
-if [ ! -f .env ]; then
-    echo "Creating .env file from template..."
-    cp .env.example .env
-    echo "✅ .env file created"
-else
-    echo "⚠️  .env file already exists, skipping..."
-fi
-
-echo ""
 echo "👤 Creating your Admin account..."
-echo "   (JWT secrets will be generated as part of this step)"
+echo "   (.env will be created and JWT secrets generated as part of this step)"
 echo ""
 node setup.js
 
@@ -64,15 +52,9 @@ echo "🎉 Installation Complete!"
 echo "========================"
 echo ""
 echo "📝 Next steps:"
-echo "1. Get your Blink API key from https://blink.sv"
-echo "2. Edit .env file and add your BLINK_API_KEY"
-echo "3. Optionally configure email settings for password reset"
-echo "4. Run: npm start"
-echo "5. Open: http://localhost:3000"
-echo ""
-echo "🔧 To configure Blink API:"
-echo "   nano .env"
-echo "   # Add: BLINK_API_KEY=your-blink-api-key-here"
+echo "1. Optionally configure email settings for password reset in .env"
+echo "2. Run: npm start"
+echo "3. Open: http://localhost:3000"
 echo ""
 echo "🚀 To start the server:"
 echo "   npm start"

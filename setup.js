@@ -35,43 +35,17 @@ function ask(question) {
 }
 
 function askHidden(question) {
-  // Fallback for non-TTY environments (e.g. piped input, CI)
-  if (!process.stdin.isTTY) {
-    return ask(question);
-  }
-
   return new Promise((resolve) => {
-    // Write the prompt manually so we can suppress echo
-    process.stdout.write(question);
+    // Suppress readline's echo by swallowing output writes during input
+    const origWrite = rl.output.write.bind(rl.output);
+    rl.output.write = () => true;
 
-    const stdin = process.stdin;
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.setEncoding("utf8");
-
-    let input = "";
-
-    const onData = (ch) => {
-      if (ch === "\n" || ch === "\r" || ch === "\u0003") {
-        stdin.setRawMode(false);
-        stdin.pause();
-        stdin.removeListener("data", onData);
-        process.stdout.write("\n");
-        if (ch === "\u0003") process.exit(); // Ctrl+C
-        resolve(input);
-      } else if (ch === "\u007f" || ch === "\b") {
-        // Backspace
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          process.stdout.write("\b \b");
-        }
-      } else {
-        input += ch;
-        process.stdout.write("*");
-      }
-    };
-
-    stdin.on("data", onData);
+    rl.question(question, (answer) => {
+      // Restore output and print a newline in place of the suppressed echo
+      rl.output.write = origWrite;
+      process.stdout.write("\n");
+      resolve(answer.trim());
+    });
   });
 }
 

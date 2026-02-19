@@ -35,66 +35,34 @@ npm run setup
 You will be prompted for:
 - Your full name
 - Email address
-- Password
+- Password (hidden input)
 - Lightning address (optional)
-- Department name
+- Blink API key (optional — can be added to `.env` later)
+
+The setup wizard will automatically:
+- Create and populate your `.env` file from `.env.example`
+- Generate secure JWT secrets and write them to `.env`
+- Write your Blink API key to `.env`
+- Initialize all data files with a clean state
 
 > **Note:** This only needs to be run once. If you run it again on an existing installation it will warn you before overwriting any data.
 
-### Step 4: Environment Configuration
+### Step 4: Optional — Configure Email (Password Reset)
 
-Create a `.env` file in the root directory:
-
-```bash
-cp .env.example .env
-```
-
-Edit the `.env` file with your configuration:
+If you want password reset functionality, edit `.env` and fill in the email settings:
 
 ```env
-# JWT Secrets - Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-ACCESS_TOKEN_SECRET=your-64-character-hex-string-here
-REFRESH_TOKEN_SECRET=your-different-64-character-hex-string-here
-
-# Blink API Configuration
-BLINK_API_KEY=your-blink-api-key-here
-
-# Tax Lightning Address
-TAX_LIGHTNING_ADDRESS=example@blink.sv
-
-# Email Configuration (Optional - for password reset)
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASS=your-app-password
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-
-# Server Configuration
-PORT=3000
-NODE_ENV=development
 ```
 
-### Step 5: Generate Secure JWT Secrets
+For Gmail, use an App Password (Google Account → Security → 2-Step Verification → App passwords).
 
-Run these commands to generate secure secrets:
+All other settings (`ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `BLINK_API_KEY`) are handled automatically by `npm run setup`.
 
-```bash
-# Generate ACCESS_TOKEN_SECRET
-node -e "console.log('ACCESS_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
-
-# Generate REFRESH_TOKEN_SECRET
-node -e "console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'))"
-```
-
-Copy the generated strings and replace the placeholders in your `.env` file.
-
-### Step 6: Get Your Blink API Key
-
-1. Visit [blink.sv](https://blink.sv) and create an account
-2. Navigate to your dashboard
-3. Generate an API key
-4. Add the API key to your `.env` file as `BLINK_API_KEY`
-
-### Step 7: Start the Local Server
+### Step 5: Start the Local Server
 
 ```bash
 npm start
