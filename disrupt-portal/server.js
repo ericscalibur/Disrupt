@@ -136,6 +136,57 @@ async function getBlinkWallets() {
   return response.data.data.me.defaultAccount.wallets;
 }
 
+async function fetchPreImageFromBlink(paymentHash) {
+  if (!paymentHash || !BLINK_API_KEY) return null;
+  try {
+    const query = `
+      query {
+        me {
+          defaultAccount {
+            transactions(first: 10) {
+              edges {
+                node {
+                  initiationVia {
+                    ... on InitiationViaLn {
+                      paymentHash
+                    }
+                  }
+                  settlementVia {
+                    ... on SettlementViaIntraLedger {
+                      preImage
+                    }
+                    ... on SettlementViaLn {
+                      preImage
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+    const response = await axios.post(
+      "https://api.blink.sv/graphql",
+      { query },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": BLINK_API_KEY,
+        },
+      },
+    );
+    const edges = response.data.data.me.defaultAccount.transactions.edges;
+    const match = edges.find(
+      (edge) => edge.node.initiationVia?.paymentHash === paymentHash,
+    );
+    return match?.node?.settlementVia?.preImage || null;
+  } catch (err) {
+    console.warn("Could not fetch preImage from Blink:", err.message);
+    return null;
+  }
+}
+
 async function getBlinkTransactions() {
   const apiKey = BLINK_API_KEY;
   const query = `
@@ -1169,7 +1220,7 @@ app.post(
         direction: "SENT",
         status: paymentResult?.status || "complete",
         paymentHash: paymentHash,
-        preImage: paymentResult?.payment?.preImage || null,
+        preImage: await fetchPreImageFromBlink(paymentHash),
         approvedStatus: draft.status,
         approvedAt: draft.approvedAt,
         approvedBy: draft.approvedBy,
@@ -2030,7 +2081,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
       direction: "SENT",
       status: (employeePaymentResult?.status || "SUCCESS").toUpperCase(),
       paymentHash: employeePaymentHash,
-      preImage: employeePaymentResult?.payment?.preImage || null,
+      preImage: await fetchPreImageFromBlink(employeePaymentHash),
       taxWithholding: isTaxWithholding
         ? {
             originalAmount: taxWithholding.originalAmount,
@@ -2054,7 +2105,7 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
         lightningAddress: TAX_LIGHTNING_ADDRESS,
         invoice: taxInvoice,
         amount: taxAmount,
-        preImage: taxPaymentResult?.payment?.preImage || null,
+        preImage: await fetchPreImageFromBlink(taxPaymentHash),
         currency: "SATS",
         note: `${taxWithholding.type || "employee"} tax withholding for ${contact} - ${note}`,
         direction: "SENT",
@@ -2272,7 +2323,7 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
     direction: "SENT",
     status: paymentResult?.status || "complete",
     paymentHash,
-    preImage: paymentResult?.payment?.preImage || null,
+    preImage: await fetchPreImageFromBlink(paymentHash),
   };
 
   transactions.unshift(transaction);
