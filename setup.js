@@ -157,7 +157,7 @@ async function main() {
       console.log("");
       const confirm = await ask(
         "  Running setup will REPLACE all data files with fresh ones.\n" +
-          "  Type YES to continue, or press Enter to cancel: ",
+          "  Type YES to continue, or anything else to cancel: ",
       );
       if (confirm !== "YES") {
         console.log("");
@@ -250,7 +250,9 @@ async function main() {
   console.log(`  Role:              Admin  ← fixed, cannot be changed here`);
   console.log("");
 
-  const go = await ask("  Look good? Type YES to create your account: ");
+  const go = await ask(
+    "  Look good? Type YES to continue, or anything else to cancel: ",
+  );
   if (go !== "YES") {
     console.log("");
     console.log("  Setup cancelled. No files were changed.");
