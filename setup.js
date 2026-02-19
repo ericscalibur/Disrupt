@@ -102,6 +102,9 @@ function writeEnvValues({ blinkApiKey }) {
 
   let env = fs.readFileSync(ENV_FILE, "utf8");
 
+  // Normalize line endings to LF for consistent regex handling (Windows CRLF safe)
+  env = env.replace(/\r\n/g, "\n");
+
   // Replace whatever is currently set for these two keys
   env = env.replace(
     /^ACCESS_TOKEN_SECRET=.*$/m,
@@ -121,9 +124,11 @@ function writeEnvValues({ blinkApiKey }) {
   }
 
   // Replace BLINK_API_KEY
-  env = env.replace(/^BLINK_API_KEY=.*$/m, `BLINK_API_KEY=${blinkApiKey}`);
-  if (!/^BLINK_API_KEY=/m.test(env)) {
-    env += `\nBLINK_API_KEY=${blinkApiKey}`;
+  if (blinkApiKey) {
+    env = env.replace(/^BLINK_API_KEY=.*$/m, `BLINK_API_KEY=${blinkApiKey}`);
+    if (!/^BLINK_API_KEY=/m.test(env)) {
+      env += `\nBLINK_API_KEY=${blinkApiKey}`;
+    }
   }
 
   fs.writeFileSync(ENV_FILE, env);
