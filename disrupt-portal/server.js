@@ -1101,10 +1101,6 @@ app.post(
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
-              payment {
-                paymentHash
-                preImage
-              }
             }
           }
         `;
@@ -1912,10 +1908,6 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
           lnInvoicePaymentSend(input: $input) {
             status
             errors { message }
-            payment {
-              paymentHash
-              preImage
-            }
           }
         }
       `;
@@ -1973,10 +1965,6 @@ app.post("/api/pay", authenticateToken, async (req, res) => {
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
-              payment {
-                paymentHash
-                preImage
-              }
             }
           }
         `;
@@ -2216,10 +2204,6 @@ app.post("/api/pay-invoice", authenticateToken, async (req, res) => {
           lnInvoicePaymentSend(input: $input) {
             status
             errors { message }
-            payment {
-              paymentHash
-              preImage
-            }
           }
         }
       `;
@@ -2384,10 +2368,6 @@ app.post(
             lnInvoicePaymentSend(input: $input) {
               status
               errors { message }
-              payment {
-                paymentHash
-                preImage
-              }
             }
           }
         `;
