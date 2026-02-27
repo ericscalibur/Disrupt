@@ -1015,6 +1015,9 @@ function populateEditForm(member) {
         }
         inputElement.appendChild(option);
       });
+    } else if (key === "password") {
+      // Skip password — handled separately below
+      return;
     } else {
       // Create regular text input for other fields
       inputElement = document.createElement("input");
@@ -1031,6 +1034,23 @@ function populateEditForm(member) {
 
     inputsContainer.appendChild(wrapper);
   }
+
+  // Always append a dedicated optional password field at the end
+  const pwLabel = document.createElement("label");
+  pwLabel.textContent = "New Password";
+  pwLabel.setAttribute("for", "input-newPassword");
+
+  const pwInput = document.createElement("input");
+  pwInput.type = "password";
+  pwInput.id = "input-newPassword";
+  pwInput.name = "newPassword";
+  pwInput.placeholder = "Leave blank to keep current password";
+  pwInput.autocomplete = "new-password";
+
+  const pwWrapper = document.createElement("div");
+  pwWrapper.appendChild(pwLabel);
+  pwWrapper.appendChild(pwInput);
+  inputsContainer.appendChild(pwWrapper);
 }
 
 function setupTransactionRowClicks(transactions) {
@@ -1482,7 +1502,12 @@ async function updateLightningBalance() {
     if (data.success) {
       currentBalanceSATS = Number(data.balanceSats) || 0;
       currentBalanceBTC = currentBalanceSATS / 100_000_000;
-      btcToUsdRate = usdRate;
+      // Only overwrite the rate if we actually got a valid number back;
+      // otherwise keep the previous value (initialised to 70 000 as a
+      // reasonable fallback so USD mode never shows $0.00).
+      if (typeof usdRate === "number" && usdRate > 0) {
+        btcToUsdRate = usdRate;
+      }
       currentBalanceMode = 0; // Always start with BTC
       updateBalanceDisplay();
     } else if (balanceElem) {
@@ -1500,17 +1525,15 @@ async function updateLightningBalance() {
 // GET EXCHANGE RATE
 async function fetchBtcUsdRate() {
   try {
-    const response = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-    );
+    const response = await authFetch(`${API_BASE}/btc-usd-rate`);
     const data = await response.json();
-    if (data.bitcoin && data.bitcoin.usd) {
-      return data.bitcoin.usd;
+    if (data.success && typeof data.rate === "number") {
+      return data.rate;
     }
   } catch (err) {
-    console.error("Failed to fetch BTC/USD rate from CoinGecko:", err);
+    console.error("Failed to fetch BTC/USD rate from Blink:", err);
   }
-  return 100000; // fallback
+  return null;
 }
 
 // Load departments and populate the list
@@ -3931,9 +3954,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     const formData = new FormData(editTeamMemberForm);
     const updatedMember = {};
     for (const [key, value] of formData.entries()) {
+      if (key === "newPassword") continue; // handled separately
       updatedMember[key] = value;
     }
     updatedMember.id = currentMember.id;
+
+    // Only include password in payload if admin actually typed a new one
+    const newPassword = formData.get("newPassword");
+    if (newPassword && newPassword.trim() !== "") {
+      updatedMember.password = newPassword.trim();
+    }
 
     try {
       const response = await authFetch(

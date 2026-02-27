@@ -227,19 +227,46 @@ async function getBlinkTransactions() {
   );
 }
 
-// Fetch current BTC/USD rate from CoinGecko — returns a number or null
+// Fetch current BTC/USD rate from Blink API — returns a number or null
 async function getBtcUsdRate() {
   try {
-    const response = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-    );
+    // Blink removed btcPrice; the current API uses realtimePrice.
+    // btcSatPrice.base / 10^offset = price of 1 sat in USD cents
+    // BTC/USD = (sat_price_in_usd_cents * 100_000_000 sats/BTC) / 100 cents/dollar
+    const query = {
+      query: "query { realtimePrice { btcSatPrice { base offset } } }",
+    };
+    const response = await fetch("https://api.blink.sv/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": BLINK_API_KEY,
+      },
+      body: JSON.stringify(query),
+    });
     const result = await response.json();
-    if (result.bitcoin && typeof result.bitcoin.usd === "number") {
-      return result.bitcoin.usd;
+    const btcSatPrice =
+      result.data &&
+      result.data.realtimePrice &&
+      result.data.realtimePrice.btcSatPrice;
+    if (
+      btcSatPrice &&
+      typeof btcSatPrice.base === "number" &&
+      typeof btcSatPrice.offset === "number"
+    ) {
+      const { base, offset } = btcSatPrice;
+      // base / 10^offset  →  USD cents per sat
+      // × 100_000_000 sats/BTC  ÷ 100 cents/dollar  →  USD per BTC
+      const usdPerSat = base / Math.pow(10, offset);
+      return (usdPerSat * 100_000_000) / 100;
     }
+    console.warn(
+      "getBtcUsdRate: unexpected Blink response",
+      JSON.stringify(result),
+    );
     return null;
   } catch (err) {
-    console.warn("Could not fetch BTC/USD rate:", err.message);
+    console.warn("Could not fetch BTC/USD rate from Blink:", err.message);
     return null;
   }
 }
@@ -1522,29 +1549,11 @@ app.post("/api/transactions", authenticateToken, async (req, res) => {
 
 // GET EXCHANGE RATE
 app.get("/api/btc-usd-rate", authenticateToken, async (req, res) => {
-  const url = "https://api.blink.sv/graphql";
-  const query = { query: "query { btcPrice { base offset } }" };
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query),
-    });
-    const result = await response.json();
-    if (
-      result.data &&
-      result.data.btcPrice &&
-      typeof result.data.btcPrice.base === "number" &&
-      typeof result.data.btcPrice.offset === "number"
-    ) {
-      const { base, offset } = result.data.btcPrice;
-      const rate = base / Math.pow(10, offset);
-      return res.json({ success: true, rate });
-    }
-    res.json({ success: false, rate: null });
-  } catch (err) {
-    res.json({ success: false, rate: null, error: err.message });
+  const rate = await getBtcUsdRate();
+  if (rate !== null) {
+    return res.json({ success: true, rate });
   }
+  res.json({ success: false, rate: null });
 });
 
 app.post("/api/transactions/local", authenticateToken, async (req, res) => {
@@ -2530,6 +2539,50 @@ app.post(
     }
 
     console.log("Final payment statuses:", paymentStatuses);
+
+    // Save successful payments to transactions.json
+    const successfulPayments = paymentStatuses.filter(
+      (p) => p.status === "Success",
+    );
+
+    if (successfulPayments.length > 0) {
+      try {
+        const btcUsdRate = await getBtcUsdRate();
+
+        let transactions = [];
+        try {
+          const data = await fs.readFile(TRANSACTIONS_FILE, "utf8");
+          transactions = data.trim() ? JSON.parse(data) : [];
+        } catch (err) {
+          if (err.code !== "ENOENT") throw err;
+        }
+
+        for (const payment of successfulPayments) {
+          const newTxn = {
+            id: `batch_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            date: new Date().toISOString(),
+            type: "batch",
+            receiver: payment.name || payment.lightningAddress,
+            lightningAddress: payment.lightningAddress,
+            amount: Number(payment.amount),
+            currency: "SATS",
+            note: payment.note || "",
+            direction: "SENT",
+            status: "SUCCESS",
+            btcUsdRate: btcUsdRate,
+          };
+          transactions.unshift(newTxn);
+        }
+
+        await fs.writeFile(
+          TRANSACTIONS_FILE,
+          JSON.stringify(transactions, null, 2),
+        );
+      } catch (err) {
+        console.error("Failed to save batch transactions:", err);
+      }
+    }
+
     res.json({ success: true, paymentStatuses });
   },
 );
