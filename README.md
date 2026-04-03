@@ -137,7 +137,7 @@ For password reset functionality, configure email in `.env`:
 
 ### Tax Lightning Address
 
-Update the tax destination address in `.env`:
+If not entered during setup, update the tax destination address in `.env`:
 ```env
 TAX_LIGHTNING_ADDRESS=your-tax-wallet@blink.sv
 ```

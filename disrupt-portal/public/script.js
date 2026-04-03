@@ -1099,18 +1099,18 @@ function setupTransactionRowClicks(transactions) {
     }
 
     const details = `
-      <span class="label">Receiver:</span> <span class="data">${cleanReceiverName(txn.receiver) || "N/A"}</span><br>
-      <span class="label">Amount:</span> <span class="data">${txn.amount || "N/A"} ${txn.currency || "SATS"}</span><br>${usdLine}
+      <span class="label">Receiver:</span> <span class="data">${escapeHtml(cleanReceiverName(txn.receiver) || "N/A")}</span><br>
+      <span class="label">Amount:</span> <span class="data">${escapeHtml(String(txn.amount || "N/A"))} ${escapeHtml(txn.currency || "SATS")}</span><br>${usdLine}
       <span class="label">Date:</span> <span class="data">${txn.date ? new Date(txn.date).toLocaleString() : "N/A"}</span><br>
-      <span class="label">Note:</span> <span class="data">${txn.note || "N/A"}</span><br>
-      <span class="label">Status:</span> <span class="data">${txn.status || "N/A"}</span><br>
-      <span class="label">Approved Status:</span> <span class="data">${txn.approvedStatus || "N/A"}</span><br>
+      <span class="label">Note:</span> <span class="data">${escapeHtml(txn.note || "N/A")}</span><br>
+      <span class="label">Status:</span> <span class="data">${escapeHtml(txn.status || "N/A")}</span><br>
+      <span class="label">Approved Status:</span> <span class="data">${escapeHtml(txn.approvedStatus || "N/A")}</span><br>
       <span class="label">Approved At:</span> <span class="data">${txn.approvedAt ? new Date(txn.approvedAt).toLocaleString() : "N/A"}</span><br>
-      <span class="label">Approved By:</span> <span class="data">${txn.approvedBy || "N/A"}</span><br>
-      <span class="label">Lightning Address:</span> <span class="data">${txn.lightningAddress || "N/A"}</span><br>
-      <span class="label">Invoice:</span> <span class="data">${txn.invoice || "N/A"}</span><br>
-      <span class="label">Payment Hash:</span> <span class="data">${txn.paymentHash || "N/A"}</span><br>
-      <span class="label">Pre-Image:</span> <span class="data">${txn.preImage || "Not yet available — payment may still be pending"}</span>
+      <span class="label">Approved By:</span> <span class="data">${escapeHtml(txn.approvedBy || "N/A")}</span><br>
+      <span class="label">Lightning Address:</span> <span class="data">${escapeHtml(txn.lightningAddress || "N/A")}</span><br>
+      <span class="label">Invoice:</span> <span class="data">${escapeHtml(txn.invoice || "N/A")}</span><br>
+      <span class="label">Payment Hash:</span> <span class="data">${escapeHtml(txn.paymentHash || "N/A")}</span><br>
+      <span class="label">Pre-Image:</span> <span class="data">${escapeHtml(txn.preImage || "Not yet available — payment may still be pending")}</span>
     `.trim();
 
     detailsContainer.innerHTML = details;
@@ -1391,13 +1391,13 @@ function renderEmployeeDraftsTable(drafts, suppliersList) {
 
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${formattedDate}</td>
-      <td>${draft.title || "(No Title)"}</td>
-      <td>${companyName}</td>
-      <td>${contactName}</td>
-      <td>${draft.note || ""}</td>
-      <td class="amount-cell">${formattedAmount}</td>
-      <td><span class="status-label ${statusClass}">${statusText}</span></td>
+      <td>${escapeHtml(formattedDate)}</td>
+      <td>${escapeHtml(draft.title || "(No Title)")}</td>
+      <td>${escapeHtml(companyName)}</td>
+      <td>${escapeHtml(contactName)}</td>
+      <td>${escapeHtml(draft.note || "")}</td>
+      <td class="amount-cell">${escapeHtml(formattedAmount)}</td>
+      <td><span class="status-label ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></td>
     `;
 
     tbody.appendChild(row);
@@ -1754,7 +1754,7 @@ async function populateDepartmentsList() {
     console.error("Error populating departments list:", err);
     const deptList = document.getElementById("departmentsList");
     if (deptList) {
-      deptList.innerHTML = `<li style="color:red;">${err.message}</li>`;
+      deptList.innerHTML = `<li style="color:red;">${escapeHtml(err.message)}</li>`;
     }
     alert(err.message);
   }
@@ -1908,11 +1908,11 @@ function renderSuppliers(suppliers) {
     const tr = document.createElement("tr");
     tr.setAttribute("data-supplier-id", supplier.id); // Add this for identification
     tr.innerHTML = `
-      <td>${company}</td>
-      <td>${contact}</td>
-      <td>${email}</td>
-      <td>${lightningAddress}</td>
-      <td>${note}</td>
+      <td>${escapeHtml(company)}</td>
+      <td>${escapeHtml(contact)}</td>
+      <td>${escapeHtml(email)}</td>
+      <td>${escapeHtml(lightningAddress)}</td>
+      <td>${escapeHtml(note)}</td>
       <td>${createdAt}</td>
     `;
     tbody.appendChild(tr);
@@ -2579,7 +2579,7 @@ async function decodeInvoiceFromFrontend(invoice) {
 
       // Payment Request
       if (decoded.paymentRequest) {
-        html += `<li><strong>Payment Request:</strong> <span style="word-break:break-all;font-family:monospace;">${decoded.paymentRequest}</span></li>`;
+        html += `<li><strong>Payment Request:</strong> <span style="word-break:break-all;font-family:monospace;">${escapeHtml(decoded.paymentRequest)}</span></li>`;
       }
 
       // Expiry Logic: use data.expiry and data.timestamp from backend response
@@ -2640,14 +2640,14 @@ async function decodeInvoiceFromFrontend(invoice) {
           (s) => s.name === "description",
         );
         if (descSection) {
-          html += `<li><strong>Description:</strong> ${descSection.value}</li>`;
+          html += `<li><strong>Description:</strong> ${escapeHtml(descSection.value)}</li>`;
         }
 
         const payeeSection = decoded.sections.find(
           (s) => s.name === "payee_node_key",
         );
         if (payeeSection) {
-          html += `<li><strong>Destination:</strong> <span style="font-family:monospace;">${payeeSection.value}</span></li>`;
+          html += `<li><strong>Destination:</strong> <span style="font-family:monospace;">${escapeHtml(payeeSection.value)}</span></li>`;
         }
       }
 
@@ -2666,13 +2666,13 @@ async function decodeInvoiceFromFrontend(invoice) {
         }
       }
     } else {
-      detailsDiv.innerHTML = `<span style="color:red;">${data.error || "Invalid or unsupported invoice."}</span>`;
+      detailsDiv.innerHTML = `<span style="color:red;">${escapeHtml(data.error) || "Invalid or unsupported invoice."}</span>`;
       if (amountEntryDiv) amountEntryDiv.style.display = "none";
       if (userAmountInput) userAmountInput.required = false;
     }
   } catch (err) {
     console.error("Error decoding invoice:", err);
-    detailsDiv.innerHTML = `<span style="color:red;">Error decoding invoice: ${err.message}</span>`;
+    detailsDiv.innerHTML = `<span style="color:red;">Error decoding invoice: ${escapeHtml(err.message)}</span>`;
     if (amountEntryDiv) amountEntryDiv.style.display = "none";
     if (userAmountInput) userAmountInput.required = false;
   }
@@ -3031,7 +3031,7 @@ function updateDepartmentsSection() {
     // Manager: hide add/remove, show only their own department
     addBtn.style.display = "none";
     removeBtn.style.display = "none";
-    deptList.innerHTML = `<li>${currentUser.department}</li>`;
+    deptList.innerHTML = `<li>${escapeHtml(currentUser.department)}</li>`;
     deptList.style.display = "block";
   }
 }
@@ -3267,11 +3267,11 @@ async function showRemoveMemberModal() {
       item.className = "member-remove-item";
       item.innerHTML = `
         <label>
-          <input type="radio" name="memberToRemove" value="${user.email}">
+          <input type="radio" name="memberToRemove" value="${escapeHtml(user.email)}">
           <div class="member-info">
-            <div class="member-name">${user.name} (${user.role})</div>
-            <div class="member-email">${user.email}</div>
-            <div class="member-dept">${user.department}</div>
+            <div class="member-name">${escapeHtml(user.name)} (${escapeHtml(user.role)})</div>
+            <div class="member-email">${escapeHtml(user.email)}</div>
+            <div class="member-dept">${escapeHtml(user.department)}</div>
           </div>
         </label>
       `;
@@ -3688,12 +3688,12 @@ function renderBatchTable(data) {
     const note = row["Note"] || defaultNote;
 
     tr.innerHTML = `
-            <td>${row["Date"] || ""}</td>
-            <td>${row["Name"] || ""}</td>
-            <td>${row["Amount(sats)"] || ""}</td>
-            <td>${row["Lightning-Address"] || ""}</td>
-            <td>${note}</td>
-            <td>${row["Status"] || "Pending"}</td>
+            <td>${escapeHtml(row["Date"] || "")}</td>
+            <td>${escapeHtml(row["Name"] || "")}</td>
+            <td>${escapeHtml(String(row["Amount(sats)"] || ""))}</td>
+            <td>${escapeHtml(row["Lightning-Address"] || "")}</td>
+            <td>${escapeHtml(note)}</td>
+            <td>${escapeHtml(row["Status"] || "Pending")}</td>
         `;
 
     // Add click event listener to open edit modal

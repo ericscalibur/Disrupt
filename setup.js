@@ -8,6 +8,7 @@
 
 const readline = require("readline");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 
@@ -284,7 +285,7 @@ async function main() {
     id,
     name,
     email,
-    password,
+    password: bcrypt.hashSync(password, 10),
     role: "Admin",
     department,
     lightningAddress: "",

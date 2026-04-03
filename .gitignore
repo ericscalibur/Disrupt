@@ -1,4 +1,37 @@
+# Environment variables
 .env
+.env.backup
 ssh_key
 ssh_key.pub
+
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Minified files
 *.min.js
+
+# AI assistant files
+.aider*
+
+# Runtime data / user data
+disrupt-portal/data/*.json
+disrupt-portal/data/*.db
+disrupt-portal/data/*.db-shm
+disrupt-portal/data/*.db-wal
+
+# Logs
+*.log
+logs/
+
+# Release artifacts
+releases/
+
+# macOS
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
