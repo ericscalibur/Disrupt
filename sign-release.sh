@@ -61,7 +61,12 @@ fi
 # ── Build archive ─────────────────────────────────────────────────────────────
 echo "📦 Building ${ARCHIVE}..."
 mkdir -p "${RELEASE_DIR}"
-tar -czf "${RELEASE_DIR}/${ARCHIVE}" "${INCLUDE[@]}"
+tar -czf "${RELEASE_DIR}/${ARCHIVE}" \
+    --exclude='disrupt-portal/data' \
+    --exclude='node_modules' \
+    --exclude='.env' \
+    --exclude='releases' \
+    "${INCLUDE[@]}"
 
 # ── Sign ──────────────────────────────────────────────────────────────────────
 echo "✍️  Signing with key ${GPG_KEY}..."

@@ -4221,11 +4221,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       try {
-        if (!token) {
-          alert("You must be logged in to remove a member.");
-          return;
-        }
-
         const response = await authFetch(`${API_BASE}/users`, {
           method: "POST",
           headers: {
