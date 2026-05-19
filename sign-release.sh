@@ -58,15 +58,25 @@ if [ ${#INCLUDE[@]} -eq 0 ]; then
   exit 1
 fi
 
-# ── Build archive ─────────────────────────────────────────────────────────────
+# ── Build archive (with top-level wrapper directory) ─────────────────────────
 echo "📦 Building ${ARCHIVE}..."
 mkdir -p "${RELEASE_DIR}"
-tar -czf "${RELEASE_DIR}/${ARCHIVE}" \
+
+STAGING=$(mktemp -d)
+STAGE="${STAGING}/${REPO_NAME}-${VERSION}"
+mkdir -p "${STAGE}"
+
+for item in "${INCLUDE[@]}"; do
+  rsync -a \
     --exclude='disrupt-portal/data' \
     --exclude='node_modules' \
     --exclude='.env' \
     --exclude='releases' \
-    "${INCLUDE[@]}"
+    "${item}" "${STAGE}/"
+done
+
+tar -czf "${RELEASE_DIR}/${ARCHIVE}" -C "${STAGING}" "${REPO_NAME}-${VERSION}"
+rm -rf "${STAGING}"
 
 # ── Sign ──────────────────────────────────────────────────────────────────────
 echo "✍️  Signing with key ${GPG_KEY}..."
@@ -76,9 +86,10 @@ gpg --batch --yes \
     --detach-sign --armor \
     "${RELEASE_DIR}/${ARCHIVE}"
 
-# ── Checksum ──────────────────────────────────────────────────────────────────
-shasum -a 256 "${RELEASE_DIR}/${ARCHIVE}" > "${RELEASE_DIR}/${CHECKSUM}"
-echo "📋 SHA256: $(cat "${RELEASE_DIR}/${CHECKSUM}" | awk '{print $1}')"
+# ── Checksum (generated from within releases/ so the path in the file is just
+#    the filename, not releases/filename — lets users verify with -c directly) ─
+(cd "${RELEASE_DIR}" && shasum -a 256 "${ARCHIVE}") > "${RELEASE_DIR}/${CHECKSUM}"
+echo "📋 SHA256: $(awk '{print $1}' "${RELEASE_DIR}/${CHECKSUM}")"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -97,8 +108,13 @@ echo "Import the signing key:"
 echo '```bash'
 echo "curl ${PGP_KEY_URL} | gpg --import"
 echo '```'
-echo ""
+else
+echo "Import the signing key (replace with the actual public key URL or fingerprint):"
+echo '```bash'
+echo "gpg --keyserver keyserver.ubuntu.com --recv-keys YOUR_KEY_FINGERPRINT"
+echo '```'
 fi
+echo ""
 echo "Verify the signature:"
 echo '```bash'
 echo "gpg --verify ${SIG} ${ARCHIVE}"

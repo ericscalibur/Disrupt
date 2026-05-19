@@ -28,6 +28,7 @@ let token = sessionStorage.getItem("token");
 let editTeamMemberModal;
 let inputsContainer;
 let batchPaymentData = []; // store batch payment data for editing
+let currentBtcUsdRate = null; // cached rate for USD display in batch table
 
 // Token refresh state management
 let isRefreshing = false;
@@ -1943,7 +1944,7 @@ function renderSuppliers(suppliers) {
   }
 }
 
-function renderTransactions(transactions) {
+function renderTransactions(transactions, fallbackRate = null) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
 
@@ -2008,6 +2009,21 @@ function renderTransactions(transactions) {
       amountCell.classList.add("amount-blue");
     else amountCell.classList.add("amount-red");
 
+    // USD Value cell
+    const usdCell = document.createElement("td");
+    usdCell.classList.add("amount");
+    if (txn.currency === "USD") {
+      usdCell.textContent = `$${Number(txn.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else {
+      const rate = txn.btcUsdRate || fallbackRate;
+      if (rate && txn.amount) {
+        const usdVal = (Number(txn.amount) / 100_000_000) * rate;
+        usdCell.textContent = `$${usdVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      } else {
+        usdCell.textContent = "—";
+      }
+    }
+
     // ID cell
     const idCell = document.createElement("td");
     idCell.classList.add("txid");
@@ -2028,6 +2044,7 @@ function renderTransactions(transactions) {
     row.appendChild(dateCell);
     row.appendChild(receiverCell);
     row.appendChild(amountCell);
+    row.appendChild(usdCell);
     row.appendChild(idCell);
     row.appendChild(noteCell);
     row.appendChild(statusCell);
@@ -2715,6 +2732,10 @@ function updateCurrentDate() {
 ///// LOAD TRANSACTIONS FOR HISTORY TABLE /////
 async function loadTransactions() {
   try {
+    // Fetch transactions and current rate in parallel; rate is a fallback
+    // for any transaction that doesn't have btcUsdRate stored.
+    const ratePromise = fetchBtcUsdRate();
+
     const response = await authFetch(
       `${API_BASE}/transactions?ts=${Date.now()}`,
       {
@@ -2736,10 +2757,11 @@ async function loadTransactions() {
     }
 
     const data = await response.json();
+    const fallbackRate = await ratePromise;
 
     if (data.success) {
       transactions = data.transactions;
-      renderTransactions(transactions);
+      renderTransactions(transactions, fallbackRate);
     } else {
       console.warn("No transactions returned or success false");
       transactions = [];
@@ -3648,9 +3670,15 @@ function parseCsv(csvData) {
   }
 }
 
-function renderBatchTable(data) {
+async function renderBatchTable(data) {
   console.log("Rendering batch table with data:", data);
   console.log("Data length:", data.length);
+
+  // Fetch rate once if not cached; used to convert between sats and USD
+  if (!currentBtcUsdRate) {
+    currentBtcUsdRate = await fetchBtcUsdRate();
+  }
+  const rate = currentBtcUsdRate;
 
   // Store the data globally for editing
   batchPaymentData = data;
@@ -3678,6 +3706,18 @@ function renderBatchTable(data) {
     console.log(`Processing row ${index}:`, row);
     console.log("Row keys:", Object.keys(row));
 
+    // Resolve sats/USD — CSV may supply either; compute the missing one
+    let satsAmount = row["Amount(sats)"] ? parseInt(row["Amount(sats)"]) : null;
+    let usdAmount = row["Amount(usd)"] ? parseFloat(row["Amount(usd)"]) : null;
+
+    if (satsAmount && !usdAmount && rate) {
+      usdAmount = (satsAmount / 100_000_000) * rate;
+      row["Amount(usd)"] = usdAmount.toFixed(2);
+    } else if (!satsAmount && usdAmount && rate) {
+      satsAmount = Math.round((usdAmount / rate) * 100_000_000);
+      row["Amount(sats)"] = String(satsAmount);
+    }
+
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     tr.style.transition = "all 0.15s ease";
@@ -3687,10 +3727,15 @@ function renderBatchTable(data) {
     const defaultNote = `${row["Name"] || "Unknown"} - ${row["Date"] || "No Date"}`;
     const note = row["Note"] || defaultNote;
 
+    const usdDisplay = usdAmount != null
+      ? `$${usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : "—";
+
     tr.innerHTML = `
             <td>${escapeHtml(row["Date"] || "")}</td>
             <td>${escapeHtml(row["Name"] || "")}</td>
-            <td>${escapeHtml(String(row["Amount(sats)"] || ""))}</td>
+            <td>${escapeHtml(satsAmount != null ? String(satsAmount) : "")}</td>
+            <td>${usdDisplay}</td>
             <td>${escapeHtml(row["Lightning-Address"] || "")}</td>
             <td>${escapeHtml(note)}</td>
             <td>${escapeHtml(row["Status"] || "Pending")}</td>
@@ -3805,10 +3850,15 @@ function handleBatchEditSubmit(event) {
     return;
   }
 
+  const newUsd = currentBtcUsdRate
+    ? ((parseInt(amount) / 100_000_000) * currentBtcUsdRate).toFixed(2)
+    : (batchPaymentData[rowIndex]["Amount(usd)"] || "");
+
   const updatedData = {
     Date: date,
     Name: name,
     "Amount(sats)": amount,
+    "Amount(usd)": newUsd,
     "Lightning-Address": lightningAddress,
     Note: note || `${name} - ${date}`,
     Status: batchPaymentData[rowIndex]["Status"] || "Pending",
@@ -4700,15 +4750,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       const tableRows = document.querySelectorAll("#batchTable tbody tr");
       const batchData = [];
       tableRows.forEach((row) => {
-        const cells = row.querySelectorAll("td");
-        const rowData = {
-          date: cells[0].innerText.trim(),
-          name: cells[1].innerText.trim(),
-          amount: cells[2].innerText.trim(),
-          lightningAddress: cells[3].innerText.trim(),
-          note: cells[4].innerText.trim(),
-        };
-        batchData.push(rowData);
+        const rowIndex = parseInt(row.getAttribute("data-row-index"));
+        const rowData = batchPaymentData[rowIndex];
+        if (!rowData) return;
+        batchData.push({
+          date: rowData["Date"] || "",
+          name: rowData["Name"] || "",
+          amount: rowData["Amount(sats)"] || "",
+          lightningAddress: rowData["Lightning-Address"] || "",
+          note: rowData["Note"] || `${rowData["Name"] || ""} - ${rowData["Date"] || ""}`,
+        });
       });
 
       try {
