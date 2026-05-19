@@ -21,7 +21,7 @@ router.get("/suppliers", authenticateToken, async (req, res) => {
 });
 
 // Add Supplier
-router.post("/suppliers", authenticateToken, validate(schemas.addSupplier), async (req, res) => {
+router.post("/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"), validate(schemas.addSupplier), async (req, res) => {
   const { company, contact, email, lightningAddress, note } = req.body;
   if (!company || !contact || !email || !lightningAddress) {
     return res.status(400).json({

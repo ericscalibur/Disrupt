@@ -2,12 +2,22 @@
 
 const express = require("express");
 const router = express.Router();
+const rateLimit = require("express-rate-limit");
 const bolt11 = require("bolt11");
 const lnurlPay = require("lnurl-pay");
 const db = require("../db");
 const logger = require("../logger");
 const { schemas, validate } = require("../validators");
 const { authenticateToken, authorizeRoles, authorizedRoles } = require("../middleware/auth");
+
+const approveRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50,
+  keyGenerator: (req) => req.user.id,
+  message: { success: false, message: "Too many approval requests. Try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBtcUsdRate } = require("../lib/blink");
 
 // GET DRAFTS
@@ -100,6 +110,7 @@ router.post(
   "/drafts/approve",
   authenticateToken,
   authorizeRoles(...authorizedRoles),
+  approveRateLimit,
   validate(schemas.approveDraft),
   async (req, res) => {
     const { draftId } = req.body;
@@ -111,6 +122,16 @@ router.post(
         return res
           .status(404)
           .json({ success: false, message: "Draft not found." });
+      }
+
+      // C-4: Prevent self-approval
+      if (draft.createdBy === req.user.email) {
+        return res.status(403).json({ success: false, message: "Cannot approve your own draft." });
+      }
+
+      // H-3: Managers can only approve drafts from their own department
+      if (req.user.role !== "Admin" && draft.department !== req.user.department) {
+        return res.status(403).json({ success: false, message: "Access denied." });
       }
 
       // 2. Idempotency guard — only process pending drafts
@@ -286,14 +307,22 @@ router.post(
     }
 
     try {
+      const draft = db.prepare("SELECT * FROM drafts WHERE id = ?").get(draftId);
+      if (!draft) {
+        return res.status(404).json({ success: false, message: "Draft not found." });
+      }
+
+      // H-3: Managers can only decline drafts from their own department
+      if (req.user.role !== "Admin" && draft.department !== req.user.department) {
+        return res.status(403).json({ success: false, message: "Access denied." });
+      }
+
       const result = db.prepare(
-        "UPDATE drafts SET status = 'declined', declinedAt = ?, declinedBy = ? WHERE id = ?"
+        "UPDATE drafts SET status = 'declined', declinedAt = ?, declinedBy = ? WHERE id = ? AND status = 'pending'"
       ).run(new Date().toISOString(), req.user.email, draftId);
 
       if (result.changes === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Draft not found" });
+        return res.status(409).json({ success: false, message: "Draft is not in a pending state." });
       }
 
       res.json({ success: true });

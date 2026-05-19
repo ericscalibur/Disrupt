@@ -108,6 +108,14 @@ router.post(
         });
       }
 
+      // H-4: Managers cannot create Admin-role users
+      if (req.user.role === "Manager" && role === "Admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Managers cannot create Admin users.",
+        });
+      }
+
       if (req.user.role === "Manager" && department !== req.user.department) {
         return res.status(403).json({
           success: false,
@@ -131,7 +139,7 @@ router.post(
         role,
         department: department || null,
         lightningAddress: lightningAddress || null,
-        password: await bcrypt.hash("1234", 10),
+        password: await bcrypt.hash(crypto.randomBytes(8).toString("hex"), 10),
         dateAdded: new Date().toISOString().split("T")[0],
       };
       db.prepare(`

@@ -531,7 +531,7 @@ function renderPendingDraftsTable(drafts, showActions = true) {
       statusText = "Declined";
       statusClass = "status-declined";
     } else {
-      actionCell = `<span class="status-label">${draft.status}</span>`;
+      actionCell = `<span class="status-label">${escapeHtml(draft.status)}</span>`;
       statusText = draft.status;
       statusClass = "";
     }
@@ -565,13 +565,13 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     row.insertAdjacentHTML(
       "beforeend",
       `
-      <td>${new Date(draft.dateCreated).toLocaleString()}</td>
+      <td>${escapeHtml(new Date(draft.dateCreated).toLocaleString())}</td>
       <td>
-        <div><strong>Company:</strong> ${companyName}</div>
-        <div><strong>Contact:</strong> ${contactName}</div>
+        <div><strong>Company:</strong> ${escapeHtml(companyName)}</div>
+        <div><strong>Contact:</strong> ${escapeHtml(contactName)}</div>
       </td>
-      <td>${draft.note || draft.description || ""}</td>
-      <td class="amount-cell">${draft.amount}</td>
+      <td>${escapeHtml(draft.note || draft.description || "")}</td>
+      <td class="amount-cell">${escapeHtml(String(draft.amount))}</td>
       <td>${actionCell}</td>
     `,
     );
@@ -3127,7 +3127,6 @@ async function addTeamMember() {
       email: document.getElementById("memberEmail").value.trim(),
       department: document.getElementById("memberDepartment").value.trim(),
       lightningAddress: document.getElementById("memberLightning").value.trim(),
-      password: document.getElementById("memberPassword").value.trim(),
     };
 
     // Validation
@@ -3136,8 +3135,7 @@ async function addTeamMember() {
       !newMember.role ||
       !newMember.email ||
       !newMember.department ||
-      !newMember.lightningAddress ||
-      !newMember.password
+      !newMember.lightningAddress
     ) {
       throw new Error("Please fill in all required fields");
     }
@@ -3201,7 +3199,6 @@ function resetAddMemberModal() {
   document.getElementById("memberEmail").value = "";
   document.getElementById("memberDepartment").value = "";
   document.getElementById("memberLightning").value = "";
-  document.getElementById("memberPassword").value = "1234";
 }
 
 async function removeTeamMember() {

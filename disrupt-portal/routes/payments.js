@@ -2,9 +2,19 @@
 
 const express = require("express");
 const router = express.Router();
+const rateLimit = require("express-rate-limit");
 const bolt11 = require("bolt11");
 const lnurlPay = require("lnurl-pay");
 const db = require("../db");
+
+const paymentRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 50,
+  keyGenerator: (req) => req.user.id,
+  message: { success: false, message: "Too many payment requests. Try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const logger = require("../logger");
 const { schemas, validate } = require("../validators");
 const { validateTaxWithholding } = require("../tax");
@@ -29,6 +39,18 @@ router.get("/lightning-balance", authenticateToken, async (req, res) => {
 
 router.get("/transactions", authenticateToken, async (req, res) => {
   try {
+    const { role, email } = req.user;
+
+    // Employees only see transactions where they are the recipient
+    if (role === "Employee") {
+      const localTxns = db
+        .prepare("SELECT * FROM transactions WHERE recipientId = ?")
+        .all(email)
+        .map(dbTxnToObj);
+      localTxns.sort((a, b) => new Date(b.date) - new Date(a.date));
+      return res.json({ success: true, transactions: localTxns });
+    }
+
     let blinkTxns = [];
     try {
       blinkTxns = await getBlinkTransactions();
@@ -227,42 +249,44 @@ router.get("/btc-usd-rate", authenticateToken, async (req, res) => {
   res.json({ success: false, rate: null });
 });
 
-router.post("/transactions/local", authenticateToken, async (req, res) => {
+router.post("/transactions/local", authenticateToken, authorizeRoles("Admin", "Manager"), async (req, res) => {
   try {
-    const newTransaction = req.body;
+    const { receiver, amount, currency, note, type, direction, status, lightningAddress, invoice, paymentHash } = req.body;
 
-    // Capture BTC/USD rate at time of save
     const btcUsdRate = await getBtcUsdRate();
 
-    const transactionWithId = {
+    const newTransaction = {
       id: `txn_${Date.now()}`,
       date: new Date().toISOString().split("T")[0],
-      ...newTransaction,
-      btcUsdRate: newTransaction.btcUsdRate ?? btcUsdRate,
+      receiver: receiver || "",
+      amount: Number(amount) || 0,
+      currency: currency || "SATS",
+      note: note || "",
+      type: type || "lightning",
+      direction: direction || "SENT",
+      status: status || "SUCCESS",
+      lightningAddress: lightningAddress || null,
+      invoice: invoice || null,
+      paymentHash: paymentHash || null,
+      btcUsdRate,
     };
 
-    // Build the insert dynamically from whatever fields are present
-    const cols = Object.keys(transactionWithId);
-    const placeholders = cols.map((c) => `@${c}`).join(", ");
-    db.prepare(
-      `INSERT OR REPLACE INTO transactions (${cols.join(", ")}) VALUES (${placeholders})`
-    ).run(transactionWithId);
+    db.prepare(`
+      INSERT OR REPLACE INTO transactions
+        (id, date, receiver, amount, currency, note, type, direction, status, lightningAddress, invoice, paymentHash, btcUsdRate)
+      VALUES
+        (@id, @date, @receiver, @amount, @currency, @note, @type, @direction, @status, @lightningAddress, @invoice, @paymentHash, @btcUsdRate)
+    `).run(newTransaction);
 
-    res.json({
-      success: true,
-      transaction: transactionWithId,
-    });
+    res.json({ success: true, transaction: newTransaction });
   } catch (err) {
     logger.error("Error saving transaction:", err);
-    res.status(500).json({
-      success: false,
-      message: "Failed to save transaction",
-    });
+    res.status(500).json({ success: false, message: "Failed to save transaction" });
   }
 });
 
 //// NEW PAYMENT /////
-router.post("/pay", authenticateToken, validate(schemas.pay), async (req, res) => {
+router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), paymentRateLimit, validate(schemas.pay), async (req, res) => {
   try {
     const {
       recipientType,
@@ -585,7 +609,7 @@ router.get("/tax-address", authenticateToken, (req, res) => {
 });
 
 // PAY INVOICE
-router.post("/pay-invoice", authenticateToken, validate(schemas.payInvoice), async (req, res) => {
+router.post("/pay-invoice", authenticateToken, authorizeRoles("Admin", "Manager"), paymentRateLimit, validate(schemas.payInvoice), async (req, res) => {
   const {
     invoice,
     note,

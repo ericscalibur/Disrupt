@@ -50,7 +50,7 @@ const schemas = {
     company: nonEmpty(),
     contact: nonEmpty(),
     recipientLightningAddress: lnAddress,
-    amount: z.number().positive(),
+    amount: z.number().int().positive(),
     note: z.string().max(1000).optional(),
   }),
 
@@ -116,7 +116,7 @@ const schemas = {
       .array(
         z.object({
           lightningAddress: lnAddress,
-          amount: z.union([z.string(), z.number()]).transform(Number),
+          amount: z.union([z.string(), z.number()]).transform(Number).pipe(z.number().int().positive()),
           name: z.string().max(255).optional(),
           note: z.string().max(1000).optional(),
         }),
