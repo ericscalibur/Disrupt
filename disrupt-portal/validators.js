@@ -52,6 +52,7 @@ const schemas = {
     recipientLightningAddress: lnAddress,
     amount: z.number().int().positive(),
     note: z.string().max(1000).optional(),
+    receiptId: z.string().uuid().optional(),
   }),
 
   approveDraft: z.object({

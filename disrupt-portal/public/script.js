@@ -1,4 +1,5 @@
 const API_BASE = "/api";
+let draftReceiptId = null; // receiptId for the draft currently being composed
 let currentUser = null;
 let currentUserRole = null;
 let currentSupplier = null;
@@ -562,6 +563,10 @@ function renderPendingDraftsTable(drafts, showActions = true) {
     }
     row.appendChild(checkboxCell);
 
+    const receiptIndicator = draft.receiptId
+      ? `<span title="Receipt attached" style="margin-left:4px;cursor:pointer;" onclick="viewReceipt('${escapeHtml(draft.receiptId)}')">📎</span>`
+      : "";
+
     row.insertAdjacentHTML(
       "beforeend",
       `
@@ -570,7 +575,7 @@ function renderPendingDraftsTable(drafts, showActions = true) {
         <div><strong>Company:</strong> ${escapeHtml(companyName)}</div>
         <div><strong>Contact:</strong> ${escapeHtml(contactName)}</div>
       </td>
-      <td>${escapeHtml(draft.note || draft.description || "")}</td>
+      <td>${escapeHtml(draft.note || draft.description || "")}${receiptIndicator}</td>
       <td class="amount-cell">${escapeHtml(String(draft.amount))}</td>
       <td>${actionCell}</td>
     `,
@@ -1111,7 +1116,8 @@ function setupTransactionRowClicks(transactions) {
       <span class="label">Lightning Address:</span> <span class="data">${escapeHtml(txn.lightningAddress || "N/A")}</span><br>
       <span class="label">Invoice:</span> <span class="data">${escapeHtml(txn.invoice || "N/A")}</span><br>
       <span class="label">Payment Hash:</span> <span class="data">${escapeHtml(txn.paymentHash || "N/A")}</span><br>
-      <span class="label">Pre-Image:</span> <span class="data">${escapeHtml(txn.preImage || "Not yet available — payment may still be pending")}</span>
+      <span class="label">Pre-Image:</span> <span class="data">${escapeHtml(txn.preImage || "Not yet available — payment may still be pending")}</span><br>
+      ${txn.receiptId ? `<span class="label">Receipt:</span> <span class="data"><a href="#" onclick="viewReceipt('${escapeHtml(txn.receiptId)}');return false;">View Receipt</a></span>` : ""}
     `.trim();
 
     detailsContainer.innerHTML = details;
@@ -3377,6 +3383,7 @@ async function populateSupplierSelect() {
 
 async function openDraftPaymentModal() {
   document.getElementById("draftPaymentModal").style.display = "flex";
+  resetDraftReceipt();
   // Load both lists in parallel, then populate the dropdown
   await Promise.all([
     loadEmployeesForPaymentModal(),
@@ -3385,6 +3392,89 @@ async function openDraftPaymentModal() {
   // Reset type to default and populate
   document.getElementById("draftRecipientType").value = "employee";
   updateDraftRecipientDropdown();
+}
+
+function viewReceipt(receiptId) {
+  // PDFs and images: open in new tab via the authenticated API endpoint
+  // We construct a URL that the browser will fetch with credentials via the token
+  // Since we can't inject auth headers into a new tab, we open a temporary object URL
+  authFetch(`${API_BASE}/receipts/${encodeURIComponent(receiptId)}`)
+    .then((resp) => {
+      if (!resp.ok) throw new Error("Could not load receipt.");
+      return resp.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank");
+      if (!win) alert("Pop-up blocked — please allow pop-ups for this site.");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    })
+    .catch((err) => alert("Failed to open receipt: " + err.message));
+}
+
+function resetDraftReceipt() {
+  draftReceiptId = null;
+  document.getElementById("draftReceiptInput").value = "";
+  document.getElementById("draftReceiptStatus").textContent = "";
+  document.getElementById("draftReceiptPreview").style.display = "none";
+  document.getElementById("draftReceiptPreview").innerHTML = "";
+  document.getElementById("draftReceiptPickBtn").textContent = "+ Attach Receipt";
+  document.getElementById("submitDraftBtn").disabled = false;
+}
+
+async function handleReceiptFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+
+  if (file.size > MAX_SIZE) {
+    document.getElementById("draftReceiptStatus").textContent = "File too large (max 10 MB).";
+    document.getElementById("draftReceiptInput").value = "";
+    return;
+  }
+  if (!ALLOWED.includes(file.type)) {
+    document.getElementById("draftReceiptStatus").textContent = "Only JPEG, PNG, WebP, or PDF allowed.";
+    document.getElementById("draftReceiptInput").value = "";
+    return;
+  }
+
+  document.getElementById("draftReceiptStatus").textContent = "Uploading…";
+  document.getElementById("draftReceiptPickBtn").textContent = "Uploading…";
+  document.getElementById("submitDraftBtn").disabled = true;
+
+  try {
+    const formData = new FormData();
+    formData.append("receipt", file);
+    const resp = await authFetch(`${API_BASE}/receipts`, { method: "POST", body: formData });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.message || "Upload failed");
+
+    draftReceiptId = data.receiptId;
+    document.getElementById("draftReceiptStatus").textContent = file.name;
+    document.getElementById("draftReceiptPickBtn").textContent = "Change Receipt";
+    document.getElementById("submitDraftBtn").disabled = false;
+
+    if (file.type.startsWith("image/")) {
+      const preview = document.getElementById("draftReceiptPreview");
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.style.cssText = "max-width:100%;max-height:150px;border-radius:4px;border:1px solid #ddd;";
+      preview.innerHTML = "";
+      preview.appendChild(img);
+      preview.style.display = "block";
+    } else {
+      const preview = document.getElementById("draftReceiptPreview");
+      preview.innerHTML = `<span style="font-size:0.85em;color:#555;">📄 ${escapeHtml(file.name)}</span>`;
+      preview.style.display = "block";
+    }
+  } catch (err) {
+    document.getElementById("draftReceiptStatus").textContent = "Upload failed: " + err.message;
+    document.getElementById("draftReceiptPickBtn").textContent = "+ Attach Receipt";
+    document.getElementById("submitDraftBtn").disabled = false;
+    draftReceiptId = null;
+  }
 }
 
 function openAddSupplierModal() {
@@ -4345,6 +4435,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("closeDraftButton").addEventListener("click", () => {
     const modal = document.getElementById("draftPaymentModal");
     if (modal) modal.style.display = "none";
+    resetDraftReceipt();
   });
 
   // Close modal when clicking outside the modal content
@@ -4352,8 +4443,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const modal = document.getElementById("draftPaymentModal");
     if (event.target === modal) {
       modal.style.display = "none";
+      resetDraftReceipt();
     }
   });
+
+  // Receipt file input handler
+  document.getElementById("draftReceiptInput").addEventListener("change", handleReceiptFileSelected);
 
   document
     .getElementById("draftPaymentForm")
@@ -4425,6 +4520,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         recipientLightningAddress,
         amount,
         note,
+        receiptId: draftReceiptId || undefined,
       };
 
       try {
@@ -4448,6 +4544,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (result.success) {
           alert("Draft payment submitted successfully!");
           document.getElementById("draftPaymentForm").reset();
+          resetDraftReceipt();
           document.getElementById("draftPaymentModal").style.display = "none";
           // Admin sees the pending drafts table, Employee sees their own drafts
           if (currentUser.role === "Admin") {

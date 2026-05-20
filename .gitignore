@@ -20,6 +20,9 @@ disrupt-portal/data/*.db
 disrupt-portal/data/*.db-shm
 disrupt-portal/data/*.db-wal
 
+# Receipt uploads (financial documents — never commit)
+disrupt-portal/uploads/
+
 # Logs
 *.log
 logs/

@@ -57,6 +57,7 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       recipientLightningAddress,
       amount,
       note,
+      receiptId,
     } = req.body;
 
     // Auto-generate title from contact/company if not provided
@@ -73,6 +74,14 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
     }
 
     // Create new draft object
+    // Validate receiptId belongs to this user if provided
+    if (receiptId) {
+      const receipt = db.prepare("SELECT uploadedBy FROM receipts WHERE id = ?").get(receiptId);
+      if (!receipt || receipt.uploadedBy !== req.user.email) {
+        return res.status(400).json({ success: false, message: "Invalid receipt." });
+      }
+    }
+
     const newDraft = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       title: resolvedTitle,
@@ -86,15 +95,16 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       department: req.user.department,
       dateCreated: new Date().toISOString(),
       status: "pending",
+      receiptId: receiptId || null,
     };
 
     db.prepare(`
       INSERT INTO drafts
         (id, title, recipientEmail, company, contact, recipientLightningAddress,
-         amount, note, createdBy, department, dateCreated, status)
+         amount, note, createdBy, department, dateCreated, status, receiptId)
       VALUES
         (@id, @title, @recipientEmail, @company, @contact, @recipientLightningAddress,
-         @amount, @note, @createdBy, @department, @dateCreated, @status)
+         @amount, @note, @createdBy, @department, @dateCreated, @status, @receiptId)
     `).run(newDraft);
 
     // Respond with success and new draft
@@ -263,6 +273,7 @@ router.post(
         approvedAt,
         approvedBy: req.user.email,
         btcUsdRate: btcUsdRate,
+        receiptId: draft.receiptId || null,
       };
 
       // 9. Atomically approve draft + record transaction
@@ -274,10 +285,10 @@ router.post(
         db.prepare(`
           INSERT OR REPLACE INTO transactions
             (id, date, type, receiver, lightningAddress, invoice, amount, currency,
-             note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate)
+             note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate, receiptId)
           VALUES
             (@id, @date, @type, @receiver, @lightningAddress, @invoice, @amount, @currency,
-             @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate)
+             @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate, @receiptId)
         `).run(transaction);
       })();
 

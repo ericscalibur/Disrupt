@@ -110,6 +110,7 @@ app.use("/api", require("./routes/departments"));
 app.use("/api", require("./routes/drafts"));
 app.use("/api", require("./routes/payments"));
 app.use("/api", require("./routes/suppliers"));
+app.use("/api", require("./routes/receipts"));
 
 // Health check (no auth required — used by uptime monitors / load balancers)
 app.get("/healthz", (req, res) => {

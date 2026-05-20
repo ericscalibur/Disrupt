@@ -98,11 +98,25 @@ db.exec(`
     target    TEXT,
     detail    TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS receipts (
+    id           TEXT PRIMARY KEY,
+    filename     TEXT NOT NULL,
+    originalName TEXT,
+    mimeType     TEXT,
+    sizeBytes    INTEGER,
+    uploadedBy   TEXT NOT NULL,
+    uploadedAt   TEXT NOT NULL
+  );
 `);
 
 // Non-destructive schema additions for already-existing databases
-const existingCols = db.prepare("PRAGMA table_info(transactions)").all().map((c) => c.name);
-if (!existingCols.includes("draftId"))        db.exec("ALTER TABLE transactions ADD COLUMN draftId TEXT");
-if (!existingCols.includes("taxPaymentFailed")) db.exec("ALTER TABLE transactions ADD COLUMN taxPaymentFailed INTEGER DEFAULT 0");
+const existingTxnCols = db.prepare("PRAGMA table_info(transactions)").all().map((c) => c.name);
+if (!existingTxnCols.includes("draftId"))          db.exec("ALTER TABLE transactions ADD COLUMN draftId TEXT");
+if (!existingTxnCols.includes("taxPaymentFailed")) db.exec("ALTER TABLE transactions ADD COLUMN taxPaymentFailed INTEGER DEFAULT 0");
+if (!existingTxnCols.includes("receiptId"))        db.exec("ALTER TABLE transactions ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
+
+const existingDraftCols = db.prepare("PRAGMA table_info(drafts)").all().map((c) => c.name);
+if (!existingDraftCols.includes("receiptId")) db.exec("ALTER TABLE drafts ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
 
 module.exports = db;
