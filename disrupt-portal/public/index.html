@@ -979,10 +979,9 @@
                                         accept="image/jpeg,image/png,image/webp,application/pdf"
                                         style="display:none"
                                     />
-                                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                                        <label for="draftReceiptInput" style="margin:0;white-space:nowrap;">Receipt (optional)</label>
-                                        <button type="button" class="new-btn" id="draftReceiptPickBtn" onclick="document.getElementById('draftReceiptInput').click()">+ Attach</button>
-                                        <span id="draftReceiptStatus" style="font-size:0.85em;color:#aaa;"></span>
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <button type="button" class="new-btn" id="draftReceiptPickBtn" onclick="document.getElementById('draftReceiptInput').click()" style="flex:1;">+ Attach Receipt (optional)</button>
+                                        <span id="draftReceiptStatus" style="font-size:0.85em;color:#aaa;white-space:nowrap;"></span>
                                     </div>
                                     <div id="draftReceiptPreview" style="display:none;margin-top:8px;"></div>
                                 </div>
