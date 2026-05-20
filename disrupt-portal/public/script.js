@@ -1119,7 +1119,7 @@ function setupTransactionRowClicks(transactions) {
       <span class="label">Invoice:</span> <span class="data">${escapeHtml(txn.invoice || "N/A")}</span><br>
       <span class="label">Payment Hash:</span> <span class="data">${escapeHtml(txn.paymentHash || "N/A")}</span><br>
       <span class="label">Pre-Image:</span> <span class="data">${escapeHtml(txn.preImage || "Not yet available — payment may still be pending")}</span><br>
-      ${txn.receiptId ? `<span class="label">Receipt:</span> <span class="data"><a href="#" onclick="viewReceipt('${escapeHtml(txn.receiptId)}');return false;">View Receipt</a></span>` : ""}
+      ${txn.receiptId ? `<span class="label">Receipt:</span> <span class="data"><a href="#" onclick="viewReceipt('${escapeHtml(txn.receiptId)}');return false;" style="color:inherit;text-decoration:underline;">View Receipt</a></span>` : ""}
     `.trim();
 
     detailsContainer.innerHTML = details;
