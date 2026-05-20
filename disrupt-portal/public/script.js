@@ -3415,10 +3415,10 @@ function viewReceipt(receiptId) {
 function resetDraftReceipt() {
   draftReceiptId = null;
   document.getElementById("draftReceiptInput").value = "";
-  document.getElementById("draftReceiptStatus").textContent = "";
+  document.getElementById("draftReceiptStatus").textContent = "📎 Click to attach receipt";
+  document.getElementById("draftReceiptZone").style.borderColor = "#555";
   document.getElementById("draftReceiptPreview").style.display = "none";
   document.getElementById("draftReceiptPreview").innerHTML = "";
-  document.getElementById("draftReceiptPickBtn").textContent = "+ Attach Receipt";
   document.getElementById("submitDraftBtn").disabled = false;
 }
 
@@ -3440,8 +3440,9 @@ async function handleReceiptFileSelected(e) {
     return;
   }
 
+  const zone = document.getElementById("draftReceiptZone");
   document.getElementById("draftReceiptStatus").textContent = "Uploading…";
-  document.getElementById("draftReceiptPickBtn").textContent = "Uploading…";
+  zone.style.borderColor = "#888";
   document.getElementById("submitDraftBtn").disabled = true;
 
   try {
@@ -3452,26 +3453,25 @@ async function handleReceiptFileSelected(e) {
     if (!data.success) throw new Error(data.message || "Upload failed");
 
     draftReceiptId = data.receiptId;
-    document.getElementById("draftReceiptStatus").textContent = file.name;
-    document.getElementById("draftReceiptPickBtn").textContent = "Change Receipt";
+    zone.style.borderColor = "#2ecc71";
+    document.getElementById("draftReceiptStatus").textContent = `✓ ${file.name}`;
     document.getElementById("submitDraftBtn").disabled = false;
 
+    const preview = document.getElementById("draftReceiptPreview");
     if (file.type.startsWith("image/")) {
-      const preview = document.getElementById("draftReceiptPreview");
       const img = document.createElement("img");
       img.src = URL.createObjectURL(file);
-      img.style.cssText = "max-width:100%;max-height:150px;border-radius:4px;border:1px solid #ddd;";
+      img.style.cssText = "max-width:100%;max-height:150px;border-radius:4px;border:1px solid #444;";
       preview.innerHTML = "";
       preview.appendChild(img);
       preview.style.display = "block";
     } else {
-      const preview = document.getElementById("draftReceiptPreview");
-      preview.innerHTML = `<span style="font-size:0.85em;color:#555;">📄 ${escapeHtml(file.name)}</span>`;
+      preview.innerHTML = `<span style="font-size:0.85em;color:#aaa;">📄 ${escapeHtml(file.name)}</span>`;
       preview.style.display = "block";
     }
   } catch (err) {
+    zone.style.borderColor = "#e74c3c";
     document.getElementById("draftReceiptStatus").textContent = "Upload failed: " + err.message;
-    document.getElementById("draftReceiptPickBtn").textContent = "+ Attach Receipt";
     document.getElementById("submitDraftBtn").disabled = false;
     draftReceiptId = null;
   }
