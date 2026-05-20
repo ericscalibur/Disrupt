@@ -49,7 +49,7 @@ app.use(
         "https://cdnjs.cloudflare.com",
         "https://use.fontawesome.com",
       ],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
       connectSrc: [
         "'self'",
         "https://api.coingecko.com",
