@@ -3467,7 +3467,7 @@ async function handleReceiptFileSelected(e) {
     if (file.type.startsWith("image/")) {
       const img = document.createElement("img");
       img.src = URL.createObjectURL(file);
-      img.style.cssText = "max-width:100%;max-height:150px;border-radius:4px;border:1px solid #444;";
+      img.style.cssText = "max-height:48px;border-radius:4px;border:1px solid #444;";
       preview.innerHTML = "";
       preview.appendChild(img);
       preview.style.display = "block";
