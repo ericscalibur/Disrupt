@@ -973,18 +973,16 @@
                                     />
                                 </div>
                                 <div class="form-group">
-                                    <label for="draftReceiptInput">Receipt (optional)</label>
                                     <input
                                         type="file"
                                         id="draftReceiptInput"
                                         accept="image/jpeg,image/png,image/webp,application/pdf"
                                         style="display:none"
                                     />
-                                    <div id="draftReceiptArea" style="display:flex;gap:8px;align-items:center;">
-                                        <button type="button" class="new-btn" id="draftReceiptPickBtn" onclick="document.getElementById('draftReceiptInput').click()">
-                                            + Attach Receipt
-                                        </button>
-                                        <span id="draftReceiptStatus" style="font-size:0.85em;color:#888;"></span>
+                                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                        <label for="draftReceiptInput" style="margin:0;white-space:nowrap;">Receipt (optional)</label>
+                                        <button type="button" class="new-btn" id="draftReceiptPickBtn" onclick="document.getElementById('draftReceiptInput').click()">+ Attach</button>
+                                        <span id="draftReceiptStatus" style="font-size:0.85em;color:#aaa;"></span>
                                     </div>
                                     <div id="draftReceiptPreview" style="display:none;margin-top:8px;"></div>
                                 </div>
