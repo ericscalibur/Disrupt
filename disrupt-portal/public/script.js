@@ -164,7 +164,9 @@ function prepareHeaders(optionsHeaders = {}, accessToken) {
     ...optionsHeaders,
     Authorization: `Bearer ${accessToken}`,
   };
-  if (!headers["Content-Type"]) {
+  if (headers["Content-Type"] === null) {
+    delete headers["Content-Type"]; // let browser set it (e.g. multipart/form-data)
+  } else if (headers["Content-Type"] === undefined) {
     headers["Content-Type"] = "application/json";
   }
   return headers;
@@ -3448,7 +3450,11 @@ async function handleReceiptFileSelected(e) {
   try {
     const formData = new FormData();
     formData.append("receipt", file);
-    const resp = await authFetch(`${API_BASE}/receipts`, { method: "POST", body: formData });
+    const resp = await authFetch(`${API_BASE}/receipts`, {
+      method: "POST",
+      headers: { "Content-Type": null }, // let browser set multipart/form-data + boundary
+      body: formData,
+    });
     const data = await resp.json();
     if (!data.success) throw new Error(data.message || "Upload failed");
 
