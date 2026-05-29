@@ -306,6 +306,17 @@ async function main() {
   fs.writeFileSync(SUPPLIERS_FILE, JSON.stringify([], null, 2));
   fs.writeFileSync(DEPARTMENTS_FILE, JSON.stringify(departments, null, 2));
 
+  // ── Migrate JSON → SQLite ─────────────────────────────────────────────────
+
+  console.log("  💾 Initializing database...");
+  try {
+    require("./disrupt-portal/migrate-to-sqlite.js");
+    console.log("  ✅  Database ready");
+  } catch (err) {
+    console.error("  ❌ Database migration failed:", err.message);
+    console.error("     Run 'npm run migrate' manually before starting the server.");
+  }
+
   // ── Done ──────────────────────────────────────────────────────────────────
 
   console.log("");
@@ -336,16 +347,14 @@ async function main() {
   console.log("");
   console.log("  Next steps:");
   const missingEnv = [];
-  if (!blinkApiKey) missingEnv.push("    • Add BLINK_API_KEY to .env");
+  if (!blinkApiKey) missingEnv.push("Add BLINK_API_KEY to .env");
   if (!taxLightningAddress)
-    missingEnv.push("    • Optionally add TAX_LIGHTNING_ADDRESS to .env");
-  missingEnv.push(
-    "    • Optionally configure email settings in .env for password reset",
-  );
+    missingEnv.push("Optionally add TAX_LIGHTNING_ADDRESS to .env");
+  missingEnv.push("Optionally configure email settings in .env for password reset");
 
-  missingEnv.forEach((line, i) => console.log(`    ${i + 1}. ${line.trim()}`));
+  missingEnv.forEach((line, i) => console.log(`    ${i + 1}. ${line}`));
   console.log(`    ${missingEnv.length + 1}. Run: npm start`);
-  console.log(`    4. Login at http://localhost:3000`);
+  console.log(`    ${missingEnv.length + 2}. Login at http://localhost:3000`);
   console.log(`       Email:    ${email}`);
   console.log(`       Password: ${"*".repeat(password.length)}`);
   console.log("");
