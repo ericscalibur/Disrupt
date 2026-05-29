@@ -416,6 +416,11 @@ function showDashboard() {
   updateDepartmentsSection();
   updateNavigationForRole();
   showContent("welcome");
+  const homeNav = document.querySelector('.nav-item[data-content="welcome"]');
+  if (homeNav) {
+    document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
+    homeNav.classList.add("active");
+  }
 }
 
 // Logout function
