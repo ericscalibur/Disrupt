@@ -4,18 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Disrupt — Lightning Payments for Small Teams</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --dark:    #0f1e2a;
-      --mid:     #1a3547;
-      --card:    #1e3d52;
-      --accent:  #5dade2;
-      --green:   #27ae60;
-      --text:    #e8f0f5;
-      --muted:   #8aafc0;
-      --border:  #2a4d63;
+      --dark:    #162020;
+      --mid:     #2f4f4f;
+      --card:    #1e3535;
+      --accent:  #2ecc71;
+      --accent-d:#27ae60;
+      --blue:    #3498db;
+      --text:    #eaf5ee;
+      --muted:   #7aaa8a;
+      --border:  #3d6060;
       --radius:  10px;
     }
 
@@ -60,7 +62,7 @@
       cursor: pointer;
     }
     .btn:hover { opacity: 0.85; }
-    .btn-accent  { background: var(--accent); color: #fff; }
+    .btn-accent  { background: var(--accent); color: #162020; }
     .btn-outline { border: 1px solid var(--border); color: var(--text); }
 
     /* ── Hero ── */
@@ -72,9 +74,9 @@
     }
     .hero-badge {
       display: inline-block;
-      background: rgba(93,173,226,0.12);
+      background: rgba(46,204,113,0.12);
       color: var(--accent);
-      border: 1px solid rgba(93,173,226,0.3);
+      border: 1px solid rgba(46,204,113,0.35);
       border-radius: 20px;
       padding: 0.3rem 1rem;
       font-size: 0.8rem;
@@ -90,7 +92,7 @@
       color: #fff;
       margin-bottom: 1rem;
     }
-    .hero h1 span { color: var(--accent); }
+    .hero h1 span { color: inherit; }
     .hero p {
       font-size: clamp(1rem, 2.5vw, 1.2rem);
       color: var(--muted);
@@ -185,6 +187,7 @@
       color: var(--accent);
       margin-bottom: 0.5rem;
     }
+    .nav-logo img { height: 28px; width: auto; margin-right: 0.5rem; vertical-align: middle; }
     .role-card p { font-size: 0.85rem; color: var(--muted); }
 
     /* ── CTA ── */
@@ -219,7 +222,7 @@
 
   <!-- Nav -->
   <nav>
-    <div class="nav-logo"><span>⚡</span> DISRUPT</div>
+    <div class="nav-logo"><img src="favicon.png" alt="Disrupt logo" /> DISRUPT</div>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#screenshots">Screenshots</a>
@@ -229,8 +232,8 @@
 
   <!-- Hero -->
   <div class="hero">
-    <div class="hero-badge">⚡ Powered by Lightning Network</div>
-    <h1>DIS<span>RUPT</span></h1>
+    <div class="hero-badge">Powered by Blink API</div>
+    <h1>DISRUPT</h1>
     <p>A self-hosted business payment portal for small teams. Send Lightning payments, manage payroll, and track every transaction — no bank required.</p>
     <div class="hero-actions">
       <a href="https://github.com/ericscalibur/Disrupt" class="btn btn-accent btn-lg" target="_blank">View on GitHub</a>
