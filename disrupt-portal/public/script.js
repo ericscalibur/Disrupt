@@ -3824,6 +3824,8 @@ async function renderBatchTable(data) {
       ? `$${usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "—";
 
+    const rowStatus = row["Status"] || "Pending";
+    const statusColor = rowStatus === "Success" ? "green" : rowStatus === "Failed" ? "red" : "#e6a817";
     tr.innerHTML = `
             <td>${escapeHtml(row["Date"] || "")}</td>
             <td>${escapeHtml(row["Name"] || "")}</td>
@@ -3831,7 +3833,7 @@ async function renderBatchTable(data) {
             <td>${usdDisplay}</td>
             <td>${escapeHtml(row["Lightning-Address"] || "")}</td>
             <td>${escapeHtml(note)}</td>
-            <td>${escapeHtml(row["Status"] || "Pending")}</td>
+            <td style="color:${statusColor};font-weight:600">${escapeHtml(rowStatus)}</td>
         `;
 
     // Add click event listener to open edit modal
@@ -4862,6 +4864,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
       });
 
+      const sendBatchBtn = document.getElementById("sendBatchBtn");
+      const originalBtnText = sendBatchBtn.textContent;
+      sendBatchBtn.disabled = true;
+      sendBatchBtn.textContent = "Sending...";
+
+      alert(`Sending ${batchData.length} payment${batchData.length !== 1 ? "s" : ""}. Click OK and please wait while the payments are processed.`);
+
       try {
         const response = await authFetch(`${API_BASE}/batch-payment`, {
           method: "POST",
@@ -4874,12 +4883,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         const results = await response.json();
         if (results.success) {
           updateBatchTableStatus(results.paymentStatuses);
+          const succeeded = results.paymentStatuses.filter((s) => s.status === "Success").length;
+          const failed = results.paymentStatuses.filter((s) => s.status !== "Success").length;
+          if (failed === 0) {
+            alert(`All ${succeeded} payment${succeeded !== 1 ? "s" : ""} sent successfully!`);
+          } else {
+            alert(`Batch complete: ${succeeded} succeeded, ${failed} failed. Check the Status column for details.`);
+          }
         } else {
           alert("Batch payment failed: " + results.message);
         }
       } catch (error) {
         console.error("Error sending batch payment:", error);
         alert("An error occurred while sending the batch payment.");
+      } finally {
+        sendBatchBtn.disabled = false;
+        sendBatchBtn.textContent = originalBtnText;
       }
     });
 });
