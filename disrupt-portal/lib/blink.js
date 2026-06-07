@@ -138,10 +138,35 @@ async function getBtcUsdRate() {
   }
 }
 
+
+async function onChainPaymentSend(walletId, address, amount, memo) {
+  const mutation = `
+    mutation onChainPaymentSend($input: OnChainPaymentSendInput!) {
+      onChainPaymentSend(input: $input) {
+        status
+        errors { message }
+        transaction { id status }
+      }
+    }
+  `;
+  const variables = {
+    input: {
+      walletId,
+      address,
+      amount: Number(amount),
+      speed: "FAST",
+      memo: memo || "",
+    },
+  };
+  const response = await blinkPost({ query: mutation, variables });
+  return response.data.data.onChainPaymentSend;
+}
+
 module.exports = {
   blinkPost,
   getBlinkWallets,
   fetchPreImageFromBlink,
   getBlinkTransactions,
   getBtcUsdRate,
+  onChainPaymentSend,
 };

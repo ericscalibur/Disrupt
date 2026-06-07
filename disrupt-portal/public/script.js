@@ -23,6 +23,9 @@ let taxLightningAddress = null;
 const balanceDisplayModes = ["BTC", "SATS", "USD"];
 let currentBalanceMode = 0;
 let currentMember = null;
+let currentPaymentRail = "lightning";
+let recipientSelectedText = "";
+let recipientComboboxList = [];
 let transactions = [];
 const authorizedRoles = ["Admin", "Manager"];
 let token = sessionStorage.getItem("token");
@@ -1843,6 +1846,7 @@ function populateEditSupplierForm(supplier) {
   form.elements["contact"].value = supplier.contact || "";
   form.elements["email"].value = supplier.email || "";
   form.elements["lightningAddress"].value = supplier.lightningAddress || "";
+  form.elements["btcAddress"].value = supplier.btcAddress || "";
   form.elements["note"].value = supplier.note || "";
   document.getElementById("editSupplierModal").style.display = "flex";
 }
@@ -1857,13 +1861,14 @@ document
     const form = event.target;
 
     const updatedSupplier = {
-      id: currentSupplier.id, // keep from currentSupplier or add hidden input if you prefer
+      id: currentSupplier.id,
       company: form.elements["name"].value,
       contact: form.elements["contact"].value,
       email: form.elements["email"].value,
       lightningAddress: form.elements["lightningAddress"].value,
+      btcAddress: form.elements["btcAddress"].value,
       note: form.elements["note"].value,
-      createdAt: currentSupplier.createdAt, // keep original createdAt
+      createdAt: currentSupplier.createdAt,
     };
 
     try {
@@ -1914,18 +1919,20 @@ function renderSuppliers(suppliers) {
     const contact = supplier.contact || "";
     const email = supplier.email || "";
     const lightningAddress = supplier.lightningAddress || "";
+    const btcAddress = supplier.btcAddress || "";
     const note = supplier.note || "";
     const createdAt = supplier.createdAt
       ? new Date(supplier.createdAt).toLocaleString()
       : "";
 
     const tr = document.createElement("tr");
-    tr.setAttribute("data-supplier-id", supplier.id); // Add this for identification
+    tr.setAttribute("data-supplier-id", supplier.id);
     tr.innerHTML = `
       <td>${escapeHtml(company)}</td>
       <td>${escapeHtml(contact)}</td>
       <td>${escapeHtml(email)}</td>
       <td>${escapeHtml(lightningAddress)}</td>
+      <td>${escapeHtml(btcAddress)}</td>
       <td>${escapeHtml(note)}</td>
       <td>${createdAt}</td>
     `;
@@ -2069,8 +2076,32 @@ function renderTransactions(transactions, fallbackRate = null) {
   setupTransactionRowClicks(filteredTransactions);
 }
 
+function updatePaymentAmountUsd() {
+  const sats = parseFloat(document.getElementById("paymentAmount").value) || 0;
+  const el = document.getElementById("paymentAmountUsd");
+  if (!el) return;
+  el.textContent = sats > 0 ? `$${((sats / 100_000_000) * btcToUsdRate).toFixed(2)}` : "";
+}
+
 function closeNewPaymentModal() {
   document.getElementById("newPaymentModal").style.display = "none";
+  const usdEl = document.getElementById("paymentAmountUsd");
+  if (usdEl) usdEl.textContent = "";
+  const searchInput = document.getElementById("recipientSearch");
+  if (searchInput) searchInput.value = "";
+  const hiddenSelect = document.getElementById("recipientSelect");
+  if (hiddenSelect) hiddenSelect.value = "";
+  recipientSelectedText = "";
+  closeRecipientDropdown();
+  currentPaymentRail = "lightning";
+  const railGroup = document.getElementById("paymentRailGroup");
+  if (railGroup) railGroup.style.display = "none";
+  const labelEl = document.getElementById("paymentAddressLabel");
+  if (labelEl) labelEl.textContent = "Lightning Address";
+  const btnLn = document.getElementById("railBtnLightning");
+  const btnOn = document.getElementById("railBtnOnchain");
+  if (btnLn) btnLn.classList.add("rail-btn-active");
+  if (btnOn) btnOn.classList.remove("rail-btn-active");
 }
 
 // ─── Transaction Export ───────────────────────────────────────────────────────
@@ -2179,56 +2210,117 @@ function exportTransactions(format) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function updateRecipientDropdown() {
-  const type = document.getElementById("recipientType").value; // "employee" or "supplier"
-  const select = document.getElementById("recipientSelect");
-  select.innerHTML = ""; // Clear previous options
+  const type = document.getElementById("recipientType").value;
+  const hiddenSelect = document.getElementById("recipientSelect");
+  const searchInput = document.getElementById("recipientSearch");
 
   let list = [];
-  let placeholder = "";
+  if (type === "employee") list = employeesList;
+  else if (type === "supplier") list = suppliersList;
 
-  if (type === "employee") {
-    list = employeesList;
-    placeholder = "Select Employee";
-  } else if (type === "supplier") {
-    list = suppliersList;
-    placeholder = "Select Supplier";
-  }
+  // Employees are keyed by email (backend uses getEmployeeByEmail); suppliers by id
+  recipientComboboxList = list.map((item) => ({
+    id: type === "employee" ? item.email : item.id,
+    label: type === "employee"
+      ? (item.name || "(Unnamed Employee)")
+      : (item.company || "(Unnamed Supplier)"),
+  }));
 
-  // Add placeholder option with empty value
-  const placeholderOption = document.createElement("option");
-  placeholderOption.value = "";
-  placeholderOption.textContent = placeholder;
-  select.appendChild(placeholderOption);
-
-  // Populate options with employee names or supplier company names
-  list.forEach((item) => {
-    const option = document.createElement("option");
-    option.value = item.id; // Use id consistently
-
-    if (type === "employee") {
-      option.textContent = item.name || "(Unnamed Employee)";
-    } else if (type === "supplier") {
-      option.textContent = item.company || "(Unnamed Supplier)";
-    }
-
-    select.appendChild(option);
-  });
-
-  // Reset details fields
+  // Reset fields
+  hiddenSelect.value = "";
+  searchInput.value = "";
+  recipientSelectedText = "";
   const recipientEmailEl = document.getElementById("recipientEmail");
-  const lightningAddressEl = document.getElementById(
-    "recipientLightningAddress",
-  );
+  const addressEl = document.getElementById("recipientLightningAddress");
   const supplierContactEl = document.getElementById("supplierContactReadonly");
-
   if (recipientEmailEl) recipientEmailEl.value = "";
-  if (lightningAddressEl) lightningAddressEl.value = "";
+  if (addressEl) addressEl.value = "";
   if (supplierContactEl) supplierContactEl.value = "";
+  closeRecipientDropdown();
 
-  // Auto-select first real option if available (skip placeholder)
-  if (list.length > 0) {
-    select.value = list[0].id;
-    populateRecipientDetails();
+  // Show/hide tax withholding section based on recipient type
+  const taxWithholdingContainer = document.getElementById("taxWithholdingCheckbox");
+  const employeeTaxCheckbox = document.getElementById("applyEmployeeTaxWithholding");
+  const contractorTaxCheckbox = document.getElementById("applyContractorTaxWithholding");
+  const employeeTaxSection = document.getElementById("employeeTaxDeductionSection");
+  const contractorTaxSection = document.getElementById("contractorTaxDeductionSection");
+  if (type === "employee") {
+    if (taxWithholdingContainer) taxWithholdingContainer.style.display = "block";
+  } else {
+    if (taxWithholdingContainer) taxWithholdingContainer.style.display = "none";
+    if (employeeTaxCheckbox) employeeTaxCheckbox.checked = false;
+    if (contractorTaxCheckbox) contractorTaxCheckbox.checked = false;
+    if (employeeTaxSection) employeeTaxSection.style.display = "none";
+    if (contractorTaxSection) contractorTaxSection.style.display = "none";
+  }
+}
+
+function renderRecipientDropdownItems(items) {
+  const dropdown = document.getElementById("recipientDropdown");
+  dropdown.innerHTML = "";
+  if (items.length === 0) {
+    dropdown.innerHTML = '<div class="recipient-dropdown-empty">No matches found</div>';
+  } else {
+    items.forEach(({ id, label }) => {
+      const div = document.createElement("div");
+      div.className = "recipient-dropdown-item";
+      div.textContent = label;
+      div.addEventListener("mousedown", () => selectRecipientItem(id, label));
+      dropdown.appendChild(div);
+    });
+  }
+  dropdown.style.display = "block";
+}
+
+function showRecipientDropdown() {
+  renderRecipientDropdownItems(recipientComboboxList);
+}
+
+function filterRecipientDropdown() {
+  const query = document.getElementById("recipientSearch").value.trim().toLowerCase();
+  const filtered = query
+    ? recipientComboboxList.filter((item) => item.label.toLowerCase().includes(query))
+    : recipientComboboxList;
+  renderRecipientDropdownItems(filtered);
+}
+
+function closeRecipientDropdown() {
+  const dropdown = document.getElementById("recipientDropdown");
+  if (dropdown) dropdown.style.display = "none";
+}
+
+function selectRecipientItem(id, label) {
+  document.getElementById("recipientSelect").value = id;
+  document.getElementById("recipientSearch").value = label;
+  recipientSelectedText = label;
+  closeRecipientDropdown();
+  populateRecipientDetails();
+}
+
+function getCurrentPaymentRecipient() {
+  const recipientType = document.getElementById("recipientType").value;
+  const selectedId = document.getElementById("recipientSelect").value;
+  if (recipientType === "employee") {
+    return employeesList.find((e) => e.email === selectedId) || null; // selectedId is employee email
+  }
+  return suppliersList.find((s) => s.id === selectedId) || null;
+}
+
+function selectPaymentRail(rail) {
+  currentPaymentRail = rail;
+  const recipient = getCurrentPaymentRecipient();
+  const addressEl = document.getElementById("recipientLightningAddress");
+  const labelEl = document.getElementById("paymentAddressLabel");
+
+  document.getElementById("railBtnLightning").classList.toggle("rail-btn-active", rail === "lightning");
+  document.getElementById("railBtnOnchain").classList.toggle("rail-btn-active", rail === "onchain");
+
+  if (rail === "lightning") {
+    if (labelEl) labelEl.textContent = "Lightning Address";
+    if (addressEl) addressEl.value = recipient?.lightningAddress || "";
+  } else {
+    if (labelEl) labelEl.textContent = "Bitcoin Address";
+    if (addressEl) addressEl.value = recipient?.btcAddress || "";
   }
 }
 
@@ -2237,44 +2329,50 @@ function populateRecipientDetails() {
   const recipientSelect = document.getElementById("recipientSelect");
   const selectedId = recipientSelect.value;
 
-  // Elements to populate
   const recipientEmailEl = document.getElementById("recipientEmail");
-  const lightningAddressEl = document.getElementById(
-    "recipientLightningAddress",
-  );
+  const addressEl = document.getElementById("recipientLightningAddress");
+  const labelEl = document.getElementById("paymentAddressLabel");
   const supplierContactEl = document.getElementById("supplierContactReadonly");
+  const railGroup = document.getElementById("paymentRailGroup");
 
-  // Clear fields initially
   if (recipientEmailEl) recipientEmailEl.value = "";
-  if (lightningAddressEl) lightningAddressEl.value = "";
+  if (addressEl) addressEl.value = "";
   if (supplierContactEl) supplierContactEl.value = "";
+  if (railGroup) railGroup.style.display = "none";
 
-  if (!selectedId) {
-    // No recipient selected, clear fields and return
-    return;
-  }
+  if (!selectedId) return;
 
   let recipient = null;
-
   if (recipientType === "employee") {
     recipient = employeesList.find((e) => e.email === selectedId);
   } else if (recipientType === "supplier") {
     recipient = suppliersList.find((s) => s.id === selectedId);
   }
+  if (!recipient) return;
 
-  if (!recipient) {
-    // Recipient not found, clear fields and return
-    return;
-  }
-
-  // Populate email and lightning address (for both types)
   if (recipientEmailEl) recipientEmailEl.value = recipient.email || "";
-  if (lightningAddressEl)
-    lightningAddressEl.value = recipient.lightningAddress || "";
-
-  // Populate contact only for suppliers
   if (recipientType === "supplier" && supplierContactEl) {
     supplierContactEl.value = recipient.contact || "";
+  }
+
+  const hasLightning = !!recipient.lightningAddress;
+  const hasBtc = !!recipient.btcAddress;
+
+  if (hasLightning && hasBtc) {
+    // Both available — show toggle, default to lightning
+    if (railGroup) railGroup.style.display = "block";
+    selectPaymentRail("lightning");
+  } else if (hasLightning) {
+    currentPaymentRail = "lightning";
+    if (labelEl) labelEl.textContent = "Lightning Address";
+    if (addressEl) addressEl.value = recipient.lightningAddress;
+  } else if (hasBtc) {
+    currentPaymentRail = "onchain";
+    if (labelEl) labelEl.textContent = "Bitcoin Address";
+    if (addressEl) addressEl.value = recipient.btcAddress;
+  } else {
+    currentPaymentRail = null;
+    if (labelEl) labelEl.textContent = "Payment Address";
   }
 }
 
@@ -2288,10 +2386,6 @@ async function loadEmployeesForPaymentModal() {
     console.error("Error loading employees for payment modal:", err);
     employeesList = [];
   }
-}
-
-function closeNewPaymentModal() {
-  document.getElementById("newPaymentModal").style.display = "none";
 }
 
 // PAY INVOICE MODAL
@@ -2356,10 +2450,7 @@ async function submitNewPayment(event) {
   let contact = "";
   let company = "";
 
-  // Get the selected option text (employee name or supplier company)
-  const recipientSelect = document.getElementById("recipientSelect");
-  const selectedOptionText =
-    recipientSelect.options[recipientSelect.selectedIndex]?.text || "";
+  const selectedOptionText = recipientSelectedText;
 
   // Build contact and company based on recipient type
   if (recipientType === "supplier") {
@@ -2386,9 +2477,9 @@ async function submitNewPayment(event) {
     return;
   }
 
-  // Validate lightning address presence
+  // Validate payment address presence
   if (!lightningAddress) {
-    alert("Selected recipient does not have a Lightning Address.");
+    alert("Selected recipient does not have a payment address configured.");
     resetSubmitButton(submitBtn);
     return;
   }
@@ -2429,8 +2520,10 @@ async function submitNewPayment(event) {
     contact,
     company,
     email,
-    lightningAddress,
-    paymentAmount: netPaymentAmount, // Send net amount to employee
+    paymentRail: currentPaymentRail,
+    lightningAddress: currentPaymentRail === "onchain" ? "" : lightningAddress,
+    btcAddress: currentPaymentRail === "onchain" ? lightningAddress : "",
+    paymentAmount: netPaymentAmount,
     paymentNote,
     btcUsdRate: btcToUsdRate || null,
     taxWithholding: {
@@ -3140,6 +3233,7 @@ async function addTeamMember() {
       email: document.getElementById("memberEmail").value.trim(),
       department: document.getElementById("memberDepartment").value.trim(),
       lightningAddress: document.getElementById("memberLightning").value.trim(),
+      btcAddress: document.getElementById("memberBtcAddress").value.trim(),
     };
 
     // Validation
@@ -3148,9 +3242,9 @@ async function addTeamMember() {
       !newMember.role ||
       !newMember.email ||
       !newMember.department ||
-      !newMember.lightningAddress
+      (!newMember.lightningAddress && !newMember.btcAddress)
     ) {
-      throw new Error("Please fill in all required fields");
+      throw new Error("Please fill in all required fields (at least one payment address is required)");
     }
 
     // Use authFetch to handle token and refresh automatically
@@ -3194,6 +3288,7 @@ async function addTeamMember() {
       "memberDepartment",
       "memberEmail",
       "memberLightning",
+      "memberBtcAddress",
     ].forEach((id) => {
       document.getElementById(id).value = "";
     });
@@ -3512,28 +3607,12 @@ async function submitAddSupplier(event) {
   const company = document.getElementById("supplierName").value.trim();
   const email = document.getElementById("supplierEmail").value.trim();
   const contact = document.getElementById("supplierContact").value.trim();
-  const lightningAddress = document
-    .getElementById("supplierLightningAddress")
-    .value.trim();
+  const lightningAddress = document.getElementById("supplierLightningAddress").value.trim();
+  const btcAddress = document.getElementById("supplierBtcAddress").value.trim();
   const note = document.getElementById("supplierNote").value.trim();
 
-  // Add createdAt timestamp
-  const createdAt = new Date().toISOString();
-
-  // Debug logging
-  console.log("Adding supplier with data:", {
-    company,
-    contact,
-    email,
-    lightningAddress,
-    note,
-    createdAt,
-  });
-
-  // Check if required fields are empty
-  if (!company || !contact || !email || !lightningAddress) {
-    console.log("Validation failed - missing required fields");
-    alert("Company name, contact, email, and lightning address are required.");
+  if (!company || !contact || !email || (!lightningAddress && !btcAddress)) {
+    alert("Company name, contact, email, and at least one payment address (Lightning or Bitcoin) are required.");
     return;
   }
 
@@ -3548,8 +3627,8 @@ async function submitAddSupplier(event) {
         contact,
         email,
         lightningAddress,
+        btcAddress,
         note,
-        createdAt,
       }),
     });
 
@@ -3731,6 +3810,14 @@ function isValidEmail(email) {
   return re.test(email);
 }
 
+function detectPaymentRail(address) {
+  if (!address) return null;
+  if (/^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(address)) return "onchain";
+  if (/^lnbc/i.test(address)) return "invoice";
+  if (/^[^@\s]+@[^@\s]+$/.test(address)) return "lightning";
+  return null;
+}
+
 function parseCsv(csvData) {
   console.log("Parsing CSV data...");
   try {
@@ -3816,12 +3903,16 @@ async function renderBatchTable(data) {
       row["Amount(sats)"] = String(satsAmount);
     }
 
+    const address = row["Address"] || row["Lightning-Address"] || "";
+    row["Address"] = address; // normalize to Address key
+    const rail = detectPaymentRail(address);
+    const railDisplay = rail === "onchain" ? "₿ On-Chain" : rail === "invoice" ? "⚡ Invoice" : rail === "lightning" ? "⚡ Lightning" : "—";
+
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     tr.style.transition = "all 0.15s ease";
     tr.setAttribute("data-row-index", index);
     tr.title = "Click to edit this payment";
-    // Generate default note if not present
     const defaultNote = `${row["Name"] || "Unknown"} - ${row["Date"] || "No Date"}`;
     const note = row["Note"] || defaultNote;
 
@@ -3836,7 +3927,8 @@ async function renderBatchTable(data) {
             <td>${escapeHtml(row["Name"] || "")}</td>
             <td>${escapeHtml(satsAmount != null ? String(satsAmount) : "")}</td>
             <td>${usdDisplay}</td>
-            <td>${escapeHtml(row["Lightning-Address"] || "")}</td>
+            <td>${escapeHtml(address)}</td>
+            <td>${escapeHtml(railDisplay)}</td>
             <td>${escapeHtml(note)}</td>
             <td style="color:${statusColor};font-weight:600">${escapeHtml(rowStatus)}</td>
         `;
@@ -3884,8 +3976,8 @@ function openBatchEditModal(rowIndex) {
   document.getElementById("batchEditDate").value = row["Date"] || "";
   document.getElementById("batchEditName").value = row["Name"] || "";
   document.getElementById("batchEditAmount").value = row["Amount(sats)"] || "";
-  document.getElementById("batchEditLightningAddress").value =
-    row["Lightning-Address"] || "";
+  document.getElementById("batchEditAddress").value =
+    row["Address"] || row["Lightning-Address"] || "";
 
   // Populate note field with existing note or generate default
   const defaultNote = `${row["Name"] || "Unknown"} - ${row["Date"] || "No Date"}`;
@@ -3930,11 +4022,10 @@ function handleBatchEditSubmit(event) {
   const date = formData.get("date");
   const name = formData.get("name").trim();
   const amount = formData.get("amount");
-  const lightningAddress = formData.get("lightningAddress").trim();
+  const address = formData.get("address").trim();
   const note = formData.get("note").trim();
 
-  // Validation
-  if (!date || !name || !amount || !lightningAddress) {
+  if (!date || !name || !amount || !address) {
     alert("Error: All fields are required");
     return;
   }
@@ -3944,9 +4035,8 @@ function handleBatchEditSubmit(event) {
     return;
   }
 
-  // Basic Lightning address validation
-  if (!isValidEmail(lightningAddress)) {
-    alert("Error: Please enter a valid Lightning address");
+  if (!detectPaymentRail(address)) {
+    alert("Error: Address must be a Lightning address, BOLT11 invoice, or Bitcoin address");
     return;
   }
 
@@ -3959,7 +4049,7 @@ function handleBatchEditSubmit(event) {
     Name: name,
     "Amount(sats)": amount,
     "Amount(usd)": newUsd,
-    "Lightning-Address": lightningAddress,
+    Address: address,
     Note: note || `${name} - ${date}`,
     Status: batchPaymentData[rowIndex]["Status"] || "Pending",
   };
@@ -4864,7 +4954,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           date: rowData["Date"] || "",
           name: rowData["Name"] || "",
           amount: rowData["Amount(sats)"] || "",
-          lightningAddress: rowData["Lightning-Address"] || "",
+          address: rowData["Address"] || rowData["Lightning-Address"] || "",
           note: rowData["Note"] || `${rowData["Name"] || ""} - ${rowData["Date"] || ""}`,
         });
       });
@@ -5031,67 +5121,6 @@ function calculateContractorTaxWithholding() {
     netPayment.toLocaleString() + " SATS";
   document.getElementById("contractorTotalTax").textContent =
     contractorTax.toLocaleString() + " SATS";
-}
-
-// Update recipient type change handler
-function updateRecipientDropdown() {
-  const recipientType = document.getElementById("recipientType").value;
-  const recipientSelect = document.getElementById("recipientSelect");
-  const employeeTaxCheckbox = document.getElementById(
-    "applyEmployeeTaxWithholding",
-  );
-  const contractorTaxCheckbox = document.getElementById(
-    "applyContractorTaxWithholding",
-  );
-  const employeeTaxSection = document.getElementById(
-    "employeeTaxDeductionSection",
-  );
-  const contractorTaxSection = document.getElementById(
-    "contractorTaxDeductionSection",
-  );
-  const taxWithholdingContainer = document.getElementById(
-    "taxWithholdingCheckbox",
-  );
-
-  // Show/hide tax withholding checkboxes based on recipient type
-  if (recipientType === "employee") {
-    if (taxWithholdingContainer) {
-      taxWithholdingContainer.style.display = "block";
-    }
-  } else {
-    if (taxWithholdingContainer) {
-      taxWithholdingContainer.style.display = "none";
-    }
-    if (employeeTaxCheckbox) employeeTaxCheckbox.checked = false;
-    if (contractorTaxCheckbox) contractorTaxCheckbox.checked = false;
-    if (employeeTaxSection) employeeTaxSection.style.display = "none";
-    if (contractorTaxSection) contractorTaxSection.style.display = "none";
-  }
-
-  // Clear the recipient dropdown
-  recipientSelect.innerHTML = '<option value="">Select a recipient</option>';
-
-  if (recipientType === "employee") {
-    // Populate with employees
-    if (employeesList && employeesList.length > 0) {
-      employeesList.forEach((employee) => {
-        const option = document.createElement("option");
-        option.value = employee.email;
-        option.textContent = `${employee.name} (${employee.email})`;
-        recipientSelect.appendChild(option);
-      });
-    }
-  } else if (recipientType === "supplier") {
-    // Populate with suppliers
-    if (suppliersList && suppliersList.length > 0) {
-      suppliersList.forEach((supplier) => {
-        const option = document.createElement("option");
-        option.value = supplier.id;
-        option.textContent = supplier.company;
-        recipientSelect.appendChild(option);
-      });
-    }
-  }
 }
 
 // Add event listeners for payment amount changes to recalculate tax

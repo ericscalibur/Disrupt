@@ -22,19 +22,14 @@ router.get("/suppliers", authenticateToken, async (req, res) => {
 
 // Add Supplier
 router.post("/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"), validate(schemas.addSupplier), async (req, res) => {
-  const { company, contact, email, lightningAddress, note } = req.body;
-  if (!company || !contact || !email || !lightningAddress) {
-    return res.status(400).json({
-      success: false,
-      message: "Company, contact, email, and lightning address are required.",
-    });
-  }
+  const { company, contact, email, lightningAddress, btcAddress, note } = req.body;
 
   try {
-    const existing = db
-      .prepare("SELECT id FROM suppliers WHERE email = ? OR lightningAddress = ?")
-      .get(email, lightningAddress);
-    if (existing) {
+    const byEmail = db.prepare("SELECT id FROM suppliers WHERE email = ?").get(email);
+    const byLn = lightningAddress
+      ? db.prepare("SELECT id FROM suppliers WHERE lightningAddress = ?").get(lightningAddress)
+      : null;
+    if (byEmail || byLn) {
       return res.status(409).json({
         success: false,
         message: "Supplier with this email or lightning address already exists.",
@@ -46,13 +41,14 @@ router.post("/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"),
       company,
       contact,
       email,
-      lightningAddress,
+      lightningAddress: lightningAddress || null,
+      btcAddress: btcAddress || null,
       note: note || "",
       createdAt: new Date().toISOString(),
     };
     db.prepare(`
-      INSERT INTO suppliers (id, company, contact, email, lightningAddress, note, createdAt)
-      VALUES (@id, @company, @contact, @email, @lightningAddress, @note, @createdAt)
+      INSERT INTO suppliers (id, company, contact, email, lightningAddress, btcAddress, note, createdAt)
+      VALUES (@id, @company, @contact, @email, @lightningAddress, @btcAddress, @note, @createdAt)
     `).run(newSupplier);
     res.json({ success: true, supplier: newSupplier });
   } catch (err) {
@@ -111,7 +107,7 @@ router.put("/suppliers/:id", authenticateToken, authorizeRoles(...authorizedRole
       return res.status(404).json({ message: "Supplier not found" });
     }
 
-    const allowed = ["company", "contact", "email", "lightningAddress", "note"];
+    const allowed = ["company", "contact", "email", "lightningAddress", "btcAddress", "note"];
     const fields = Object.keys(updates).filter((k) => allowed.includes(k));
     if (fields.length > 0) {
       const setClause = fields.map((k) => `${k} = @${k}`).join(", ");

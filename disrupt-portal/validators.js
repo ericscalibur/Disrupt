@@ -11,6 +11,13 @@ const lnAddress = z
   .min(1)
   .max(512)
   .regex(/^[^@\s]+@[^@\s]+$/, "Must be a Lightning address (user@domain)");
+const btcAddress = z
+  .string()
+  .max(128)
+  .regex(
+    /^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/,
+    "Must be a valid Bitcoin address (bc1..., 1..., or 3...)"
+  );
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 const schemas = {
@@ -26,6 +33,7 @@ const schemas = {
     role: z.enum(["Admin", "Manager", "Bookkeeper", "Employee"]).optional(),
     department: nonEmpty().optional(),
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    btcAddress: btcAddress.optional().or(z.literal("")).optional(),
   }),
 
   editUser: z.object({
@@ -33,6 +41,7 @@ const schemas = {
     role: z.enum(["Admin", "Manager", "Bookkeeper", "Employee"]).optional(),
     department: nonEmpty().optional(),
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    btcAddress: btcAddress.optional().or(z.literal("")).optional(),
   }),
 
   addDepartment: z.object({
@@ -71,15 +80,20 @@ const schemas = {
     company: nonEmpty(),
     contact: nonEmpty(),
     email: email,
-    lightningAddress: lnAddress,
+    lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     note: z.string().max(1000).optional(),
-  }),
+  }).refine(
+    (d) => (d.lightningAddress && d.lightningAddress.trim()) || (d.btcAddress && d.btcAddress.trim()),
+    { message: "At least one payment address (Lightning or Bitcoin) is required." }
+  ),
 
   editSupplier: z.object({
     company: nonEmpty().optional(),
     contact: nonEmpty().optional(),
     email: email.optional(),
-    lightningAddress: lnAddress.optional(),
+    lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     note: z.string().max(1000).optional(),
   }),
 
@@ -89,7 +103,9 @@ const schemas = {
     contact: nonEmpty(),
     company: nonEmpty(),
     email: email.optional(),
-    lightningAddress: lnAddress,
+    lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    btcAddress: btcAddress.optional().or(z.literal("")).optional(),
+    paymentRail: z.enum(["lightning", "onchain"]).optional(),
     paymentAmount: z.number().positive(),
     paymentNote: z.string().max(1000).optional(),
     taxWithholding: z
@@ -102,7 +118,10 @@ const schemas = {
       })
       .optional(),
     btcUsdRate: z.number().positive().optional(),
-  }),
+  }).refine(
+    (d) => (d.paymentRail === "onchain") ? !!d.btcAddress : !!d.lightningAddress,
+    { message: "A payment address is required for the selected rail." }
+  ),
 
   payInvoice: z.object({
     invoice: z.string().min(1).max(4096),
@@ -116,7 +135,7 @@ const schemas = {
     payments: z
       .array(
         z.object({
-          lightningAddress: lnAddress,
+          address: z.string().min(1).max(512),
           amount: z.union([z.string(), z.number()]).transform(Number).pipe(z.number().int().positive()),
           name: z.string().max(255).optional(),
           note: z.string().max(1000).optional(),

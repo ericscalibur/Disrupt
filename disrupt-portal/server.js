@@ -11,12 +11,18 @@ const bcrypt = require("bcryptjs");
 
 const db = require("./db");
 const logger = require("./logger");
+const { getBlinkTransactions } = require("./lib/blink");
 
 const app = express();
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 if (!ACCESS_TOKEN_SECRET) {
   throw new Error("ACCESS_TOKEN_SECRET environment variable is not defined");
+}
+
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
+if (!REFRESH_TOKEN_SECRET) {
+  throw new Error("REFRESH_TOKEN_SECRET environment variable is not defined");
 }
 
 const PORT = process.env.PORT || 3000;
@@ -149,6 +155,33 @@ async function migratePasswords() {
   }
 }
 
+// ── On-chain confirmation polling ─────────────────────────────────────────────
+let pollingActive = false;
+async function pollOnchainConfirmations() {
+  if (pollingActive) return;
+  const pending = db.prepare(
+    "SELECT id FROM transactions WHERE type = 'onchain' AND status = 'PENDING'"
+  ).all();
+  if (pending.length === 0) return;
+
+  pollingActive = true;
+  try {
+    const blinkTxns = await getBlinkTransactions();
+    const blinkById = new Map(blinkTxns.map((t) => [t.id, t]));
+    for (const { id } of pending) {
+      const blinkTxn = blinkById.get(id);
+      if (blinkTxn && blinkTxn.status === "SUCCESS") {
+        db.prepare("UPDATE transactions SET status = 'SUCCESS' WHERE id = ?").run(id);
+        logger.info({ id }, "onchain transaction confirmed");
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, "onchain poll: failed to fetch Blink transactions");
+  } finally {
+    pollingActive = false;
+  }
+}
+
 // Start server
 async function startServer() {
   // Reset any drafts stuck in 'processing' from a previous crash
@@ -163,6 +196,10 @@ async function startServer() {
   app.listen(PORT, () => {
     logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started");
   });
+
+  // Poll for on-chain confirmations on startup, then every 5 minutes
+  pollOnchainConfirmations();
+  setInterval(pollOnchainConfirmations, 5 * 60 * 1000);
 }
 
 if (require.main === module) {

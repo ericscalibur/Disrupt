@@ -1,3 +1,4 @@
-Date,Name,Amount(sats),Lightning-Address,Status
-2026-02-14,Alice Johnson,50,ericscalibur@blink.sv,Pending
-2026-02-14,Bob Smith,75,ericscalibur@blink.sv,Pending
+Date,Name,Amount(sats),Address,Note,Status
+2026-02-14,Alice Johnson,50,alice@blink.sv,salary payment,Pending
+2026-02-14,Bob Smith,75,bob@walletofsatoshi.com,contractor fee,Pending
+2026-02-14,Carol Davis,100,bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh,on-chain payment,Pending

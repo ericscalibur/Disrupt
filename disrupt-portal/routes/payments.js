@@ -19,7 +19,7 @@ const logger = require("../logger");
 const { schemas, validate } = require("../validators");
 const { validateTaxWithholding } = require("../tax");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
-const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBlinkTransactions, getBtcUsdRate } = require("../lib/blink");
+const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBlinkTransactions, getBtcUsdRate, onChainPaymentSend } = require("../lib/blink");
 const { dbTxnToObj, auditLog, getEmployeeByEmail, getSupplierById } = require("../lib/db-helpers");
 
 const TAX_LIGHTNING_ADDRESS = process.env.TAX_LIGHTNING_ADDRESS;
@@ -88,23 +88,25 @@ router.get("/transactions", authenticateToken, async (req, res) => {
       }
 
       if (local) {
-        // Local record exists — use it as the base so all rich fields
-        // (invoice, lightningAddress, paymentHash, preImage, status, etc.)
-        // are preserved. Only override amount/currency/date from Blink
-        // since those are the authoritative settled values.
+        // Local record exists — use it as the base so all rich fields are preserved.
+        // For on-chain txns, Blink returns a negative settlementAmount (debit);
+        // keep the local positive amount instead.
+        const resolvedAmount = local.type === "onchain"
+          ? (local.amount || Math.abs(amount))
+          : amount;
         return {
           ...local,
           receiver: getReceiver(local),
-          amount,
+          amount: resolvedAmount,
           currency,
-          date: blinkTxn.createdAt || local.date,
+          date: local.date || new Date(blinkTxn.createdAt * 1000).toISOString(),
         };
       }
 
       // No local record — build minimal object from Blink data only
       return {
         id: blinkTxn.id,
-        date: blinkTxn.createdAt,
+        date: new Date(blinkTxn.createdAt * 1000).toISOString(),
         receiver: blinkTxn.memo || "Unknown",
         amount,
         currency,
@@ -295,6 +297,8 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       company,
       email,
       lightningAddress,
+      btcAddress,
+      paymentRail = "lightning",
       paymentAmount,
       paymentNote,
       taxWithholding,
@@ -313,11 +317,78 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
     }
 
     if (!recipient) {
-      return res.status(404).json({
-        success: false,
-        message: "Recipient not found.",
-      });
+      return res.status(404).json({ success: false, message: "Recipient not found." });
     }
+
+    // ── On-chain payment path ─────────────────────────────────────────────────
+    if (paymentRail === "onchain") {
+      let walletId;
+      try {
+        const wallets = await getBlinkWallets();
+        const btcWallet = wallets.find((w) => w.walletCurrency === "BTC");
+        if (!btcWallet) throw new Error("No BTC wallet found");
+        walletId = btcWallet.id;
+      } catch (err) {
+        logger.error("Failed to fetch wallet for on-chain payment:", err);
+        return res.status(500).json({ success: false, message: "Failed to fetch wallet: " + err.message });
+      }
+
+      let onchainResult;
+      try {
+        onchainResult = await onChainPaymentSend(walletId, btcAddress, amount, note);
+      } catch (err) {
+        logger.error("On-chain payment failed:", err);
+        return res.status(500).json({ success: false, message: "On-chain payment failed: " + err.message });
+      }
+
+      if (onchainResult.errors && onchainResult.errors.length > 0) {
+        return res.json({ success: false, message: onchainResult.errors[0].message });
+      }
+
+      const btcUsdRate = typeof clientBtcUsdRate === "number" && clientBtcUsdRate > 0
+        ? clientBtcUsdRate
+        : await getBtcUsdRate();
+
+      const txnId = onchainResult.transaction?.id || `onchain_${Date.now()}`;
+      const onchainTxn = {
+        id: txnId,
+        date: new Date().toISOString(),
+        type: "onchain",
+        recipientType,
+        recipientId,
+        receiver: contact || company,
+        contact,
+        company,
+        lightningAddress: null,
+        invoice: null,
+        amount,
+        currency: "SATS",
+        note,
+        direction: "SENT",
+        status: "PENDING",
+        paymentHash: txnId,
+        preImage: null,
+        btcUsdRate,
+        taxWithholding: null,
+        taxPaymentFailed: 0,
+      };
+
+      db.prepare(`
+        INSERT OR REPLACE INTO transactions
+          (id, date, type, recipientType, recipientId, contact, company, lightningAddress,
+           invoice, amount, currency, note, direction, status, paymentHash, preImage,
+           btcUsdRate, taxWithholding, taxPaymentFailed)
+        VALUES
+          (@id, @date, @type, @recipientType, @recipientId, @contact, @company, @lightningAddress,
+           @invoice, @amount, @currency, @note, @direction, @status, @paymentHash, @preImage,
+           @btcUsdRate, @taxWithholding, @taxPaymentFailed)
+      `).run({ ...onchainTxn, taxWithholding: null });
+
+      auditLog(req.user.email, "onchain_payment_sent", btcAddress, { amount, contact, company });
+      logger.info(`On-chain payment sent to ${btcAddress} for ${amount} sats (${onchainTxn.status})`);
+      return res.json({ success: true, employeeTransaction: onchainTxn, taxTransaction: null });
+    }
+    // ── End on-chain path ─────────────────────────────────────────────────────
 
     // Validate client-supplied tax math against server-computed values
     const taxValidationError = validateTaxWithholding(taxWithholding);
@@ -781,79 +852,78 @@ router.post(
       });
     }
 
+    const detectRail = (addr) => {
+      if (!addr) return null;
+      if (/^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(addr)) return "onchain";
+      if (/^lnbc/i.test(addr)) return "invoice";
+      if (/^[^@\s]+@[^@\s]+$/.test(addr)) return "lightning";
+      return null;
+    };
+
     for (const payment of payments) {
-      logger.debug("Processing payment:", payment);
+      const { address, amount } = payment;
+      const rail = detectRail(address);
+
       try {
-        const { lightningAddress, amount } = payment;
-        logger.debug(`Sending ${amount} sats to ${lightningAddress}`);
-
-        // Step 1: Convert Lightning address to invoice using LNURL-pay
-        let invoice;
-        try {
-          const lnurlResp = await lnurlPay.requestInvoice({
-            lnUrlOrAddress: lightningAddress,
-            tokens: Number(amount),
-            comment: payment.note || "",
-          });
-          invoice = lnurlResp.invoice;
-          if (!invoice) {
-            throw new Error(
-              "Could not resolve invoice from Lightning Address.",
-            );
+        if (rail === "onchain") {
+          // On-chain payment
+          const result = await onChainPaymentSend(walletId, address, Number(amount), payment.note || "");
+          if (result.errors && result.errors.length > 0) {
+            paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
+          } else {
+            logger.info({ address, amount }, "batch onchain payment sent");
+            paymentStatuses.push({ ...payment, status: "Success" });
           }
-          logger.debug("Resolved invoice for", lightningAddress);
-        } catch (err) {
-          logger.error("LNURL-pay error:", err);
-          paymentStatuses.push({
-            ...payment,
-            status: "Failed",
-            error: "Failed to resolve Lightning Address: " + err.message,
-          });
-          continue;
-        }
-
-        // Step 2: Pay the invoice using lnInvoicePaymentSend
-        const mutation = `
-          mutation payInvoice($input: LnInvoicePaymentInput!) {
-            lnInvoicePaymentSend(input: $input) {
-              status
-              errors { message }
+        } else if (rail === "invoice") {
+          // BOLT11 invoice — pay directly
+          const mutation = `
+            mutation payInvoice($input: LnInvoicePaymentInput!) {
+              lnInvoicePaymentSend(input: $input) {
+                status
+                errors { message }
+              }
             }
+          `;
+          const response = await blinkPost({ query: mutation, variables: { input: { walletId, paymentRequest: address } } });
+          const result = response.data.data.lnInvoicePaymentSend;
+          if (result.errors && result.errors.length > 0) {
+            paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
+          } else {
+            paymentStatuses.push({ ...payment, status: "Success" });
           }
-        `;
-
-        const variables = {
-          input: {
-            walletId: walletId,
-            paymentRequest: invoice,
-          },
-        };
-
-        logger.debug("Paying invoice for", lightningAddress);
-
-        const response = await blinkPost({ query: mutation, variables });
-
-        const result = response.data.data.lnInvoicePaymentSend;
-        logger.debug("Payment result:", JSON.stringify(result, null, 2));
-
-        if (result.errors && result.errors.length > 0) {
-          logger.warn({ lightningAddress, amount, errMsg: result.errors[0].message }, "batch payment failed");
-          paymentStatuses.push({
-            ...payment,
-            status: "Failed",
-            error: result.errors[0].message,
-          });
+        } else if (rail === "lightning") {
+          // Lightning address — resolve via LNURL then pay
+          let invoice;
+          try {
+            const lnurlResp = await lnurlPay.requestInvoice({ lnUrlOrAddress: address, tokens: Number(amount), comment: payment.note || "" });
+            invoice = lnurlResp.invoice;
+            if (!invoice) throw new Error("Could not resolve invoice from Lightning Address.");
+          } catch (err) {
+            paymentStatuses.push({ ...payment, status: "Failed", error: "LNURL error: " + err.message });
+            continue;
+          }
+          const mutation = `
+            mutation payInvoice($input: LnInvoicePaymentInput!) {
+              lnInvoicePaymentSend(input: $input) {
+                status
+                errors { message }
+              }
+            }
+          `;
+          const response = await blinkPost({ query: mutation, variables: { input: { walletId, paymentRequest: invoice } } });
+          const result = response.data.data.lnInvoicePaymentSend;
+          if (result.errors && result.errors.length > 0) {
+            paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
+          } else {
+            logger.info({ address, amount }, "batch lightning payment sent");
+            paymentStatuses.push({ ...payment, status: "Success" });
+          }
         } else {
-          logger.info({ lightningAddress, amount }, "batch payment sent");
-          paymentStatuses.push({ ...payment, status: "Success" });
+          paymentStatuses.push({ ...payment, status: "Failed", error: "Unrecognized address format." });
         }
       } catch (error) {
-        logger.error({ lightningAddress: payment.lightningAddress, amount: payment.amount, err: error.message }, "batch payment error");
-        paymentStatuses.push({
-          ...payment,
-          status: "Failed",
-          error: error.message,
-        });
+        logger.error({ address, amount, err: error.message }, "batch payment error");
+        paymentStatuses.push({ ...payment, status: "Failed", error: error.message });
       }
     }
 
@@ -875,17 +945,18 @@ router.post(
         `);
         db.transaction(() => {
           for (const payment of successfulPayments) {
+            const isOnchain = /^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(payment.address);
             insertBatch.run({
               id: `batch_${Date.now()}_${Math.random().toString(36).slice(2)}`,
               date: new Date().toISOString(),
-              type: "batch",
-              receiver: payment.name || payment.lightningAddress,
-              lightningAddress: payment.lightningAddress,
+              type: isOnchain ? "onchain" : "batch",
+              receiver: payment.name || payment.address,
+              lightningAddress: isOnchain ? null : payment.address,
               amount: Number(payment.amount),
               currency: "SATS",
               note: payment.note || "",
               direction: "SENT",
-              status: "SUCCESS",
+              status: isOnchain ? "PENDING" : "SUCCESS",
               btcUsdRate: btcUsdRate,
             });
           }

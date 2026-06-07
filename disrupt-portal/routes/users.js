@@ -16,7 +16,7 @@ router.get(
   authorizeRoles("Admin", "Manager", "Employee", "Bookkeeper"),
   async (req, res) => {
     try {
-      const cols = "id, name, email, role, department, lightningAddress, dateAdded";
+      const cols = "id, name, email, role, department, lightningAddress, btcAddress, dateAdded";
       let users;
       if (req.user.role !== "Admin" && req.user.department) {
         users = db.prepare(`SELECT ${cols} FROM users WHERE department = ?`).all(req.user.department);
@@ -100,7 +100,7 @@ router.post(
       }
 
       // Default action: add user
-      const { name, role, department, lightningAddress } = rest;
+      const { name, role, department, lightningAddress, btcAddress } = rest;
       if (!name || !email || !role) {
         return res.status(400).json({
           success: false,
@@ -139,12 +139,13 @@ router.post(
         role,
         department: department || null,
         lightningAddress: lightningAddress || null,
+        btcAddress: btcAddress || null,
         password: await bcrypt.hash(crypto.randomBytes(8).toString("hex"), 10),
         dateAdded: new Date().toISOString().split("T")[0],
       };
       db.prepare(`
-        INSERT INTO users (id, name, email, password, role, department, lightningAddress, dateAdded)
-        VALUES (@id, @name, @email, @password, @role, @department, @lightningAddress, @dateAdded)
+        INSERT INTO users (id, name, email, password, role, department, lightningAddress, btcAddress, dateAdded)
+        VALUES (@id, @name, @email, @password, @role, @department, @lightningAddress, @btcAddress, @dateAdded)
       `).run(newUser);
       const { password: _pw, ...safeUser } = newUser;
       return res.json({ success: true, user: safeUser });
@@ -181,7 +182,7 @@ router.get(
   authorizeRoles("Admin", "Manager"),
   async (req, res) => {
     try {
-      const cols = "id, name, email, role, department, lightningAddress, dateAdded";
+      const cols = "id, name, email, role, department, lightningAddress, btcAddress, dateAdded";
       let employees;
       if (req.user.role === "Manager" && req.user.department) {
         employees = db.prepare(`SELECT ${cols} FROM users WHERE department = ?`).all(req.user.department);

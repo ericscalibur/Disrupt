@@ -20,6 +20,7 @@ db.exec(`
     role             TEXT NOT NULL,
     department       TEXT,
     lightningAddress TEXT,
+    btcAddress       TEXT,
     dateAdded        TEXT NOT NULL
   );
 
@@ -76,7 +77,8 @@ db.exec(`
     company          TEXT NOT NULL,
     contact          TEXT NOT NULL,
     email            TEXT NOT NULL,
-    lightningAddress TEXT NOT NULL,
+    lightningAddress TEXT,
+    btcAddress       TEXT,
     note             TEXT DEFAULT '',
     createdAt        TEXT NOT NULL
   );
@@ -118,5 +120,34 @@ if (!existingTxnCols.includes("receiptId"))        db.exec("ALTER TABLE transact
 
 const existingDraftCols = db.prepare("PRAGMA table_info(drafts)").all().map((c) => c.name);
 if (!existingDraftCols.includes("receiptId")) db.exec("ALTER TABLE drafts ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
+
+const existingUserCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
+if (!existingUserCols.includes("btcAddress")) db.exec("ALTER TABLE users ADD COLUMN btcAddress TEXT");
+
+// Suppliers migration: drop NOT NULL on lightningAddress (SQLite requires table recreation) and add btcAddress
+const existingSupplierCols = db.prepare("PRAGMA table_info(suppliers)").all();
+const supplierLnCol = existingSupplierCols.find((c) => c.name === "lightningAddress");
+if (supplierLnCol && supplierLnCol.notnull === 1) {
+  db.exec(`
+    BEGIN TRANSACTION;
+    ALTER TABLE suppliers RENAME TO suppliers_old;
+    CREATE TABLE suppliers (
+      id               TEXT PRIMARY KEY,
+      company          TEXT NOT NULL,
+      contact          TEXT NOT NULL,
+      email            TEXT NOT NULL,
+      lightningAddress TEXT,
+      btcAddress       TEXT,
+      note             TEXT DEFAULT '',
+      createdAt        TEXT NOT NULL
+    );
+    INSERT INTO suppliers (id, company, contact, email, lightningAddress, note, createdAt)
+      SELECT id, company, contact, email, lightningAddress, note, createdAt FROM suppliers_old;
+    DROP TABLE suppliers_old;
+    COMMIT;
+  `);
+} else if (!existingSupplierCols.find((c) => c.name === "btcAddress")) {
+  db.exec("ALTER TABLE suppliers ADD COLUMN btcAddress TEXT");
+}
 
 module.exports = db;

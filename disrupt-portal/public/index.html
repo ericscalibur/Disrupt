@@ -405,16 +405,20 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="recipientSelect"
-                                        >Recipient</label
-                                    >
-                                    <select
-                                        id="recipientSelect"
-                                        required
-                                        onchange="populateRecipientDetails()"
-                                    >
-                                        <!-- Options populated dynamically -->
-                                    </select>
+                                    <label for="recipientSearch">Recipient</label>
+                                    <div class="recipient-combobox" id="recipientCombobox">
+                                        <input
+                                            type="text"
+                                            id="recipientSearch"
+                                            placeholder="Type to search..."
+                                            autocomplete="off"
+                                            oninput="filterRecipientDropdown()"
+                                            onfocus="showRecipientDropdown()"
+                                            onblur="setTimeout(closeRecipientDropdown, 150)"
+                                        />
+                                        <div id="recipientDropdown" class="recipient-dropdown"></div>
+                                    </div>
+                                    <input type="hidden" id="recipientSelect" value="" />
                                 </div>
                                 <div
                                     class="form-group"
@@ -440,10 +444,18 @@
                                     />
                                 </div>
 
+                                <div class="payment-rail-row" id="paymentRailGroup" style="display: none">
+                                    <span class="payment-rail-label">Payment Rail</span>
+                                    <span class="rail-side-label">Lightning</span>
+                                    <div class="rail-switch">
+                                        <button type="button" id="railBtnLightning" class="rail-switch-cell rail-cell-lightning rail-btn-active" onclick="selectPaymentRail('lightning')">⚡</button>
+                                        <button type="button" id="railBtnOnchain" class="rail-switch-cell rail-cell-onchain" onclick="selectPaymentRail('onchain')">₿</button>
+                                    </div>
+                                    <span class="rail-side-label">On-Chain</span>
+                                </div>
+
                                 <div class="form-group">
-                                    <label for="recipientLightningAddress"
-                                        >Lightning Address</label
-                                    >
+                                    <label id="paymentAddressLabel" for="recipientLightningAddress">Lightning Address</label>
                                     <input
                                         type="text"
                                         id="recipientLightningAddress"
@@ -455,13 +467,17 @@
                                     <label for="paymentAmount"
                                         >Amount (SATS)</label
                                     >
-                                    <input
-                                        type="number"
-                                        id="paymentAmount"
-                                        min="0.00000001"
-                                        step="0.00000001"
-                                        required
-                                    />
+                                    <div class="amount-input-wrapper">
+                                        <input
+                                            type="number"
+                                            id="paymentAmount"
+                                            min="0.00000001"
+                                            step="0.00000001"
+                                            required
+                                            oninput="updatePaymentAmountUsd()"
+                                        />
+                                        <span id="paymentAmountUsd" class="amount-usd-overlay"></span>
+                                    </div>
                                 </div>
 
                                 <div
@@ -1049,7 +1065,8 @@
                                     <th>Name</th>
                                     <th>Sats</th>
                                     <th>USD</th>
-                                    <th>Lightning-Address</th>
+                                    <th>Address</th>
+                                    <th>Rail</th>
                                     <th>Note</th>
                                     <th>Status</th>
                                 </tr>
@@ -1237,7 +1254,17 @@
                                 />
                             </div>
                             <div class="form-group">
-                                <p class="form-hint">A temporary password will be generated. Have the new member use "Forgot Password" to set their own password.</p>
+                                <label for="memberBtcAddress"
+                                    >Bitcoin Address:</label
+                                >
+                                <input
+                                    type="text"
+                                    id="memberBtcAddress"
+                                    placeholder="bc1q..."
+                                />
+                            </div>
+                            <div class="form-group">
+                                <p class="form-hint">At least one payment address required. A temporary password will be generated — have the new member use "Forgot Password" to set their own.</p>
                             </div>
                             <div class="modal-footer">
                                 <button class="submit-btn" id="submitMemberBtn">
@@ -1378,6 +1405,15 @@
                                         name="lightningAddress"
                                     />
 
+                                    <label for="editSupplierBtcAddress"
+                                        >Bitcoin Address</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="editSupplierBtcAddress"
+                                        name="btcAddress"
+                                    />
+
                                     <label for="editSupplierNote">Note</label>
                                     <input
                                         type="text"
@@ -1432,6 +1468,7 @@
                                     <th>Contact</th>
                                     <th>Email</th>
                                     <th>Lightning Address</th>
+                                    <th>Bitcoin Address</th>
                                     <th>Note</th>
                                     <th>Created At</th>
                                 </tr>
@@ -1491,7 +1528,17 @@
                                     <input
                                         type="text"
                                         id="supplierLightningAddress"
-                                        required
+                                        placeholder="user@wallet.com"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierBtcAddress"
+                                        >Bitcoin Address</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="supplierBtcAddress"
+                                        placeholder="bc1q..."
                                     />
                                 </div>
                                 <div class="form-group">
@@ -1593,14 +1640,14 @@
                                     />
                                 </div>
                                 <div class="form-group">
-                                    <label for="batchEditLightningAddress"
-                                        >Lightning Address</label
+                                    <label for="batchEditAddress"
+                                        >Address</label
                                     >
                                     <input
-                                        type="email"
-                                        id="batchEditLightningAddress"
-                                        name="lightningAddress"
-                                        placeholder="example@blink.sv"
+                                        type="text"
+                                        id="batchEditAddress"
+                                        name="address"
+                                        placeholder="user@wallet.com or bc1q..."
                                         required
                                     />
                                 </div>

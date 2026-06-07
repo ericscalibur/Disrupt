@@ -320,6 +320,128 @@ br {
     /* You can add page-level padding or max-width here if desired */
 }
 
+.amount-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.amount-input-wrapper input {
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 90px;
+}
+
+.amount-usd-overlay {
+    position: absolute;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.82rem;
+    color: #999;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.recipient-combobox {
+    position: relative;
+}
+
+.recipient-combobox input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.recipient-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+}
+
+.recipient-dropdown-item {
+    padding: 9px 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.recipient-dropdown-item:hover {
+    background: #f0f7ff;
+}
+
+.recipient-dropdown-empty {
+    padding: 9px 12px;
+    color: #999;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.payment-rail-row {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+.payment-rail-label {
+    font-size: 1rem;
+    font-weight: bold;
+    color: ghostwhite;
+    white-space: nowrap;
+    margin-right: 84px;
+}
+
+.rail-side-label {
+    font-size: 0.8rem;
+    color: white;
+    white-space: nowrap;
+}
+
+.rail-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 7px;
+    padding: 3px;
+    flex-shrink: 0;
+    width: fit-content;
+}
+
+.rail-switch-cell {
+    width: 32px;
+    height: 26px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    background: transparent;
+    border-radius: 5px;
+    transition: background 0.18s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    color: #000;
+}
+
+.rail-cell-lightning.rail-btn-active {
+    background: #3498db;
+}
+
+.rail-cell-onchain.rail-btn-active {
+    background: #f39c12;
+}
+
 #successMessage {
     color: white;
 }
