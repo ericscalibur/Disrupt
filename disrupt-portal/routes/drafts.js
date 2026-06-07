@@ -18,7 +18,7 @@ const approveRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBtcUsdRate } = require("../lib/blink");
+const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBtcUsdRate, onChainPaymentSend } = require("../lib/blink");
 
 // GET DRAFTS
 router.get("/drafts", authenticateToken, async (req, res) => {
@@ -55,6 +55,8 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       company,
       contact,
       recipientLightningAddress,
+      recipientBtcAddress,
+      paymentRail = "lightning",
       amount,
       note,
       receiptId,
@@ -88,7 +90,9 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       recipientEmail: recipientEmail.trim(),
       company: company.trim(),
       contact: contact.trim(),
-      recipientLightningAddress: recipientLightningAddress.trim(),
+      recipientLightningAddress: recipientLightningAddress ? recipientLightningAddress.trim() : null,
+      recipientBtcAddress: recipientBtcAddress ? recipientBtcAddress.trim() : null,
+      paymentRail,
       amount: Number(amount),
       note: note ? note.trim() : "",
       createdBy: req.user.email,
@@ -101,10 +105,10 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
     db.prepare(`
       INSERT INTO drafts
         (id, title, recipientEmail, company, contact, recipientLightningAddress,
-         amount, note, createdBy, department, dateCreated, status, receiptId)
+         recipientBtcAddress, paymentRail, amount, note, createdBy, department, dateCreated, status, receiptId)
       VALUES
         (@id, @title, @recipientEmail, @company, @contact, @recipientLightningAddress,
-         @amount, @note, @createdBy, @department, @dateCreated, @status, @receiptId)
+         @recipientBtcAddress, @paymentRail, @amount, @note, @createdBy, @department, @dateCreated, @status, @receiptId)
     `).run(newDraft);
 
     // Respond with success and new draft
@@ -164,37 +168,15 @@ router.post(
       }
 
       // 3. Get recipient, amount, memo
-      const lightningAddress =
-        draft.recipientLightningAddress || draft.lnAddress;
+      const paymentRail = draft.paymentRail || "lightning";
       const amount = Number(draft.amountSats || draft.amount);
       const note = draft.note || draft.memo || "Disrupt Portal Payment";
 
-      if (!lightningAddress || !amount) {
-        return res.status(400).json({
-          success: false,
-          message: "Draft is missing a Lightning Address or amount.",
-        });
+      if (!amount) {
+        return res.status(400).json({ success: false, message: "Draft is missing an amount." });
       }
 
-      // 4. Resolve Lightning Address to invoice
-      let invoice;
-      try {
-        const lnurlResp = await lnurlPay.requestInvoice({
-          lnUrlOrAddress: lightningAddress,
-          tokens: amount,
-          comment: note,
-        });
-        invoice = lnurlResp.invoice;
-        if (!invoice)
-          throw new Error("Could not resolve invoice from Lightning Address.");
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: "Failed to resolve Lightning Address: " + err.message,
-        });
-      }
-
-      // 5. Get BTC wallet ID from Blink
+      // 4. Get BTC wallet ID from Blink
       let walletId;
       try {
         const wallets = await getBlinkWallets();
@@ -203,78 +185,124 @@ router.post(
         walletId = btcWallet.id;
       } catch (err) {
         db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to fetch wallet: " + err.message,
-        });
+        return res.status(500).json({ success: false, message: "Failed to fetch wallet: " + err.message });
       }
 
-      // 6. Decode the invoice for payment_hash
-      let paymentHash = null;
-      try {
-        const decoded = bolt11.decode(invoice);
-        paymentHash =
-          decoded.tags.find((tag) => tag.tagName === "payment_hash")?.data ||
-          null;
-      } catch (err) {
-        paymentHash = null;
-      }
-
-      // 7. Pay the invoice via Blink
-      let paymentResult = null;
-      try {
-        const mutation = `
-          mutation payInvoice($input: LnInvoicePaymentInput!) {
-            lnInvoicePaymentSend(input: $input) {
-              status
-              errors { message }
-            }
-          }
-        `;
-        const payResp = await blinkPost({ query: mutation, variables: { input: { walletId, paymentRequest: invoice } } });
-        const result = payResp.data.data.lnInvoicePaymentSend;
-        if (result.errors && result.errors.length > 0) {
-          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
-          return res.json({ success: false, message: result.errors[0].message });
-        }
-        paymentResult = result;
-      } catch (err) {
-        const isTimeout = err.code === "ECONNABORTED" || String(err.message).toLowerCase().includes("timeout");
-        db.prepare("UPDATE drafts SET status = ? WHERE id = ?").run(
-          isTimeout ? "pending_confirmation" : "pending",
-          draftId
-        );
-        const blinkError = err.response?.data ? JSON.stringify(err.response.data) : "";
-        return res.status(500).json({
-          success: false,
-          message: "Payment failed: " + err.message + " " + blinkError,
-        });
-      }
-
-      // 8. Capture BTC/USD rate
       const btcUsdRate = await getBtcUsdRate();
       const approvedAt = new Date().toISOString();
+      let transaction;
 
-      const transaction = {
-        id: String(paymentHash || Date.now()),
-        date: approvedAt,
-        type: "lightning",
-        receiver: draft.contact || draft.company || "Unknown",
-        lightningAddress: lightningAddress || null,
-        invoice: invoice || null,
-        amount: amount || 0,
-        currency: "SATS",
-        note: note || "",
-        direction: "SENT",
-        status: paymentResult?.status || "complete",
-        paymentHash: paymentHash,
-        preImage: await fetchPreImageFromBlink(paymentHash),
-        approvedStatus: "approved",
-        approvedAt,
-        approvedBy: req.user.email,
-        btcUsdRate: btcUsdRate,
-        receiptId: draft.receiptId || null,
-      };
+      // ── On-chain path ────────────────────────────────────────────────────────
+      if (paymentRail === "onchain") {
+        const btcAddress = draft.recipientBtcAddress;
+        if (!btcAddress) {
+          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+          return res.status(400).json({ success: false, message: "Draft is missing a Bitcoin address." });
+        }
+
+        let onchainResult;
+        try {
+          onchainResult = await onChainPaymentSend(walletId, btcAddress, amount, note);
+        } catch (err) {
+          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+          return res.status(500).json({ success: false, message: "On-chain payment failed: " + err.message });
+        }
+
+        if (onchainResult.errors && onchainResult.errors.length > 0) {
+          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+          return res.json({ success: false, message: onchainResult.errors[0].message });
+        }
+
+        const txnId = onchainResult.transaction?.id || `onchain_${Date.now()}`;
+        transaction = {
+          id: txnId,
+          date: approvedAt,
+          type: "onchain",
+          receiver: draft.contact || draft.company || "Unknown",
+          lightningAddress: null,
+          invoice: null,
+          amount,
+          currency: "SATS",
+          note,
+          direction: "SENT",
+          status: "PENDING",
+          paymentHash: txnId,
+          preImage: null,
+          approvedStatus: "approved",
+          approvedAt,
+          approvedBy: req.user.email,
+          btcUsdRate,
+          receiptId: draft.receiptId || null,
+        };
+
+      // ── Lightning path ───────────────────────────────────────────────────────
+      } else {
+        const lightningAddress = draft.recipientLightningAddress || draft.lnAddress;
+        if (!lightningAddress) {
+          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+          return res.status(400).json({ success: false, message: "Draft is missing a Lightning Address." });
+        }
+
+        let invoice;
+        try {
+          const lnurlResp = await lnurlPay.requestInvoice({ lnUrlOrAddress: lightningAddress, tokens: amount, comment: note });
+          invoice = lnurlResp.invoice;
+          if (!invoice) throw new Error("Could not resolve invoice from Lightning Address.");
+        } catch (err) {
+          db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+          return res.status(500).json({ success: false, message: "Failed to resolve Lightning Address: " + err.message });
+        }
+
+        let paymentHash = null;
+        try {
+          const decoded = bolt11.decode(invoice);
+          paymentHash = decoded.tags.find((t) => t.tagName === "payment_hash")?.data || null;
+        } catch (_) {}
+
+        let paymentResult;
+        try {
+          const mutation = `
+            mutation payInvoice($input: LnInvoicePaymentInput!) {
+              lnInvoicePaymentSend(input: $input) {
+                status
+                errors { message }
+              }
+            }
+          `;
+          const payResp = await blinkPost({ query: mutation, variables: { input: { walletId, paymentRequest: invoice } } });
+          const result = payResp.data.data.lnInvoicePaymentSend;
+          if (result.errors && result.errors.length > 0) {
+            db.prepare("UPDATE drafts SET status = 'pending' WHERE id = ?").run(draftId);
+            return res.json({ success: false, message: result.errors[0].message });
+          }
+          paymentResult = result;
+        } catch (err) {
+          const isTimeout = err.code === "ECONNABORTED" || String(err.message).toLowerCase().includes("timeout");
+          db.prepare("UPDATE drafts SET status = ? WHERE id = ?").run(isTimeout ? "pending_confirmation" : "pending", draftId);
+          return res.status(500).json({ success: false, message: "Payment failed: " + err.message });
+        }
+
+        transaction = {
+          id: String(paymentHash || Date.now()),
+          date: approvedAt,
+          type: "lightning",
+          receiver: draft.contact || draft.company || "Unknown",
+          lightningAddress: lightningAddress || null,
+          invoice: invoice || null,
+          amount,
+          currency: "SATS",
+          note,
+          direction: "SENT",
+          status: paymentResult?.status || "complete",
+          paymentHash,
+          preImage: await fetchPreImageFromBlink(paymentHash),
+          approvedStatus: "approved",
+          approvedAt,
+          approvedBy: req.user.email,
+          btcUsdRate,
+          receiptId: draft.receiptId || null,
+        };
+      }
 
       // 9. Atomically approve draft + record transaction
       db.transaction(() => {

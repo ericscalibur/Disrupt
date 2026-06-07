@@ -58,11 +58,16 @@ const schemas = {
     recipientEmail: email,
     company: nonEmpty(),
     contact: nonEmpty(),
-    recipientLightningAddress: lnAddress,
+    recipientLightningAddress: lnAddress.optional().or(z.literal("")).optional(),
+    recipientBtcAddress: btcAddress.optional().or(z.literal("")).optional(),
+    paymentRail: z.enum(["lightning", "onchain"]).optional(),
     amount: z.number().int().positive(),
     note: z.string().max(1000).optional(),
     receiptId: z.string().uuid().optional(),
-  }),
+  }).refine(
+    (d) => (d.paymentRail === "onchain") ? !!d.recipientBtcAddress : !!d.recipientLightningAddress,
+    { message: "A payment address is required for the selected rail." }
+  ),
 
   approveDraft: z.object({
     draftId: nonEmpty(128),

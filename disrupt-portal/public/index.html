@@ -958,8 +958,17 @@
                                         readonly
                                     />
                                 </div>
+                                <div class="payment-rail-row" id="draftRailGroup" style="display: none">
+                                    <span class="payment-rail-label">Payment Rail</span>
+                                    <span class="rail-side-label">Lightning</span>
+                                    <div class="rail-switch">
+                                        <button type="button" id="draftRailBtnLightning" class="rail-switch-cell rail-cell-lightning rail-btn-active" onclick="selectDraftPaymentRail('lightning')">⚡</button>
+                                        <button type="button" id="draftRailBtnOnchain" class="rail-switch-cell rail-cell-onchain" onclick="selectDraftPaymentRail('onchain')">₿</button>
+                                    </div>
+                                    <span class="rail-side-label">On-Chain</span>
+                                </div>
                                 <div class="form-group">
-                                    <label>Lightning Address</label>
+                                    <label id="draftPaymentAddressLabel">Lightning Address</label>
                                     <input
                                         type="text"
                                         id="draftRecipientLightningAddress"

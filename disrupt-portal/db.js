@@ -59,7 +59,9 @@ db.exec(`
     recipientEmail          TEXT NOT NULL,
     company                 TEXT NOT NULL,
     contact                 TEXT NOT NULL,
-    recipientLightningAddress TEXT NOT NULL,
+    recipientLightningAddress TEXT,
+    recipientBtcAddress     TEXT,
+    paymentRail             TEXT NOT NULL DEFAULT 'lightning',
     amount                  REAL NOT NULL,
     note                    TEXT DEFAULT '',
     createdBy               TEXT NOT NULL,
@@ -119,7 +121,9 @@ if (!existingTxnCols.includes("taxPaymentFailed")) db.exec("ALTER TABLE transact
 if (!existingTxnCols.includes("receiptId"))        db.exec("ALTER TABLE transactions ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
 
 const existingDraftCols = db.prepare("PRAGMA table_info(drafts)").all().map((c) => c.name);
-if (!existingDraftCols.includes("receiptId")) db.exec("ALTER TABLE drafts ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
+if (!existingDraftCols.includes("receiptId"))         db.exec("ALTER TABLE drafts ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
+if (!existingDraftCols.includes("recipientBtcAddress")) db.exec("ALTER TABLE drafts ADD COLUMN recipientBtcAddress TEXT");
+if (!existingDraftCols.includes("paymentRail"))         db.exec("ALTER TABLE drafts ADD COLUMN paymentRail TEXT NOT NULL DEFAULT 'lightning'");
 
 const existingUserCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
 if (!existingUserCols.includes("btcAddress")) db.exec("ALTER TABLE users ADD COLUMN btcAddress TEXT");

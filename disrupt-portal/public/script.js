@@ -24,6 +24,7 @@ const balanceDisplayModes = ["BTC", "SATS", "USD"];
 let currentBalanceMode = 0;
 let currentMember = null;
 let currentPaymentRail = "lightning";
+let draftPaymentRail = "lightning";
 let recipientSelectedText = "";
 let recipientComboboxList = [];
 let transactions = [];
@@ -752,6 +753,30 @@ async function loadAccountingPage() {
   }
 }
 
+function selectDraftPaymentRail(rail) {
+  draftPaymentRail = rail;
+  const addressEl = document.getElementById("draftRecipientLightningAddress");
+  const labelEl = document.getElementById("draftPaymentAddressLabel");
+  const btnLn = document.getElementById("draftRailBtnLightning");
+  const btnOn = document.getElementById("draftRailBtnOnchain");
+
+  btnLn.classList.toggle("rail-btn-active", rail === "lightning");
+  btnOn.classList.toggle("rail-btn-active", rail === "onchain");
+
+  const type = document.getElementById("draftRecipientType").value;
+  const selectedId = document.getElementById("draftRecipientSelect").value;
+  const list = type === "employee" ? (employeesList || []) : (suppliersList || []);
+  const recipient = list.find((r) => (r.id || r.email) === selectedId || r.id === selectedId);
+
+  if (rail === "lightning") {
+    if (labelEl) labelEl.textContent = "Lightning Address";
+    if (addressEl) addressEl.value = recipient?.lightningAddress || "";
+  } else {
+    if (labelEl) labelEl.textContent = "Bitcoin Address";
+    if (addressEl) addressEl.value = recipient?.btcAddress || "";
+  }
+}
+
 // LOADS SUPPLIERS IN DROPDOWN
 // Called when Recipient Type dropdown changes — repopulates the Recipient select
 function updateDraftRecipientDropdown() {
@@ -809,35 +834,56 @@ function populateDraftRecipientDetails() {
   const type = document.getElementById("draftRecipientType").value;
   const select = document.getElementById("draftRecipientSelect");
   const selectedId = select.value;
+  const railGroup = document.getElementById("draftRailGroup");
+  const addressEl = document.getElementById("draftRecipientLightningAddress");
+  const labelEl = document.getElementById("draftPaymentAddressLabel");
 
   if (!selectedId) {
     document.getElementById("draftContactName").value = "";
     document.getElementById("draftRecipientEmail").value = "";
-    document.getElementById("draftRecipientLightningAddress").value = "";
+    if (addressEl) addressEl.value = "";
+    if (railGroup) railGroup.style.display = "none";
     return;
   }
 
+  let recipient = null;
   if (type === "employee") {
-    const employee = (employeesList || []).find(
-      (e) => (e.id || e.email) === selectedId,
-    );
-    if (employee) {
-      document.getElementById("draftContactName").value = employee.name || "";
-      document.getElementById("draftRecipientEmail").value =
-        employee.email || "";
-      document.getElementById("draftRecipientLightningAddress").value =
-        employee.lightningAddress || "";
+    recipient = (employeesList || []).find((e) => (e.id || e.email) === selectedId);
+    if (recipient) {
+      document.getElementById("draftContactName").value = recipient.name || "";
+      document.getElementById("draftRecipientEmail").value = recipient.email || "";
     }
   } else {
-    const supplier = (suppliersList || []).find((s) => s.id === selectedId);
-    if (supplier) {
-      document.getElementById("draftContactName").value =
-        supplier.contact || "";
-      document.getElementById("draftRecipientEmail").value =
-        supplier.email || "";
-      document.getElementById("draftRecipientLightningAddress").value =
-        supplier.lightningAddress || "";
+    recipient = (suppliersList || []).find((s) => s.id === selectedId);
+    if (recipient) {
+      document.getElementById("draftContactName").value = recipient.contact || "";
+      document.getElementById("draftRecipientEmail").value = recipient.email || "";
     }
+  }
+
+  if (!recipient) return;
+
+  const hasLightning = !!recipient.lightningAddress;
+  const hasBtc = !!recipient.btcAddress;
+
+  if (hasLightning && hasBtc) {
+    if (railGroup) railGroup.style.display = "inline-flex";
+    selectDraftPaymentRail("lightning");
+  } else if (hasLightning) {
+    draftPaymentRail = "lightning";
+    if (railGroup) railGroup.style.display = "none";
+    if (labelEl) labelEl.textContent = "Lightning Address";
+    if (addressEl) addressEl.value = recipient.lightningAddress;
+  } else if (hasBtc) {
+    draftPaymentRail = "onchain";
+    if (railGroup) railGroup.style.display = "none";
+    if (labelEl) labelEl.textContent = "Bitcoin Address";
+    if (addressEl) addressEl.value = recipient.btcAddress;
+  } else {
+    draftPaymentRail = "lightning";
+    if (railGroup) railGroup.style.display = "none";
+    if (labelEl) labelEl.textContent = "Payment Address";
+    if (addressEl) addressEl.value = "";
   }
 }
 
@@ -4539,6 +4585,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     const modal = document.getElementById("draftPaymentModal");
     if (modal) modal.style.display = "none";
     resetDraftReceipt();
+    draftPaymentRail = "lightning";
+    const railGroup = document.getElementById("draftRailGroup");
+    if (railGroup) railGroup.style.display = "none";
+    const labelEl = document.getElementById("draftPaymentAddressLabel");
+    if (labelEl) labelEl.textContent = "Lightning Address";
+    const btnLn = document.getElementById("draftRailBtnLightning");
+    const btnOn = document.getElementById("draftRailBtnOnchain");
+    if (btnLn) btnLn.classList.add("rail-btn-active");
+    if (btnOn) btnOn.classList.remove("rail-btn-active");
   });
 
   // Close modal when clicking outside the modal content
@@ -4565,9 +4620,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       const recipientEmail = document
         .getElementById("draftRecipientEmail")
         .value.trim();
-      const recipientLightningAddress = document
+      const addressFieldValue = document
         .getElementById("draftRecipientLightningAddress")
         .value.trim();
+      const recipientLightningAddress = draftPaymentRail === "lightning" ? addressFieldValue : "";
+      const recipientBtcAddress = draftPaymentRail === "onchain" ? addressFieldValue : "";
       const amount = parseFloat(
         document.getElementById("draftPaymentAmount").value,
       );
@@ -4607,7 +4664,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         !recipientEmail ||
         !company ||
         !contact ||
-        !recipientLightningAddress ||
+        (!recipientLightningAddress && !recipientBtcAddress) ||
         !amount ||
         isNaN(amount) ||
         amount <= 0
@@ -4620,7 +4677,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         recipientEmail,
         company,
         contact,
-        recipientLightningAddress,
+        recipientLightningAddress: recipientLightningAddress || undefined,
+        recipientBtcAddress: recipientBtcAddress || undefined,
+        paymentRail: draftPaymentRail,
         amount,
         note,
         receiptId: draftReceiptId || undefined,
