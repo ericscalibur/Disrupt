@@ -3913,10 +3913,17 @@ function openImportModal(type) {
   const config = IMPORT_CONFIG[type];
 
   document.getElementById("importModalTitle").textContent = config.title;
-  document.getElementById("importPromptText").textContent = config.prompt;
   document.getElementById("importPrompt").style.display = "block";
   document.getElementById("importTableSection").style.display = "none";
   document.getElementById("importFileInput").value = "";
+
+  // Render column chips — required ones highlighted
+  const required = { employees: ["name","email","role"], suppliers: ["company","contact","email"] }[type];
+  const chipsEl = document.getElementById("importColumnChips");
+  chipsEl.innerHTML = config.columns.map((col) =>
+    `<span class="import-chip${required.includes(col) ? " required" : ""}">${escapeHtml(col)}</span>`
+  ).join("");
+
   document.getElementById("importCsvModal").style.display = "flex";
 }
 
@@ -3936,11 +3943,23 @@ function downloadImportTemplate(e) {
   a.click();
 }
 
+function handleImportDrop(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("import-drop-hover");
+  const file = event.dataTransfer?.files[0];
+  if (file) processImportFile(file);
+}
+
 function handleImportFile(event) {
   const file = event.target.files[0];
   if (!file) return;
+  processImportFile(file);
+}
+
+function processImportFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
+
     const raw = parseCsv(e.target.result);
     if (!raw.length) { alert("No data rows found in the CSV."); return; }
 

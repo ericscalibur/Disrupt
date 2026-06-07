@@ -321,19 +321,120 @@ br {
 }
 
 .import-csv-btn {
-    background: none;
-    border: 1px solid #5dade2;
-    color: #5dade2;
-    padding: 6px 12px;
-    border-radius: 4px;
+    background-color: transparent !important;
+    border: 1px solid #5dade2 !important;
+    color: #5dade2 !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 1em;
+    width: auto !important;
     transition: background 0.15s, color 0.15s;
 }
 
 .import-csv-btn:hover {
-    background: #5dade2;
-    color: white;
+    background-color: #5dade2 !important;
+    color: white !important;
+}
+
+.import-modal-content {
+    max-width: 660px;
+    width: 100%;
+}
+
+.import-drop-zone {
+    border: 2px dashed #5dade2;
+    border-radius: 10px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    margin: 16px 0;
+    transition: background 0.15s;
+}
+
+.import-drop-zone:hover,
+.import-drop-zone.import-drop-hover {
+    background: rgba(93,173,226,0.1);
+    border-color: #85c1e9;
+}
+
+.import-drop-icon {
+    font-size: 2.8rem;
+    color: #5dade2;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.import-drop-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: ghostwhite;
+    margin-bottom: 4px;
+}
+
+.import-drop-sub {
+    font-size: 0.82rem;
+    color: #aaa;
+}
+
+.import-columns-section {
+    margin: 16px 0 10px;
+}
+
+.import-columns-title {
+    font-size: 0.78rem;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.import-column-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.import-chip {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    color: #ccc;
+}
+
+.import-chip.required {
+    border-color: #5dade2;
+    color: #5dade2;
+}
+
+.import-template-row {
+    text-align: right;
+    font-size: 0.82rem;
+    margin-top: 8px;
+}
+
+.import-template-row a {
+    color: #aaa;
+    text-decoration: none;
+}
+
+.import-template-row a:hover {
+    color: #5dade2;
+}
+
+.import-summary {
+    font-size: 0.88rem;
+    color: #ccc;
+    margin-bottom: 10px;
+}
+
+.import-table-wrap {
+    overflow-x: auto;
+    max-height: 340px;
+    overflow-y: auto;
+    border-radius: 6px;
 }
 
 .import-status-imported { color: #2ecc71; font-weight: 600; }
