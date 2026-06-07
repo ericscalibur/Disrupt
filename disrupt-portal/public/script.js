@@ -33,6 +33,8 @@ let token = sessionStorage.getItem("token");
 let editTeamMemberModal;
 let inputsContainer;
 let batchPaymentData = []; // store batch payment data for editing
+let currentImportType = null;
+let currentImportRows = [];
 let currentBtcUsdRate = null; // cached rate for USD display in batch table
 
 // Token refresh state management
@@ -3855,6 +3857,201 @@ function isValidEmail(email) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
 }
+
+// ─── CSV Import ───────────────────────────────────────────────────────────────
+
+const IMPORT_CONFIG = {
+  employees: {
+    title: "Import Team Members",
+    prompt: "Upload a CSV with columns: name, email, role, department, lightningAddress, btcAddress. Temporary passwords are auto-generated.",
+    apiEndpoint: "/import/employees",
+    columns: ["name", "email", "role", "department", "lightningAddress", "btcAddress"],
+    headers: ["Name", "Email", "Role", "Department", "Lightning Address", "Bitcoin Address", "Status"],
+    template: "name,email,role,department,lightningAddress,btcAddress\nAlice Johnson,alice@company.com,Employee,Engineering,alice@blink.sv,\nBob Smith,bob@company.com,Manager,Operations,,bc1q...\n",
+    templateFilename: "employees_template.csv",
+    validate(row) {
+      if (!row.name) return "Missing name";
+      if (!row.email || !row.email.includes("@")) return "Missing/invalid email";
+      if (!row.role) return "Missing role";
+      if (!["Admin","Manager","Bookkeeper","Employee"].includes(row.role)) return `Invalid role "${row.role}"`;
+      return null;
+    },
+    rowToPayload(row) {
+      return { name: row.name, email: row.email, role: row.role, department: row.department, lightningAddress: row.lightningAddress, btcAddress: row.btcAddress };
+    },
+    rowCells(row) {
+      return [row.name, row.email, row.role, row.department, row.lightningAddress, row.btcAddress];
+    },
+  },
+  suppliers: {
+    title: "Import Suppliers",
+    prompt: "Upload a CSV with columns: company, contact, email, lightningAddress, btcAddress, note. At least one payment address is required per row.",
+    apiEndpoint: "/import/suppliers",
+    columns: ["company", "contact", "email", "lightningAddress", "btcAddress", "note"],
+    headers: ["Company", "Contact", "Email", "Lightning Address", "Bitcoin Address", "Note", "Status"],
+    template: "company,contact,email,lightningAddress,btcAddress,note\nAcme Corp,Bob Smith,bob@acme.com,bob@blink.sv,,bulk supplier\nGlobe Inc,Carol Lee,carol@globe.com,,bc1q...,preferred vendor\n",
+    templateFilename: "suppliers_template.csv",
+    validate(row) {
+      if (!row.company) return "Missing company";
+      if (!row.contact) return "Missing contact";
+      if (!row.email || !row.email.includes("@")) return "Missing/invalid email";
+      if (!row.lightningAddress && !row.btcAddress) return "No payment address";
+      return null;
+    },
+    rowToPayload(row) {
+      return { company: row.company, contact: row.contact, email: row.email, lightningAddress: row.lightningAddress, btcAddress: row.btcAddress, note: row.note };
+    },
+    rowCells(row) {
+      return [row.company, row.contact, row.email, row.lightningAddress, row.btcAddress, row.note];
+    },
+  },
+};
+
+function openImportModal(type) {
+  currentImportType = type;
+  currentImportRows = [];
+  const config = IMPORT_CONFIG[type];
+
+  document.getElementById("importModalTitle").textContent = config.title;
+  document.getElementById("importPromptText").textContent = config.prompt;
+  document.getElementById("importPrompt").style.display = "block";
+  document.getElementById("importTableSection").style.display = "none";
+  document.getElementById("importFileInput").value = "";
+  document.getElementById("importCsvModal").style.display = "flex";
+}
+
+function closeImportModal() {
+  document.getElementById("importCsvModal").style.display = "none";
+  currentImportType = null;
+  currentImportRows = [];
+}
+
+function downloadImportTemplate(e) {
+  e.preventDefault();
+  const config = IMPORT_CONFIG[currentImportType];
+  const blob = new Blob([config.template], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = config.templateFilename;
+  a.click();
+}
+
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const raw = parseCsv(e.target.result);
+    if (!raw.length) { alert("No data rows found in the CSV."); return; }
+
+    const config = IMPORT_CONFIG[currentImportType];
+
+    // Normalize header keys to camelCase/expected keys (case-insensitive)
+    const keyMap = {
+      "lightningaddress": "lightningAddress", "lightning-address": "lightningAddress", "lightning": "lightningAddress",
+      "btcaddress": "btcAddress", "bitcoin": "btcAddress", "btc": "btcAddress", "bitcoinaddress": "btcAddress",
+    };
+    currentImportRows = raw.map((rawRow) => {
+      const row = {};
+      for (const [k, v] of Object.entries(rawRow)) {
+        const normalized = k.toLowerCase().replace(/\s+/g, "");
+        row[keyMap[normalized] || normalized] = (v || "").trim();
+      }
+      return row;
+    });
+
+    renderImportPreview();
+  };
+  reader.readAsText(file);
+}
+
+function renderImportPreview(resultsMap = null) {
+  const config = IMPORT_CONFIG[currentImportType];
+  document.getElementById("importPrompt").style.display = "none";
+  document.getElementById("importTableSection").style.display = "block";
+
+  // Build header
+  const thead = document.getElementById("importPreviewHead");
+  thead.innerHTML = `<tr>${config.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
+
+  // Build rows
+  const tbody = document.getElementById("importPreviewBody");
+  tbody.innerHTML = "";
+  let readyCount = 0;
+
+  currentImportRows.forEach((row, i) => {
+    const validationError = resultsMap ? null : config.validate(row);
+    const apiResult = resultsMap ? resultsMap[i] : null;
+
+    let statusHtml;
+    if (apiResult) {
+      if (apiResult.status === "imported") statusHtml = `<span class="import-status-imported">✓ Imported</span>`;
+      else if (apiResult.status === "skipped") statusHtml = `<span class="import-status-skipped">Skipped — ${escapeHtml(apiResult.reason)}</span>`;
+      else statusHtml = `<span class="import-status-failed">Failed — ${escapeHtml(apiResult.reason)}</span>`;
+    } else if (validationError) {
+      statusHtml = `<span class="import-status-invalid">⚠ ${escapeHtml(validationError)}</span>`;
+    } else {
+      statusHtml = `<span class="import-status-ready">Ready</span>`;
+      readyCount++;
+    }
+
+    const cells = config.rowCells(row).map((v) => `<td>${escapeHtml(v || "")}</td>`).join("");
+    tbody.innerHTML += `<tr>${cells}<td>${statusHtml}</td></tr>`;
+  });
+
+  if (resultsMap) {
+    const imported = Object.values(resultsMap).filter((r) => r.status === "imported").length;
+    const skipped = currentImportRows.length - imported;
+    document.getElementById("importTableSummary").textContent =
+      `Done: ${imported} imported, ${skipped} skipped.`;
+    const btn = document.getElementById("importSubmitBtn");
+    btn.textContent = "Done";
+    btn.onclick = closeImportModal;
+    document.getElementById("importSubmitBtn").disabled = false;
+  } else {
+    document.getElementById("importTableSummary").textContent =
+      `${readyCount} of ${currentImportRows.length} rows ready to import.`;
+    const btn = document.getElementById("importSubmitBtn");
+    btn.textContent = "Import";
+    btn.onclick = submitImport;
+    btn.disabled = readyCount === 0;
+  }
+}
+
+async function submitImport() {
+  const config = IMPORT_CONFIG[currentImportType];
+  const btn = document.getElementById("importSubmitBtn");
+  btn.disabled = true;
+  btn.textContent = "Importing...";
+
+  const payload = currentImportRows.map((row) => config.rowToPayload(row));
+  const payloadKey = currentImportType; // "employees" or "suppliers"
+
+  try {
+    const response = await authFetch(`${API_BASE}${config.apiEndpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [payloadKey]: payload }),
+    });
+    const data = await response.json();
+    if (!data.success) { alert("Import failed: " + data.message); btn.disabled = false; btn.textContent = "Import"; return; }
+
+    // Build resultsMap indexed by position
+    const resultsMap = {};
+    data.results.forEach((r, i) => { resultsMap[i] = r; });
+    renderImportPreview(resultsMap);
+
+    // Refresh the relevant list
+    if (currentImportType === "employees") await loadTeamMembers();
+    else await loadSuppliers();
+  } catch (err) {
+    alert("Error: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Import";
+  }
+}
+
+// ─── CSV Import end ───────────────────────────────────────────────────────────
 
 function detectPaymentRail(address) {
   if (!address) return null;

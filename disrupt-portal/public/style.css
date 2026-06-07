@@ -320,6 +320,28 @@ br {
     /* You can add page-level padding or max-width here if desired */
 }
 
+.import-csv-btn {
+    background: none;
+    border: 1px solid #5dade2;
+    color: #5dade2;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s;
+}
+
+.import-csv-btn:hover {
+    background: #5dade2;
+    color: white;
+}
+
+.import-status-imported { color: #2ecc71; font-weight: 600; }
+.import-status-skipped  { color: #e6a817; font-weight: 600; }
+.import-status-failed   { color: #e74c3c; font-weight: 600; }
+.import-status-ready    { color: #aaa; }
+.import-status-invalid  { color: #e74c3c; }
+
 .amount-input-wrapper {
     position: relative;
     width: 100%;

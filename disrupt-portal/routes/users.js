@@ -199,4 +199,67 @@ router.get(
   },
 );
 
+// BULK IMPORT EMPLOYEES FROM CSV
+router.post("/import/employees", authenticateToken, authorizeRoles("Admin", "Manager"), async (req, res) => {
+  const { employees } = req.body;
+  if (!Array.isArray(employees) || employees.length === 0) {
+    return res.status(400).json({ success: false, message: "No employee data provided." });
+  }
+
+  const validRoles = ["Admin", "Manager", "Bookkeeper", "Employee"];
+  const results = [];
+
+  for (const row of employees) {
+    const name = (row.name || "").trim();
+    const email = (row.email || "").trim().toLowerCase();
+    const role = (row.role || "").trim();
+    const department = (row.department || "").trim();
+    const lightningAddress = (row.lightningAddress || "").trim();
+    const btcAddress = (row.btcAddress || "").trim();
+    const label = name || email || "(unnamed)";
+
+    if (!name || !email || !role) {
+      results.push({ label, status: "skipped", reason: "Missing name, email, or role" }); continue;
+    }
+    if (!validRoles.includes(role)) {
+      results.push({ label, status: "skipped", reason: `Invalid role "${role}"` }); continue;
+    }
+    if (req.user.role === "Manager" && role === "Admin") {
+      results.push({ label, status: "skipped", reason: "Managers cannot import Admin-role users" }); continue;
+    }
+    if (req.user.role === "Manager" && department && department !== req.user.department) {
+      results.push({ label, status: "skipped", reason: "Managers can only import to their own department" }); continue;
+    }
+    if (db.prepare("SELECT id FROM users WHERE email = ? COLLATE NOCASE").get(email)) {
+      results.push({ label, status: "skipped", reason: "Email already exists" }); continue;
+    }
+
+    try {
+      if (department) {
+        db.prepare("INSERT OR IGNORE INTO departments (name) VALUES (?)").run(department);
+      }
+      const id = crypto.createHash("sha256").update(`${name}|${email}|${role}|${department}|${lightningAddress}`).digest("hex");
+      db.prepare(`
+        INSERT INTO users (id, name, email, password, role, department, lightningAddress, btcAddress, dateAdded)
+        VALUES (@id, @name, @email, @password, @role, @department, @lightningAddress, @btcAddress, @dateAdded)
+      `).run({
+        id, name, email,
+        password: await bcrypt.hash(crypto.randomBytes(8).toString("hex"), 10),
+        role,
+        department: department || null,
+        lightningAddress: lightningAddress || null,
+        btcAddress: btcAddress || null,
+        dateAdded: new Date().toISOString().split("T")[0],
+      });
+      results.push({ label, status: "imported" });
+    } catch (err) {
+      results.push({ label, status: "failed", reason: err.message });
+    }
+  }
+
+  const imported = results.filter((r) => r.status === "imported").length;
+  logger.info({ imported, total: employees.length, by: req.user.email }, "employee CSV import");
+  res.json({ success: true, results });
+});
+
 module.exports = router;

@@ -1155,6 +1155,9 @@
                                     >
                                         - Remove
                                     </button>
+                                    <button class="import-csv-btn" onclick="openImportModal('employees')">
+                                        ↑ Import CSV
+                                    </button>
                                 </div>
                             </div>
                             <table class="team-table" id="teamTable">
@@ -1468,6 +1471,9 @@
                                 >
                                     - Remove
                                 </button>
+                                <button class="import-csv-btn" onclick="openImportModal('suppliers')">
+                                    ↑ Import CSV
+                                </button>
                             </div>
                         </div>
                         <table class="team-table" id="suppliersTable">
@@ -1486,6 +1492,41 @@
                                 <!-- Suppliers will be rendered here -->
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- CSV Import Modal (shared for employees and suppliers) -->
+                    <div id="importCsvModal" class="modal" style="display:none">
+                        <div class="modal-content" style="max-width:720px">
+                            <div class="modal-header">
+                                <span class="modal-title" id="importModalTitle">Import CSV</span>
+                                <button class="close-btn" onclick="closeImportModal()">&times;</button>
+                            </div>
+
+                            <!-- Step 1: upload prompt -->
+                            <div id="importPrompt">
+                                <p id="importPromptText" style="margin-bottom:12px"></p>
+                                <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+                                    <button class="submit-btn" onclick="document.getElementById('importFileInput').click()">Choose CSV File</button>
+                                    <a id="importTemplateLink" href="#" style="font-size:0.85rem;color:#5dade2" onclick="downloadImportTemplate(event)">Download template</a>
+                                </div>
+                                <input type="file" id="importFileInput" accept=".csv" style="display:none" onchange="handleImportFile(event)">
+                            </div>
+
+                            <!-- Step 2 & 3: preview / results table -->
+                            <div id="importTableSection" style="display:none">
+                                <p id="importTableSummary" style="margin-bottom:10px;font-size:0.9rem"></p>
+                                <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+                                    <table class="team-table" id="importPreviewTable">
+                                        <thead id="importPreviewHead"></thead>
+                                        <tbody id="importPreviewBody"></tbody>
+                                    </table>
+                                </div>
+                                <div class="modal-footer" style="gap:10px">
+                                    <button id="importSubmitBtn" class="submit-btn" onclick="submitImport()">Import</button>
+                                    <button class="remove-btn" onclick="closeImportModal()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Add Supplier Modal -->

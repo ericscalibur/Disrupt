@@ -122,4 +122,55 @@ router.put("/suppliers/:id", authenticateToken, authorizeRoles(...authorizedRole
   }
 });
 
+// BULK IMPORT SUPPLIERS FROM CSV
+router.post("/import/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"), async (req, res) => {
+  const { suppliers } = req.body;
+  if (!Array.isArray(suppliers) || suppliers.length === 0) {
+    return res.status(400).json({ success: false, message: "No supplier data provided." });
+  }
+
+  const results = [];
+
+  for (const row of suppliers) {
+    const company = (row.company || "").trim();
+    const contact = (row.contact || "").trim();
+    const email = (row.email || "").trim().toLowerCase();
+    const lightningAddress = (row.lightningAddress || "").trim();
+    const btcAddress = (row.btcAddress || "").trim();
+    const note = (row.note || "").trim();
+    const label = company || email || "(unnamed)";
+
+    if (!company || !contact || !email) {
+      results.push({ label, status: "skipped", reason: "Missing company, contact, or email" }); continue;
+    }
+    if (!lightningAddress && !btcAddress) {
+      results.push({ label, status: "skipped", reason: "At least one payment address required" }); continue;
+    }
+    if (db.prepare("SELECT id FROM suppliers WHERE email = ?").get(email)) {
+      results.push({ label, status: "skipped", reason: "Email already exists" }); continue;
+    }
+
+    try {
+      db.prepare(`
+        INSERT INTO suppliers (id, company, contact, email, lightningAddress, btcAddress, note, createdAt)
+        VALUES (@id, @company, @contact, @email, @lightningAddress, @btcAddress, @note, @createdAt)
+      `).run({
+        id: "sup" + Date.now() + Math.random().toString(36).slice(2),
+        company, contact, email,
+        lightningAddress: lightningAddress || null,
+        btcAddress: btcAddress || null,
+        note,
+        createdAt: new Date().toISOString(),
+      });
+      results.push({ label, status: "imported" });
+    } catch (err) {
+      results.push({ label, status: "failed", reason: err.message });
+    }
+  }
+
+  const imported = results.filter((r) => r.status === "imported").length;
+  logger.info({ imported, total: suppliers.length, by: req.user.email }, "supplier CSV import");
+  res.json({ success: true, results });
+});
+
 module.exports = router;
