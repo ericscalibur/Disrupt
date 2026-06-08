@@ -36,6 +36,12 @@ let batchPaymentData = []; // store batch payment data for editing
 let currentImportType = null;
 let currentImportRows = [];
 let currentBtcUsdRate = null; // cached rate for USD display in batch table
+let analyticsComboboxList = [];
+let analyticsSelectedRecipient = null;
+let analyticsLineChartInstance = null;
+let analyticsDonutChartInstance = null;
+let analyticsCurrentData = null;
+let analyticsShowUsd = false;
 
 // Token refresh state management
 let isRefreshing = false;
@@ -943,6 +949,7 @@ async function showContent(contentId, event) {
     "suppliersContent",
     "pendingContent",
     "batchContent",
+    "analyticsContent",
   ];
 
   // Hide all content sections
@@ -1009,6 +1016,9 @@ async function showContent(contentId, event) {
         break;
       case "batch":
         // No data to load for batch page initially
+        break;
+      case "analytics":
+        await initAnalyticsPage();
         break;
       default:
         console.warn(`No data loader defined for contentId: ${contentId}`);
@@ -3167,16 +3177,29 @@ function updateNavigationForRole() {
   }
 
   const suppliersNav = document.getElementById("suppliersNav");
-  if (!suppliersNav) return;
+  if (suppliersNav) {
+    if (
+      currentUser.role === "Admin" ||
+      currentUser.role === "Manager" ||
+      currentUser.role === "Bookkeeper"
+    ) {
+      suppliersNav.style.display = "block";
+    } else {
+      suppliersNav.style.display = "none";
+    }
+  }
 
-  if (
-    currentUser.role === "Admin" ||
-    currentUser.role === "Manager" ||
-    currentUser.role === "Bookkeeper"
-  ) {
-    suppliersNav.style.display = "block";
-  } else {
-    suppliersNav.style.display = "none";
+  const analyticsNav = document.getElementById("analyticsNav");
+  if (analyticsNav) {
+    if (
+      currentUser.role === "Admin" ||
+      currentUser.role === "Manager" ||
+      currentUser.role === "Bookkeeper"
+    ) {
+      analyticsNav.style.display = "block";
+    } else {
+      analyticsNav.style.display = "none";
+    }
   }
 }
 
@@ -5564,3 +5587,375 @@ document.addEventListener("click", function (event) {
     closeQrScanner();
   }
 });
+
+// ── Analytics Tab ─────────────────────────────────────────────────────────
+
+async function initAnalyticsPage() {
+  if (employeesList.length === 0) await loadEmployeesForPaymentModal();
+  if (suppliersList.length === 0) await loadSuppliersForPaymentModal();
+
+  analyticsComboboxList = [
+    ...employeesList.map((e) => ({
+      id: e.email,
+      type: "employee",
+      label: e.name || e.email,
+    })),
+    ...suppliersList.map((s) => ({
+      id: s.id,
+      type: "supplier",
+      label: s.company || "(Unnamed Supplier)",
+    })),
+  ];
+
+  const searchInput = document.getElementById("analyticsSearch");
+  if (searchInput) {
+    searchInput.value = analyticsSelectedRecipient ? analyticsSelectedRecipient.label : "";
+  }
+  closeAnalyticsDropdown();
+}
+
+function renderAnalyticsDropdownItems(items) {
+  const dropdown = document.getElementById("analyticsDropdown");
+  dropdown.innerHTML = "";
+  if (items.length === 0) {
+    dropdown.innerHTML = '<div class="recipient-dropdown-empty">No matches found</div>';
+  } else {
+    items.forEach(({ id, type, label }) => {
+      const div = document.createElement("div");
+      div.className = "recipient-dropdown-item analytics-dropdown-item";
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = label;
+      const badge = document.createElement("span");
+      badge.className = `analytics-type-badge analytics-badge-${type}`;
+      badge.textContent = type === "employee" ? "Employee" : "Supplier";
+      div.appendChild(nameSpan);
+      div.appendChild(badge);
+      div.addEventListener("mousedown", () => selectAnalyticsRecipient(id, type, label));
+      dropdown.appendChild(div);
+    });
+  }
+  dropdown.style.display = "block";
+}
+
+function showAnalyticsDropdown() {
+  renderAnalyticsDropdownItems(analyticsComboboxList);
+}
+
+function filterAnalyticsDropdown() {
+  const query = document.getElementById("analyticsSearch").value.trim().toLowerCase();
+  const filtered = query
+    ? analyticsComboboxList.filter((item) =>
+        item.label.toLowerCase().includes(query) ||
+        item.type.includes(query)
+      )
+    : analyticsComboboxList;
+  renderAnalyticsDropdownItems(filtered);
+}
+
+function closeAnalyticsDropdown() {
+  const dropdown = document.getElementById("analyticsDropdown");
+  if (dropdown) dropdown.style.display = "none";
+}
+
+async function selectAnalyticsRecipient(id, type, label) {
+  analyticsSelectedRecipient = { id, type, label };
+  const searchInput = document.getElementById("analyticsSearch");
+  if (searchInput) searchInput.value = label;
+  closeAnalyticsDropdown();
+  await loadAnalyticsForRecipient(id, type);
+}
+
+async function loadAnalyticsForRecipient(id, type) {
+  const dashboard = document.getElementById("analyticsDashboard");
+  const placeholder = document.getElementById("analyticsPlaceholder");
+
+  try {
+    const resp = await authFetch(
+      `${API_BASE}/analytics/recipient?recipientId=${encodeURIComponent(id)}&recipientType=${encodeURIComponent(type)}`
+    );
+    const data = await resp.json();
+
+    if (!data.success) throw new Error(data.message || "Failed to load analytics");
+
+    analyticsCurrentData = data;
+    analyticsShowUsd = false;
+
+    if (placeholder) placeholder.style.display = "none";
+    if (dashboard) {
+      dashboard.style.display = "block";
+
+      if (!data.stats) {
+        document.getElementById("analyticsStatCards").innerHTML = "";
+        document.getElementById("analyticsTableBody").innerHTML =
+          '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">No payment history found for this recipient.</td></tr>';
+        if (analyticsLineChartInstance) { analyticsLineChartInstance.destroy(); analyticsLineChartInstance = null; }
+        if (analyticsDonutChartInstance) { analyticsDonutChartInstance.destroy(); analyticsDonutChartInstance = null; }
+        return;
+      }
+    }
+
+    renderAnalyticsStatCards(data.stats, type === "employee");
+    renderAnalyticsCharts(data.stats, data.byMonth, data.transactions);
+    renderAnalyticsTable(data.transactions);
+
+    const toggleBtn = document.getElementById("analyticsToggleUsd");
+    if (toggleBtn) toggleBtn.textContent = "Show USD";
+  } catch (err) {
+    console.error("Analytics load error:", err);
+    if (placeholder) placeholder.style.display = "block";
+    if (dashboard) dashboard.style.display = "none";
+  }
+}
+
+function renderAnalyticsStatCards(stats, isEmployee) {
+  const container = document.getElementById("analyticsStatCards");
+  const usdText = stats.totalUsd
+    ? `$${stats.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : "$0.00";
+  const lastText = stats.lastPaymentDate ? analyticsTimeAgo(stats.lastPaymentDate) : "Never";
+
+  let html = `
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">Total Paid</div>
+      <div class="analytics-stat-value">${stats.totalSats.toLocaleString()} <span class="analytics-stat-unit">SATS</span></div>
+      <div class="analytics-stat-sub">${escapeHtml(usdText)}</div>
+    </div>
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label"># Payments</div>
+      <div class="analytics-stat-value">${stats.count}</div>
+    </div>
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">Avg Payment</div>
+      <div class="analytics-stat-value">${stats.avgSats.toLocaleString()} <span class="analytics-stat-unit">SATS</span></div>
+    </div>
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">Last Payment</div>
+      <div class="analytics-stat-value analytics-stat-relative">${escapeHtml(lastText)}</div>
+    </div>
+  `;
+
+  if (isEmployee && stats.taxWithheldSats > 0) {
+    html += `
+      <div class="analytics-stat-card analytics-stat-card-tax">
+        <div class="analytics-stat-label">Tax Withheld</div>
+        <div class="analytics-stat-value">${stats.taxWithheldSats.toLocaleString()} <span class="analytics-stat-unit">SATS</span></div>
+        <div class="analytics-stat-sub">ISSS / AFP</div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function analyticsTimeAgo(dateStr) {
+  if (!dateStr) return "Never";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const months = Math.floor(days / 30);
+  if (months > 0) return `${months} month${months !== 1 ? "s" : ""} ago`;
+  if (weeks > 0) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
+  if (days > 0) return `${days} day${days !== 1 ? "s" : ""} ago`;
+  if (hours > 0) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  if (minutes > 0) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  return "Just now";
+}
+
+function analyticsGetMonthLabels(byMonth) {
+  const now = new Date();
+  const last12 = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    last12.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  const dataMonths = byMonth.map((b) => b.month);
+  return [...new Set([...dataMonths, ...last12])].sort();
+}
+
+function analyticsMonthLabel(m) {
+  const [year, month] = m.split("-");
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function renderAnalyticsCharts(stats, byMonth, transactions) {
+  if (analyticsLineChartInstance) {
+    analyticsLineChartInstance.destroy();
+    analyticsLineChartInstance = null;
+  }
+  if (analyticsDonutChartInstance) {
+    analyticsDonutChartInstance.destroy();
+    analyticsDonutChartInstance = null;
+  }
+
+  const months = analyticsGetMonthLabels(byMonth);
+  const monthMap = {};
+  byMonth.forEach((b) => { monthMap[b.month] = b; });
+
+  const satsData = months.map((m) => monthMap[m]?.totalSats || 0);
+  const usdData = months.map((m) => monthMap[m]?.totalUsd || 0);
+  const labels = months.map(analyticsMonthLabel);
+
+  const lineCtx = document.getElementById("analyticsLineChart")?.getContext("2d");
+  if (lineCtx) {
+    const isVolcano = document.body.classList.contains("volcano-mode");
+    const textColor = isVolcano ? "#999" : "#555";
+    const legendColor = isVolcano ? "#bbb" : "#444";
+    const gridColor = isVolcano ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
+
+    analyticsLineChartInstance = new Chart(lineCtx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Monthly Total",
+            data: satsData,
+            backgroundColor: "rgba(93,173,226,0.45)",
+            borderColor: "rgba(93,173,226,0.8)",
+            borderWidth: 1,
+            borderRadius: 3,
+          },
+          {
+            type: "line",
+            label: "Trend",
+            data: satsData,
+            borderColor: "rgba(231,76,60,0.8)",
+            backgroundColor: "transparent",
+            pointRadius: 4,
+            pointBackgroundColor: "rgba(231,76,60,0.9)",
+            tension: 0.35,
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: legendColor, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.parsed.y.toLocaleString()} SATS`,
+            },
+          },
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor } },
+        },
+      },
+    });
+  }
+
+  const { lightning, onchain, batch } = stats.railBreakdown;
+  const railEntries = [
+    { label: "⚡ Lightning", count: lightning, color: "rgba(241,196,15,0.85)" },
+    { label: "₿ On-Chain", count: onchain, color: "rgba(231,76,60,0.85)" },
+    { label: "📋 Batch", count: batch, color: "rgba(52,152,219,0.85)" },
+  ].filter((e) => e.count > 0);
+
+  const donutCtx = document.getElementById("analyticsDonutChart")?.getContext("2d");
+  if (donutCtx) {
+    const isVolcano = document.body.classList.contains("volcano-mode");
+    const legendColor = isVolcano ? "#bbb" : "#444";
+    if (railEntries.length === 0) {
+      donutCtx.canvas.parentElement.innerHTML =
+        '<p style="text-align:center;color:#999;padding:60px 0;font-size:0.9rem;">No data</p>';
+    } else {
+      analyticsDonutChartInstance = new Chart(donutCtx, {
+        type: "doughnut",
+        data: {
+          labels: railEntries.map((e) => e.label),
+          datasets: [
+            {
+              data: railEntries.map((e) => e.count),
+              backgroundColor: railEntries.map((e) => e.color),
+              borderColor: "rgba(255,255,255,0.08)",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { color: legendColor, padding: 14, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.label}: ${ctx.parsed} payment${ctx.parsed !== 1 ? "s" : ""}`,
+              },
+            },
+          },
+        },
+      });
+    }
+  }
+}
+
+function toggleAnalyticsChartCurrency() {
+  if (!analyticsCurrentData?.stats || !analyticsLineChartInstance) return;
+
+  analyticsShowUsd = !analyticsShowUsd;
+
+  const { byMonth } = analyticsCurrentData;
+  const months = analyticsGetMonthLabels(byMonth);
+  const monthMap = {};
+  byMonth.forEach((b) => { monthMap[b.month] = b; });
+
+  const newData = months.map((m) =>
+    analyticsShowUsd ? (monthMap[m]?.totalUsd || 0) : (monthMap[m]?.totalSats || 0)
+  );
+  const unit = analyticsShowUsd ? "USD" : "SATS";
+
+  analyticsLineChartInstance.data.datasets[0].data = newData;
+  analyticsLineChartInstance.data.datasets[1].data = newData;
+  analyticsLineChartInstance.data.datasets[0].label = `Monthly Total (${unit})`;
+  analyticsLineChartInstance.options.plugins.tooltip.callbacks.label = (ctx) =>
+    analyticsShowUsd
+      ? `$${ctx.parsed.y.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : `${ctx.parsed.y.toLocaleString()} SATS`;
+  analyticsLineChartInstance.update();
+
+  const btn = document.getElementById("analyticsToggleUsd");
+  if (btn) btn.textContent = analyticsShowUsd ? "Show SATS" : "Show USD";
+}
+
+function renderAnalyticsTable(transactions) {
+  const tbody = document.getElementById("analyticsTableBody");
+  if (!transactions || transactions.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">No transactions</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = transactions
+    .map((t) => {
+      const date = t.date
+        ? new Date(t.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "—";
+      const sats = t.amount ? `${Number(t.amount).toLocaleString()} SATS` : "—";
+      const usd =
+        t.btcUsdRate && t.amount
+          ? `$${((Number(t.amount) / 100_000_000) * t.btcUsdRate).toFixed(2)}`
+          : "—";
+      const railIcon = t.type === "onchain" ? "₿" : t.type === "batch" ? "📋" : "⚡";
+      const railLabel = `${railIcon} ${t.type || "lightning"}`;
+      const statusClass =
+        t.status === "SUCCESS" ? "status-paid" : t.status === "FAILED" || t.status === "FAILURE" ? "status-declined" : "status-pending";
+      return `<tr>
+        <td>${escapeHtml(date)}</td>
+        <td class="amount">${escapeHtml(sats)}</td>
+        <td>${escapeHtml(usd)}</td>
+        <td>${railLabel}</td>
+        <td>${escapeHtml(t.note || "—")}</td>
+        <td><span class="status-label ${statusClass}">${escapeHtml(t.status || "PENDING")}</span></td>
+      </tr>`;
+    })
+    .join("");
+}

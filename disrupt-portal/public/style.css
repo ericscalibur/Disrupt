@@ -1542,3 +1542,192 @@ body.volcano-mode,
 .volcano-mode .txn-checkbox-col input[type="checkbox"] {
     accent-color: #f37c19;
 }
+
+/* ── Analytics Tab ───────────────────────────────────────────────────────── */
+
+.analytics-placeholder {
+    padding: 40px 0;
+    color: #999;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.analytics-stat-cards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+}
+
+.analytics-stat-card {
+    flex: 1 1 160px;
+    min-width: 150px;
+    max-width: 240px;
+    background: rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.09);
+    border-radius: 8px;
+    padding: 16px 20px;
+}
+
+.analytics-stat-card-tax {
+    border-color: rgba(52, 152, 219, 0.35);
+    background: rgba(52, 152, 219, 0.05);
+}
+
+.analytics-stat-label {
+    font-size: 0.78rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.analytics-stat-value {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    word-break: break-all;
+}
+
+.analytics-stat-unit {
+    font-size: 0.8rem;
+    color: #888;
+    font-weight: 400;
+}
+
+.analytics-stat-sub {
+    font-size: 0.82rem;
+    color: #666;
+    margin-top: 4px;
+}
+
+.analytics-stat-relative {
+    font-size: 1.1rem;
+}
+
+.analytics-charts-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.analytics-chart-box {
+    flex: 2 1 420px;
+    background: rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    padding: 16px;
+    min-width: 0;
+}
+
+.analytics-donut-box {
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+
+.analytics-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.analytics-chart-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #444;
+}
+
+.analytics-chart-area {
+    position: relative;
+    height: 220px;
+}
+
+.analytics-toggle-btn {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    width: auto;
+    background: rgba(0,0,0,0.04);
+    color: #555;
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.analytics-toggle-btn:hover {
+    background: rgba(0,0,0,0.08);
+}
+
+.analytics-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.analytics-type-badge {
+    font-size: 0.72rem;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.analytics-badge-employee {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.analytics-badge-supplier {
+    background: rgba(52, 152, 219, 0.2);
+    color: #5dade2;
+}
+
+/* Volcano mode analytics */
+.volcano-mode .analytics-stat-card {
+    background: rgba(243,124,25,0.06);
+    border-color: rgba(243,124,25,0.2);
+}
+
+.volcano-mode .analytics-stat-card-tax {
+    background: rgba(52,152,219,0.08);
+    border-color: rgba(52,152,219,0.3);
+}
+
+.volcano-mode .analytics-stat-label {
+    color: #aaa;
+}
+
+.volcano-mode .analytics-stat-value {
+    color: #eee;
+}
+
+.volcano-mode .analytics-stat-unit {
+    color: #aaa;
+}
+
+.volcano-mode .analytics-stat-sub {
+    color: #888;
+}
+
+.volcano-mode .analytics-chart-box {
+    background: rgba(243,124,25,0.04);
+    border-color: rgba(243,124,25,0.15);
+}
+
+.volcano-mode .analytics-chart-title {
+    color: #ccc;
+}
+
+.volcano-mode .analytics-toggle-btn {
+    color: #f37c19;
+    border-color: rgba(243,124,25,0.3);
+    background: rgba(243,124,25,0.08);
+}
+
+.volcano-mode .analytics-toggle-btn:hover {
+    background: rgba(243,124,25,0.18);
+}

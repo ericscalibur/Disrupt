@@ -11,6 +11,7 @@
             href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
         />
         <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     </head>
     <body class="volcano-mode">
         <!-- Login Page -->
@@ -136,6 +137,14 @@
                         onclick="showContent('suppliers', event)"
                     >
                         <i class="fa fa-truck"></i>Suppliers
+                    </div>
+                    <div
+                        class="nav-item"
+                        id="analyticsNav"
+                        data-content="analytics"
+                        onclick="showContent('analytics', event)"
+                    >
+                        📊 Analytics
                     </div>
                     <!-- <div
                         class="nav-item"
@@ -1493,6 +1502,71 @@
                                 <!-- Suppliers will be rendered here -->
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Analytics Content -->
+                    <div id="analyticsContent" class="content-card" style="display: none">
+                        <h2>Analytics</h2>
+                        <div class="form-group" style="max-width: 440px; margin-bottom: 24px;">
+                            <label for="analyticsSearch">Recipient</label>
+                            <div class="recipient-combobox" id="analyticsCombobox">
+                                <input
+                                    type="text"
+                                    id="analyticsSearch"
+                                    placeholder="Search employees &amp; suppliers..."
+                                    autocomplete="off"
+                                    oninput="filterAnalyticsDropdown()"
+                                    onfocus="showAnalyticsDropdown()"
+                                    onblur="setTimeout(closeAnalyticsDropdown, 150)"
+                                />
+                                <div id="analyticsDropdown" class="recipient-dropdown"></div>
+                            </div>
+                        </div>
+
+                        <div id="analyticsPlaceholder" class="analytics-placeholder">
+                            Search for an employee or supplier above to view their payment analytics.
+                        </div>
+
+                        <div id="analyticsDashboard" style="display: none">
+                            <div class="analytics-stat-cards" id="analyticsStatCards"></div>
+
+                            <div class="analytics-charts-row">
+                                <div class="analytics-chart-box">
+                                    <div class="analytics-chart-header">
+                                        <span class="analytics-chart-title">Payment History</span>
+                                        <button id="analyticsToggleUsd" class="analytics-toggle-btn" onclick="toggleAnalyticsChartCurrency()">Show USD</button>
+                                    </div>
+                                    <div class="analytics-chart-area">
+                                        <canvas id="analyticsLineChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="analytics-chart-box analytics-donut-box">
+                                    <div class="analytics-chart-header">
+                                        <span class="analytics-chart-title">Payment Rail Breakdown</span>
+                                    </div>
+                                    <div class="analytics-chart-area">
+                                        <canvas id="analyticsDonutChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 style="margin: 24px 0 12px;">Payment History</h3>
+                            <div style="overflow-x: auto;">
+                                <table class="transactions-table" id="analyticsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Amount</th>
+                                            <th>USD Value</th>
+                                            <th>Rail</th>
+                                            <th>Note</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="analyticsTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- CSV Import Modal (shared for employees and suppliers) -->
