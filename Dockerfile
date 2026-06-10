@@ -1,5 +1,5 @@
 # Disrupt Portal — StartOS container
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -8,8 +8,12 @@ WORKDIR /app
 RUN apk add --no-cache curl yq bash sqlite su-exec
 
 # Install production dependencies first (layer caching)
+# better-sqlite3 is a native module — needs python3/make/g++ to compile,
+# installed temporarily and removed to keep the image small
 COPY package*.json ./
-RUN npm install --production
+RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
+    npm install --production && \
+    apk del .build-deps
 
 # Copy application
 COPY . .
