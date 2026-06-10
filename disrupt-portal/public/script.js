@@ -2084,14 +2084,12 @@ function renderTransactions(transactions, fallbackRate = null) {
       ? `${txn.amount} ${txn.currency || "SATS"}`
       : "";
     amountCell.classList.add("amount");
-    if (txn.status === "SUCCESS") amountCell.classList.add("amount-green");
-    else if (txn.status === "ALREADY_PAID")
-      amountCell.classList.add("amount-blue");
-    else amountCell.classList.add("amount-red");
+    if (txn.direction === "RECEIVE") amountCell.classList.add("amount-blue");
 
     // USD Value cell
     const usdCell = document.createElement("td");
     usdCell.classList.add("amount");
+    if (txn.direction === "RECEIVE") usdCell.classList.add("amount-blue");
     if (txn.currency === "USD") {
       usdCell.textContent = `$${Number(txn.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     } else {
