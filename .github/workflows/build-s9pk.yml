@@ -44,15 +44,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/start-sdk
-          key: start-sdk-${{ runner.os }}-v1
+          key: start-sdk-${{ runner.os }}-v0.3.5.1
 
       - name: Build start-sdk (only on cache miss — takes ~15 min first time)
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          git clone https://github.com/Start9Labs/start-os.git
+          set -x
+          # Pin the 0.3.5.x tag — current master moved to the TS SDK and no
+          # longer has a 'make sdk' target (this is what broke build #1)
+          git clone --depth 1 --branch v0.3.5.1 https://github.com/Start9Labs/start-os.git
           cd start-os
-          git submodule update --init --recursive
+          git submodule update --init --recursive --depth 1
           make sdk
+          start-sdk --version
 
       - name: Initialize start-sdk
         run: start-sdk init
