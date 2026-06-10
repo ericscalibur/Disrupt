@@ -68,7 +68,7 @@ function generateSecret() {
   return crypto.randomBytes(64).toString("hex");
 }
 
-function writeEnvValues({ blinkApiKey, taxLightningAddress }) {
+function writeEnvValues({ blinkApiKey, taxLightningAddress, employeeDeductionRate, employerContributionRate, contractorWithholdingRate }) {
   const accessSecret = generateSecret();
   const refreshSecret = generateSecret();
 
@@ -131,6 +131,22 @@ function writeEnvValues({ blinkApiKey, taxLightningAddress }) {
     );
     if (!/^TAX_LIGHTNING_ADDRESS=/m.test(env)) {
       env += `\nTAX_LIGHTNING_ADDRESS=${taxLightningAddress}`;
+    }
+  }
+
+  // Write tax rates
+  const rateLines = [
+    ["EMPLOYEE_DEDUCTION_RATE",    employeeDeductionRate],
+    ["EMPLOYER_CONTRIBUTION_RATE", employerContributionRate],
+    ["CONTRACTOR_WITHHOLDING_RATE", contractorWithholdingRate],
+  ];
+  for (const [key, val] of rateLines) {
+    const line = `${key}=${val}`;
+    const re = new RegExp(`^${key}=.*$`, "m");
+    if (re.test(env)) {
+      env = env.replace(re, line);
+    } else {
+      env += `\n${line}`;
     }
   }
 
@@ -211,11 +227,26 @@ async function main() {
     break;
   }
 
+  // ── Collect tax rates ─────────────────────────────────────────────────────
+
+  console.log("");
+  console.log("  Tax withholding rates (press Enter to use El Salvador defaults):");
+  console.log("");
+
+  const rawEmpDeduction = await ask("  Employee deduction rate     % [default 10.25]: ");
+  const employeeDeductionRate = rawEmpDeduction === "" ? "10.25" : rawEmpDeduction;
+
+  const rawEmpContribution = await ask("  Employer contribution rate  % [default 16.25]: ");
+  const employerContributionRate = rawEmpContribution === "" ? "16.25" : rawEmpContribution;
+
+  const rawContractor = await ask("  Contractor withholding rate % [default 10]:    ");
+  const contractorWithholdingRate = rawContractor === "" ? "10" : rawContractor;
+
   // ── Collect tax lightning address (optional) ──────────────────────────────
 
   console.log("");
-  console.log("  The Tax Lightning Address is where El Salvador payroll tax");
-  console.log("  withholdings (ISSS + AFP) are automatically sent.");
+  console.log("  The Tax Lightning Address is where payroll tax withholdings");
+  console.log("  are automatically sent when the withholding checkbox is used.");
   const taxLightningAddress = await ask(
     "  Tax Lightning Address (optional, press Enter to skip): ",
   );
@@ -239,6 +270,9 @@ async function main() {
   console.log(`  Name:              ${name}`);
   console.log(`  Email:             ${email}`);
   console.log(`  Password:          ${"*".repeat(password.length)}`);
+  console.log(`  Employee deduction rate:     ${employeeDeductionRate}%`);
+  console.log(`  Employer contribution rate:  ${employerContributionRate}%`);
+  console.log(`  Contractor withholding rate: ${contractorWithholdingRate}%`);
   console.log(
     `  Tax Lightning Address: ${taxLightningAddress || "(none — add to .env later)"}`,
   );
@@ -271,6 +305,9 @@ async function main() {
   const { accessSecret, refreshSecret } = writeEnvValues({
     blinkApiKey,
     taxLightningAddress,
+    employeeDeductionRate,
+    employerContributionRate,
+    contractorWithholdingRate,
   });
   console.log("  ✅  .env updated");
 
@@ -332,11 +369,14 @@ async function main() {
   console.log(`    • ACCESS_TOKEN_SECRET  = ${accessSecret.slice(0, 12)}...`);
   console.log(`    • REFRESH_TOKEN_SECRET = ${refreshSecret.slice(0, 12)}...`);
   console.log(
-    `    • BLINK_API_KEY         = ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(not set — add manually)"}`,
+    `    • BLINK_API_KEY              = ${blinkApiKey ? blinkApiKey.slice(0, 6) + "..." : "(not set — add manually)"}`,
   );
   console.log(
-    `    • TAX_LIGHTNING_ADDRESS = ${taxLightningAddress || "(not set — add manually)"}`,
+    `    • TAX_LIGHTNING_ADDRESS      = ${taxLightningAddress || "(not set — add manually)"}`,
   );
+  console.log(`    • EMPLOYEE_DEDUCTION_RATE    = ${employeeDeductionRate}%`);
+  console.log(`    • EMPLOYER_CONTRIBUTION_RATE = ${employerContributionRate}%`);
+  console.log(`    • CONTRACTOR_WITHHOLDING_RATE= ${contractorWithholdingRate}%`);
   console.log("");
   console.log("  Data files initialized:");
   console.log(`    • ${path.relative(process.cwd(), USERS_FILE)}`);

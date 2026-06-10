@@ -1,20 +1,22 @@
 "use strict";
 
 /**
- * El Salvador payroll tax calculations.
+ * Configurable payroll tax calculations.
  *
- * Employee side (withheld from employee):  ISSS 3.00% + AFP 7.25% = 10.25%
- * Employer side (borne by employer):       ISSS 7.50% + AFP 8.75% = 16.25%
- * Total flow to tax authority:                                      26.50%
- *
- * Contractor payments use a flat 10% withholding rate.
+ * Rates are set during setup and stored in .env. Defaults match El Salvador:
+ *   Employee deduction (withheld from employee): 10.25%
+ *   Employer contribution (extra employer cost):  16.25%
+ *   Total to tax authority:                       26.50%
+ *   Contractor withholding:                       10.00%
  *
  * All amounts are in satoshis. Math.floor() is used throughout because
  * satoshis are indivisible — fractional amounts always go to the recipient.
  */
 
-const EMPLOYEE_RATE   = 0.265; // 26.5 %
-const CONTRACTOR_RATE = 0.10;  // 10.0 %
+const EMPLOYEE_DEDUCTION_RATE    = parseFloat(process.env.EMPLOYEE_DEDUCTION_RATE    ?? "10.25") / 100;
+const EMPLOYER_CONTRIBUTION_RATE = parseFloat(process.env.EMPLOYER_CONTRIBUTION_RATE ?? "16.25") / 100;
+const EMPLOYEE_RATE              = EMPLOYEE_DEDUCTION_RATE + EMPLOYER_CONTRIBUTION_RATE;
+const CONTRACTOR_RATE            = parseFloat(process.env.CONTRACTOR_WITHHOLDING_RATE ?? "10")    / 100;
 
 /**
  * Calculate employee withholding for a gross payment.
@@ -68,6 +70,8 @@ function validateTaxWithholding(tw) {
 }
 
 module.exports = {
+  EMPLOYEE_DEDUCTION_RATE,
+  EMPLOYER_CONTRIBUTION_RATE,
   EMPLOYEE_RATE,
   CONTRACTOR_RATE,
   calcEmployeeTax,

@@ -36,6 +36,7 @@ let batchPaymentData = []; // store batch payment data for editing
 let currentImportType = null;
 let currentImportRows = [];
 let currentBtcUsdRate = null; // cached rate for USD display in batch table
+let taxRates = { employeeDeductionRate: 10.25, employerContributionRate: 16.25, contractorWithholdingRate: 10 };
 let analyticsComboboxList = [];
 let analyticsSelectedRecipient = null;
 let analyticsLineChartInstance = null;
@@ -389,6 +390,7 @@ async function login() {
     currentUserRole = currentUser.role;
 
     // Now that token and user are ready, load protected data in sequence
+    await fetchTaxRates();
     await populateDepartmentsList();
     await loadEmployeeDrafts();
 
@@ -2434,6 +2436,23 @@ function populateRecipientDetails() {
   }
 }
 
+async function fetchTaxRates() {
+  try {
+    const resp = await authFetch(`${API_BASE}/settings/tax-rates`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.success) {
+      taxRates = {
+        employeeDeductionRate:    data.employeeDeductionRate,
+        employerContributionRate: data.employerContributionRate,
+        contractorWithholdingRate: data.contractorWithholdingRate,
+      };
+    }
+  } catch (err) {
+    console.warn("Could not fetch tax rates, using defaults:", err.message);
+  }
+}
+
 async function loadEmployeesForPaymentModal() {
   try {
     const response = await authFetch(`${API_BASE}/users`);
@@ -2560,13 +2579,12 @@ async function submitNewPayment(event) {
   let taxType = "none";
 
   if (isEmployeeTaxWithholding) {
-    // Calculate employee tax withholding (26.5% total - El Salvador structure)
-    taxWithholdingAmount = Math.floor(paymentAmount * 0.265);
+    const totalRate = (taxRates.employeeDeductionRate + taxRates.employerContributionRate) / 100;
+    taxWithholdingAmount = Math.floor(paymentAmount * totalRate);
     netPaymentAmount = paymentAmount - taxWithholdingAmount;
     taxType = "employee";
   } else if (isContractorTaxWithholding) {
-    // Calculate contractor tax withholding (10% total)
-    taxWithholdingAmount = Math.floor(paymentAmount * 0.1);
+    taxWithholdingAmount = Math.floor(paymentAmount * (taxRates.contractorWithholdingRate / 100));
     netPaymentAmount = paymentAmount - taxWithholdingAmount;
     taxType = "contractor";
   }
@@ -5370,55 +5388,43 @@ function toggleContractorTaxWithholding() {
 }
 
 function calculateEmployeeTaxWithholding() {
-  const amountInput = document.getElementById("paymentAmount");
-  const amount = parseFloat(amountInput.value) || 0;
+  const amount = parseFloat(document.getElementById("paymentAmount").value) || 0;
+  const dedRate  = taxRates.employeeDeductionRate    / 100;
+  const contRate = taxRates.employerContributionRate / 100;
 
-  // El Salvador Employee Deductions
-  const isssEmployee = Math.floor(amount * 0.03); // 3%
-  const afpEmployee = Math.floor(amount * 0.0725); // 7.25%
+  const employeeDeduction    = Math.floor(amount * dedRate);
+  const employerContribution = Math.floor(amount * contRate);
+  const totalDeducted        = employeeDeduction + employerContribution;
+  const netPayment           = amount - totalDeducted;
 
-  // El Salvador Employer Contributions
-  const isssEmployer = Math.floor(amount * 0.075); // 7.5%
-  const afpEmployer = Math.floor(amount * 0.0875); // 8.75%
+  // Update labels with current rates
+  const titleEl = document.getElementById("employeeTaxTitle");
+  if (titleEl) titleEl.textContent = `Employee Tax Deductions (${(dedRate + contRate) * 100}% Total)`;
+  const dedLabel = document.getElementById("employeeDeductionLabel");
+  if (dedLabel) dedLabel.textContent = `Employee Deduction (${taxRates.employeeDeductionRate}%):`;
+  const contLabel = document.getElementById("employerContributionLabel");
+  if (contLabel) contLabel.textContent = `Employer Contribution (${taxRates.employerContributionRate}%):`;
 
-  // Total deductions (26.5%)
-  const totalDeducted = isssEmployee + afpEmployee + isssEmployer + afpEmployer;
-
-  // Net payment to employee (73.5%)
-  const netPayment = amount - totalDeducted;
-
-  // Update display
-  document.getElementById("isssEmployeeAmount").textContent =
-    isssEmployee.toLocaleString();
-  document.getElementById("afpEmployeeAmount").textContent =
-    afpEmployee.toLocaleString();
-  document.getElementById("isssEmployerAmount").textContent =
-    isssEmployer.toLocaleString();
-  document.getElementById("afpEmployerAmount").textContent =
-    afpEmployer.toLocaleString();
-  document.getElementById("totalDeducted").textContent =
-    totalDeducted.toLocaleString();
-  document.getElementById("netPayment").textContent =
-    netPayment.toLocaleString();
+  document.getElementById("employeeDeductionAmount").textContent  = employeeDeduction.toLocaleString() + " SATS";
+  document.getElementById("employerContributionAmount").textContent = employerContribution.toLocaleString() + " SATS";
+  document.getElementById("totalDeducted").textContent = totalDeducted.toLocaleString();
+  document.getElementById("netPayment").textContent    = netPayment.toLocaleString();
 }
 
 function calculateContractorTaxWithholding() {
-  const amountInput = document.getElementById("paymentAmount");
-  const amount = parseFloat(amountInput.value) || 0;
+  const amount = parseFloat(document.getElementById("paymentAmount").value) || 0;
+  const rate   = taxRates.contractorWithholdingRate / 100;
 
-  // Contractor tax withholding (10%)
-  const contractorTax = Math.floor(amount * 0.1);
+  const contractorTax = Math.floor(amount * rate);
+  const netPayment    = amount - contractorTax;
 
-  // Net payment to contractor (90%)
-  const netPayment = amount - contractorTax;
+  // Update title with current rate
+  const titleEl = document.getElementById("contractorTaxTitle");
+  if (titleEl) titleEl.textContent = `Contractor/Professional Services Tax Withholding (${taxRates.contractorWithholdingRate}%)`;
 
-  // Update display
-  document.getElementById("contractorTaxAmount").textContent =
-    contractorTax.toLocaleString() + " SATS";
-  document.getElementById("contractorNetPayment").textContent =
-    netPayment.toLocaleString() + " SATS";
-  document.getElementById("contractorTotalTax").textContent =
-    contractorTax.toLocaleString() + " SATS";
+  document.getElementById("contractorTaxAmount").textContent   = contractorTax.toLocaleString() + " SATS";
+  document.getElementById("contractorNetPayment").textContent  = netPayment.toLocaleString() + " SATS";
+  document.getElementById("contractorTotalTax").textContent    = contractorTax.toLocaleString() + " SATS";
 }
 
 // Add event listeners for payment amount changes to recalculate tax
