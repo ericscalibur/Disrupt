@@ -50,6 +50,10 @@ jobs:
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           set -x
+          # Old 'time' crate in start-os 0.3.5.1 breaks on Rust >=1.80
+          # (E0282 inference change) — pin the era-appropriate toolchain
+          rustup toolchain install 1.78.0 --profile minimal
+          rustup default 1.78.0
           # Pin the 0.3.5.x tag — current master moved to the TS SDK and no
           # longer has a 'make sdk' target (this is what broke build #1)
           git clone --depth 1 --branch v0.3.5.1 https://github.com/Start9Labs/start-os.git
