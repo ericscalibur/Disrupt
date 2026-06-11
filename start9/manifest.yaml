@@ -1,10 +1,11 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.0.3
+version: 1.2.0
 release-notes: |
-  - Fix crash when config values contain spaces (e.g. Gmail app passwords)
-  - Fix Config screen error on fresh installs
-  - Initial StartOS release
+  - First public StartOS release
+  - Config-tab setup: admin account, Blink API key, tax withholding rates
+  - Automatic admin bootstrap (no interactive wizard needed)
+  - CORS support for .local and .onion origins
   - Lightning + on-chain payments via Blink
   - Payroll, suppliers, batch payments, tax withholding
 license: GPL-3.0
