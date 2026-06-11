@@ -228,7 +228,7 @@ Set `NODE_ENV=development` in `.env` and restart.
 
 ## License
 
-ISC
+GPL-3.0 — see [LICENSE](LICENSE). Free to use, modify, and distribute; modified distributed versions must remain open source.
 
 ---
 
