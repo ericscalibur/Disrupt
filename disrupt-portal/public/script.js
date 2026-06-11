@@ -1150,9 +1150,10 @@ function setupTransactionRowClicks(transactions) {
     const detailsContainer = document.getElementById("transactionDetails");
     if (!detailsContainer) return;
 
+    const signedAmt = signedTxnAmount(txn);
     let usdLine = "";
-    if (txn.btcUsdRate && txn.amount) {
-      const usdValue = (Number(txn.amount) / 100_000_000) * txn.btcUsdRate;
+    if (txn.btcUsdRate && txn.amount && signedAmt !== null) {
+      const usdValue = (signedAmt / 100_000_000) * txn.btcUsdRate;
       const formattedUsd = usdValue.toLocaleString("en-US", {
         style: "currency",
         currency: "USD",
@@ -1176,7 +1177,7 @@ function setupTransactionRowClicks(transactions) {
 
     const details = `
       <span class="label">Receiver:</span> <span class="data">${escapeHtml(cleanReceiverName(txn.receiver) || "N/A")}</span><br>
-      <span class="label">Amount:</span> <span class="data">${escapeHtml(String(txn.amount || "N/A"))} ${escapeHtml(txn.currency || "SATS")}</span><br>${usdLine}
+      <span class="label">Amount:</span> <span class="data">${escapeHtml(String(txn.amount ? (signedAmt ?? txn.amount) : "N/A"))} ${escapeHtml(txn.currency || "SATS")}</span><br>${usdLine}
       <span class="label">Date:</span> <span class="data">${txn.date ? new Date(txn.date).toLocaleString() : "N/A"}</span><br>
       <span class="label">Note:</span> <span class="data">${escapeHtml(txn.note || "N/A")}</span><br>
       <span class="label">Status:</span> <span class="data">${escapeHtml(txn.status || "N/A")}</span><br>
@@ -2024,6 +2025,25 @@ function renderSuppliers(suppliers) {
   }
 }
 
+// Outgoing payments are stored as positive amounts with direction SENT/SEND;
+// sign the amount by direction so debits display as negative.
+function signedTxnAmount(txn) {
+  const amt = Number(txn.amount);
+  if (isNaN(amt)) return null;
+  const dir = String(txn.direction || "").toUpperCase();
+  if (dir === "SEND" || dir === "SENT") return -Math.abs(amt);
+  if (dir === "RECEIVE" || dir === "RECEIVED") return Math.abs(amt);
+  return amt;
+}
+
+function formatUsdSigned(value) {
+  const abs = Math.abs(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value < 0 ? "-" : ""}$${abs}`;
+}
+
 function renderTransactions(transactions, fallbackRate = null) {
   const tbody = document.querySelector("#transactionsTable tbody");
   tbody.innerHTML = "";
@@ -2079,9 +2099,10 @@ function renderTransactions(transactions, fallbackRate = null) {
     receiverCell.textContent = cleanReceiverName(txn.receiver);
 
     // Amount cell
+    const signedAmt = signedTxnAmount(txn);
     const amountCell = document.createElement("td");
-    amountCell.textContent = txn.amount
-      ? `${txn.amount} ${txn.currency || "SATS"}`
+    amountCell.textContent = txn.amount && signedAmt !== null
+      ? `${signedAmt} ${txn.currency || "SATS"}`
       : "";
     amountCell.classList.add("amount");
     if (txn.direction === "RECEIVE") amountCell.classList.add("amount-blue");
@@ -2091,12 +2112,12 @@ function renderTransactions(transactions, fallbackRate = null) {
     usdCell.classList.add("amount");
     if (txn.direction === "RECEIVE") usdCell.classList.add("amount-blue");
     if (txn.currency === "USD") {
-      usdCell.textContent = `$${Number(txn.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      usdCell.textContent = formatUsdSigned(signedAmt ?? Number(txn.amount));
     } else {
       const rate = txn.btcUsdRate || fallbackRate;
-      if (rate && txn.amount) {
-        const usdVal = (Number(txn.amount) / 100_000_000) * rate;
-        usdCell.textContent = `$${usdVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (rate && txn.amount && signedAmt !== null) {
+        const usdVal = (signedAmt / 100_000_000) * rate;
+        usdCell.textContent = formatUsdSigned(usdVal);
       } else {
         usdCell.textContent = "—";
       }
@@ -2228,7 +2249,7 @@ function exportTransactions(format) {
       [
         t.date ? new Date(t.date).toLocaleDateString() : "",
         cleanReceiverName(t.receiver) || "",
-        t.amount ?? "",
+        signedTxnAmount(t) ?? t.amount ?? "",
         t.currency || "SATS",
         t.id || "",
         t.note || "",
