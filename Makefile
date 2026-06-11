@@ -20,16 +20,18 @@ PKG_VERSION := $(shell yq e ".version" start9/manifest.yaml)
 all: verify
 
 # Final package
-$(PKG_ID).s9pk: start9/manifest.yaml instructions.md icon.png LICENSE image.tar
+$(PKG_ID).s9pk: start9/manifest.yaml instructions.md icon.png LICENSE docker-images/x86_64.tar
 	@echo "Packing $(PKG_ID).s9pk ..."
 	cp start9/manifest.yaml manifest.yaml
 	start-sdk pack
 
-# Docker image (x86_64 — add arm64 target if you want Raspberry Pi support)
-image.tar: Dockerfile start9/*.sh package.json
+# Docker image — start-sdk pack expects docker-images/<arch>.tar
+# (add an arm64 target here if you ever want Raspberry Pi support)
+docker-images/x86_64.tar: Dockerfile start9/*.sh package.json
 	chmod +x start9/*.sh
+	mkdir -p docker-images
 	docker buildx build --tag start9/$(PKG_ID)/main:$(PKG_VERSION) \
-		--platform=linux/amd64 -o type=docker,dest=image.tar .
+		--platform=linux/amd64 -o type=docker,dest=docker-images/x86_64.tar .
 
 verify: $(PKG_ID).s9pk
 	start-sdk verify s9pk $(PKG_ID).s9pk
@@ -38,6 +40,6 @@ verify: $(PKG_ID).s9pk
 	@echo "   Sideload it: StartOS → System → Sideload Service"
 
 clean:
-	rm -f image.tar $(PKG_ID).s9pk manifest.yaml
+	rm -rf docker-images $(PKG_ID).s9pk manifest.yaml
 
 .PHONY: all verify clean
