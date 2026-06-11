@@ -150,19 +150,23 @@ set_config() {
     EMAIL_HOST=$(echo "$CONFIG_INPUT" | yq e '.email_host // "smtp.gmail.com"' -)
     EMAIL_PORT=$(echo "$CONFIG_INPUT" | yq e '.email_port // 587' -)
 
+    # Single-quote every value so spaces and special characters survive
+    # being sourced by the shell (e.g. Gmail app passwords contain spaces)
+    esc() { printf "%s" "$1" | sed "s/'/'\\\\''/g"; }
+
     mkdir -p "$(dirname "$ENV_FILE")"
     cat > "$ENV_FILE" << EOF
-ADMIN_NAME=${ADMIN_NAME}
-ADMIN_EMAIL=${ADMIN_EMAIL}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-BLINK_API_KEY=${BLINK_API_KEY}
+ADMIN_NAME='$(esc "$ADMIN_NAME")'
+ADMIN_EMAIL='$(esc "$ADMIN_EMAIL")'
+ADMIN_PASSWORD='$(esc "$ADMIN_PASSWORD")'
+BLINK_API_KEY='$(esc "$BLINK_API_KEY")'
 EMPLOYEE_DEDUCTION_RATE=${EMP_RATE}
 EMPLOYER_CONTRIBUTION_RATE=${EMPLOYER_RATE}
 CONTRACTOR_WITHHOLDING_RATE=${CONTRACTOR_RATE}
-TAX_LIGHTNING_ADDRESS=${TAX_ADDR}
-EMAIL_USER=${EMAIL_USER}
-EMAIL_PASS=${EMAIL_PASS}
-EMAIL_HOST=${EMAIL_HOST}
+TAX_LIGHTNING_ADDRESS='$(esc "$TAX_ADDR")'
+EMAIL_USER='$(esc "$EMAIL_USER")'
+EMAIL_PASS='$(esc "$EMAIL_PASS")'
+EMAIL_HOST='$(esc "$EMAIL_HOST")'
 EMAIL_PORT=${EMAIL_PORT}
 PORT=3000
 NODE_ENV=production
