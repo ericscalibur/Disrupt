@@ -227,8 +227,9 @@ router.post("/forgot-password", forgotPasswordRateLimit, validate(schemas.forgot
   // Generate a cryptographically random temporary password (16 hex chars = 64 bits of entropy)
   const tempPassword = crypto.randomBytes(8).toString("hex");
   const hashedPassword = await bcrypt.hash(tempPassword, 10);
-  db.prepare("UPDATE users SET password = ? WHERE email = ? COLLATE NOCASE").run(hashedPassword, email);
 
+  // Send the email BEFORE writing to the DB — if the send fails, the user's
+  // existing password is preserved and they are not locked out.
   try {
     await transporter.sendMail({
       from: '"Disrupt Portal" <support@disrupt.com>',
@@ -236,15 +237,17 @@ router.post("/forgot-password", forgotPasswordRateLimit, validate(schemas.forgot
       subject: "Your Temporary Password",
       text: `Your temporary password is: ${tempPassword}\n\nPlease log in and change your password immediately.`,
     });
-
-    res.json({
-      success: true,
-      message: "If that email exists, a reset PIN has been sent.",
-    });
   } catch (err) {
     logger.error("Failed to send email:", err);
-    res.status(500).json({ success: false, message: "Failed to send email." });
+    return res.status(500).json({ success: false, message: "Failed to send email." });
   }
+
+  db.prepare("UPDATE users SET password = ? WHERE email = ? COLLATE NOCASE").run(hashedPassword, email);
+
+  res.json({
+    success: true,
+    message: "If that email exists, a reset PIN has been sent.",
+  });
 });
 
 module.exports = router;

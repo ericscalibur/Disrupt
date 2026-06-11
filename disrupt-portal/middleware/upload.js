@@ -1,11 +1,15 @@
 "use strict";
 
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const UPLOAD_DIR = path.join(__dirname, "../uploads/receipts");
+
+// Ensure the uploads directory exists on first load (safe on all platforms)
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
