@@ -71,10 +71,11 @@ app.use(express.json());
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin only in development (Postman, curl, etc.)
+      // Non-CORS requests (same-origin navigation, curl, health checks)
+      // send no Origin header. Blocking them adds no security: any
+      // non-browser client can omit or forge the header.
       if (!origin) {
-        if (process.env.NODE_ENV !== "production") return callback(null, true);
-        return callback(new Error("Not allowed by CORS"));
+        return callback(null, true);
       }
 
       // Allow localhost on any port for development
@@ -82,8 +83,18 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow specific origins
-      const allowedOrigins = ["http://localhost:5500"];
+      // Self-hosted deployments: StartOS serves the UI at https://<app>.local
+      // on LAN and at a .onion address over Tor
+      if (/^https?:\/\/[^\/]+\.(local|onion)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      // Additional origins via env (comma-separated), e.g. a VPS domain
+      const extraOrigins = (process.env.ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const allowedOrigins = ["http://localhost:5500", ...extraOrigins];
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }

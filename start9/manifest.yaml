@@ -1,6 +1,6 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.0.2
+version: 1.0.3
 release-notes: |
   - Fix crash when config values contain spaces (e.g. Gmail app passwords)
   - Fix Config screen error on fresh installs
