@@ -82,7 +82,17 @@ async function getBlinkTransactions() {
             edges {
               node {
                 id
-                initiationVia { __typename }
+                initiationVia {
+                  __typename
+                  ... on InitiationViaLn { paymentHash }
+                  ... on InitiationViaOnChain { address }
+                  ... on InitiationViaIntraLedger { counterPartyUsername }
+                }
+                settlementVia {
+                  __typename
+                  ... on SettlementViaIntraLedger { counterPartyUsername }
+                  ... on SettlementViaOnChain { transactionHash }
+                }
                 settlementAmount
                 settlementCurrency
                 createdAt

@@ -71,8 +71,32 @@ router.get("/transactions", authenticateToken, async (req, res) => {
       txn.memo ||
       "Unknown";
 
+    // Receiver for Blink-only rows: memo, then Blink counterparty username,
+    // then on-chain address, then a direction-aware generic label.
+    const getBlinkReceiver = (blinkTxn) => {
+      if (blinkTxn.memo) return blinkTxn.memo;
+      const counterparty =
+        blinkTxn.settlementVia?.counterPartyUsername ||
+        blinkTxn.initiationVia?.counterPartyUsername;
+      if (counterparty) return `${counterparty} (Blink)`;
+      const addr = blinkTxn.initiationVia?.address;
+      if (addr) return `On-chain ${addr.slice(0, 8)}…${addr.slice(-6)}`;
+      return blinkTxn.direction === "RECEIVE"
+        ? "Lightning payment received"
+        : "Lightning payment sent";
+    };
+
+    // Local lightning records use the payment hash as their id, which never
+    // equals Blink's internal txn id — match on either so rows merge properly.
+    const matchedLocalIds = new Set();
     const mergedTxns = blinkTxns.map((blinkTxn) => {
-      const local = localTxns.find((t) => t.id === blinkTxn.id);
+      const blinkPaymentHash = blinkTxn.initiationVia?.paymentHash;
+      const local = localTxns.find(
+        (t) =>
+          t.id === blinkTxn.id ||
+          (blinkPaymentHash && t.paymentHash === blinkPaymentHash),
+      );
+      if (local) matchedLocalIds.add(local.id);
 
       // Resolve amount/currency from Blink (authoritative settlement values)
       let amount, currency;
@@ -107,7 +131,7 @@ router.get("/transactions", authenticateToken, async (req, res) => {
       return {
         id: blinkTxn.id,
         date: new Date(blinkTxn.createdAt * 1000).toISOString(),
-        receiver: blinkTxn.memo || "Unknown",
+        receiver: getBlinkReceiver(blinkTxn),
         amount,
         currency,
         note: blinkTxn.memo || "",
@@ -119,7 +143,9 @@ router.get("/transactions", authenticateToken, async (req, res) => {
 
     // Include local transactions not in Blink — keep all fields as-is
     const blinkTxnIds = new Set(blinkTxns.map((txn) => txn.id));
-    const uniqueLocalTxns = localTxns.filter((txn) => !blinkTxnIds.has(txn.id));
+    const uniqueLocalTxns = localTxns.filter(
+      (txn) => !blinkTxnIds.has(txn.id) && !matchedLocalIds.has(txn.id),
+    );
 
     const formattedLocalTxns = uniqueLocalTxns.map((txn) => ({
       ...txn,
