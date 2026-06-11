@@ -1,7 +1,8 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.0.0
+version: 1.0.1
 release-notes: |
+  - Fix Config screen error on fresh installs
   - Initial StartOS release
   - Lightning + on-chain payments via Blink
   - Payroll, suppliers, batch payments, tax withholding
