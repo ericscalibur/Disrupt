@@ -2,7 +2,8 @@ id: disrupt
 title: "Disrupt Portal"
 version: 1.0.2
 release-notes: |
-  - Fix crash when config values contain spaces (e.g. Gmail app passwords)\n  - Fix Config screen error on fresh installs
+  - Fix crash when config values contain spaces (e.g. Gmail app passwords)
+  - Fix Config screen error on fresh installs
   - Initial StartOS release
   - Lightning + on-chain payments via Blink
   - Payroll, suppliers, batch payments, tax withholding
