@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.aider*
+node_modules
+start-os
+docker-images
+releases
+*.s9pk
+image.tar
+disrupt-portal/data
+disrupt-portal/uploads
+.env
+.DS_Store
+*.md
+group-text.txt
+test

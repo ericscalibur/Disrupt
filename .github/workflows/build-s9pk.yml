@@ -20,8 +20,6 @@ on:
   release:
     types: [published]      # runs when you click "Publish release" on GitHub
   workflow_dispatch:         # also lets you run it manually from the Actions tab
-  push:
-    branches: [start9-packaging]   # TEMP: test the build on this branch; remove after merge
 
 jobs:
   build:
@@ -56,8 +54,8 @@ jobs:
           rustup default 1.78.0
           # Pin the 0.3.5.x tag — current master moved to the TS SDK and no
           # longer has a 'make sdk' target (this is what broke build #1)
-          git clone --depth 1 --branch v0.3.5.1 https://github.com/Start9Labs/start-os.git
-          cd start-os
+          git clone --depth 1 --branch v0.3.5.1 https://github.com/Start9Labs/start-os.git /tmp/start-os
+          cd /tmp/start-os
           git submodule update --init --recursive --depth 1
           make sdk
           start-sdk --version
