@@ -115,7 +115,16 @@ const schemas = {
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
     btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     note: z.string().max(1000).optional(),
-  }),
+  }).refine(
+    // When the edit touches the address fields, at least one must remain set —
+    // don't let a supplier be left with no payable address. (Updates that omit
+    // both address fields entirely, e.g. editing only the note, are unaffected.)
+    (d) =>
+      (d.lightningAddress === undefined && d.btcAddress === undefined) ||
+      (d.lightningAddress && d.lightningAddress.trim()) ||
+      (d.btcAddress && d.btcAddress.trim()),
+    { message: "At least one payment address (Lightning or Bitcoin) is required." }
+  ),
 
   pay: z.object({
     recipientType: z.enum(["employee", "supplier"]),

@@ -1,6 +1,6 @@
 {
   "name": "disrupt-portal",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Lightning Network-enabled business payment platform with configurable payroll tax withholding",
   "main": "disrupt-portal/server.js",
   "scripts": {

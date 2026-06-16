@@ -100,6 +100,36 @@ describe("Refresh-token revocation", () => {
   });
 });
 
+describe("PUT /api/suppliers/:id — address guard", () => {
+  before(() => {
+    db.prepare(`INSERT OR IGNORE INTO suppliers (id, company, contact, email, lightningAddress, btcAddress, note, createdAt)
+      VALUES ('sup-1','ACME','Jane','jane@acme.com','acme@getalby.com',NULL,'', '2024-01-01')`).run();
+  });
+  const put = (body) => request(app).put("/api/suppliers/sup-1")
+    .set("Authorization", `Bearer ${adminToken()}`).send(body);
+
+  it("rejects an edit that blanks BOTH payment addresses", async () => {
+    const res = await put({ company: "ACME", contact: "Jane", email: "jane@acme.com", lightningAddress: "", btcAddress: "" });
+    assert.equal(res.status, 400);
+  });
+  it("allows a note-only edit that doesn't touch addresses", async () => {
+    const res = await put({ note: "preferred vendor" });
+    assert.equal(res.status, 200);
+  });
+  it("allows clearing Lightning while keeping a Bitcoin address", async () => {
+    const res = await put({ lightningAddress: "", btcAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4" });
+    assert.equal(res.status, 200);
+  });
+});
+
+describe("POST /api/login — no user enumeration", () => {
+  it("returns 401 (not 500) for an unknown email", async () => {
+    const res = await request(app).post("/api/login").send({ email: "nobody@nowhere.com", password: "whatever1!" });
+    assert.equal(res.status, 401);
+    assert.match(res.body.message, /invalid email or password/i);
+  });
+});
+
 describe("POST /api/pay — idempotency & integer amounts", () => {
   const base = {
     recipientType: "employee", recipientId: "pay@test.com",

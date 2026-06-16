@@ -12,6 +12,10 @@ const logger = require("../logger");
 const { schemas, validate } = require("../validators");
 const { authenticateToken } = require("../middleware/auth");
 
+// Pre-computed hash compared against when an email is unknown, so a failed login
+// takes the same time whether or not the account exists (anti-enumeration).
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("disrupt-dummy-password", 10);
+
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
@@ -58,8 +62,12 @@ router.post("/login", loginRateLimit, validate(schemas.login), async (req, res) 
       .prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE")
       .get(email);
 
-    const passwordMatch =
-      userByEmail && (await bcrypt.compare(password, userByEmail.password));
+    // Always run a bcrypt compare — even when the email is unknown, compare against
+    // a dummy hash — so response timing doesn't reveal whether an account exists.
+    const passwordMatch = await bcrypt.compare(
+      password,
+      userByEmail ? userByEmail.password : DUMMY_PASSWORD_HASH,
+    );
 
     if (!userByEmail || !passwordMatch) {
       logger.warn({ email }, "login failed");

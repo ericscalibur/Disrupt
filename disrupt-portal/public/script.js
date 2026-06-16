@@ -1128,6 +1128,7 @@ function populateEditForm(member) {
   pwWrapper.appendChild(pwLabel);
   pwWrapper.appendChild(pwInput);
   inputsContainer.appendChild(pwWrapper);
+  addPasswordToggle(pwInput); // eyeball show/hide
 }
 
 function setupTransactionRowClicks(transactions) {
@@ -2526,6 +2527,37 @@ function newIdempotencyKey() {
   const hex = (n) =>
     Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
   return `${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}`;
+}
+
+// Wrap a password input with a show/hide (eyeball) toggle.
+function addPasswordToggle(input) {
+  if (!input || input.dataset.pwToggle) return;
+  input.dataset.pwToggle = "1";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "password-field-wrapper";
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "password-toggle-btn";
+  btn.setAttribute("aria-label", "Show password");
+  btn.textContent = "👁";
+  btn.addEventListener("click", () => {
+    const reveal = input.type === "password";
+    input.type = reveal ? "text" : "password";
+    btn.style.opacity = reveal ? "1" : "";
+    btn.setAttribute("aria-label", reveal ? "Hide password" : "Show password");
+  });
+  wrapper.appendChild(btn);
+}
+
+// Attach the eyeball toggle to every password field under `root`.
+function initPasswordToggles(root) {
+  (root || document)
+    .querySelectorAll('input[type="password"]')
+    .forEach(addPasswordToggle);
 }
 
 async function submitNewPayment(event) {
@@ -4482,6 +4514,7 @@ function updateBatchTableStatus(statuses) {
 
 /////// DOM CONTENT LOADED LISTENER ///////
 document.addEventListener("DOMContentLoaded", async () => {
+  initPasswordToggles(); // eyeball show/hide on all static password fields
   const isLoggedIn = token && token.split(".").length === 3;
   const volcanoPref = localStorage.getItem("volcanoMode");
   const body = document.body;
@@ -5436,9 +5469,12 @@ function calculateEmployeeTaxWithholding() {
   const dedRate  = taxRates.employeeDeductionRate    / 100;
   const contRate = taxRates.employerContributionRate / 100;
 
+  // Total withheld must match the server (single floor of the combined rate),
+  // otherwise the preview can read 1 sat higher than what's actually sent.
+  // Derive the employer line as the remainder so the breakdown still sums exactly.
   const employeeDeduction    = Math.floor(amount * dedRate);
-  const employerContribution = Math.floor(amount * contRate);
-  const totalDeducted        = employeeDeduction + employerContribution;
+  const totalDeducted        = Math.floor(amount * (dedRate + contRate));
+  const employerContribution = totalDeducted - employeeDeduction;
   const netPayment           = amount - totalDeducted;
 
   // Update labels with current rates
