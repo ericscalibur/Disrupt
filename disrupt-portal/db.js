@@ -91,7 +91,13 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS refresh_tokens (
     token     TEXT PRIMARY KEY,
+    userId    TEXT,
     createdAt TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS processed_payments (
+    idempotencyKey TEXT PRIMARY KEY,
+    createdAt      TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -127,6 +133,9 @@ if (!existingDraftCols.includes("paymentRail"))         db.exec("ALTER TABLE dra
 
 const existingUserCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
 if (!existingUserCols.includes("btcAddress")) db.exec("ALTER TABLE users ADD COLUMN btcAddress TEXT");
+
+const existingRtCols = db.prepare("PRAGMA table_info(refresh_tokens)").all().map((c) => c.name);
+if (!existingRtCols.includes("userId")) db.exec("ALTER TABLE refresh_tokens ADD COLUMN userId TEXT");
 
 // Suppliers migration: drop NOT NULL on lightningAddress (SQLite requires table recreation) and add btcAddress
 const existingSupplierCols = db.prepare("PRAGMA table_info(suppliers)").all();

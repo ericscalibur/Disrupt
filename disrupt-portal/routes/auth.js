@@ -89,7 +89,7 @@ router.post("/login", loginRateLimit, validate(schemas.login), async (req, res) 
     });
 
     // Store refresh token in DB
-    db.prepare("INSERT OR REPLACE INTO refresh_tokens (token, createdAt) VALUES (?, ?)").run(refreshToken, new Date().toISOString());
+    db.prepare("INSERT OR REPLACE INTO refresh_tokens (token, userId, createdAt) VALUES (?, ?, ?)").run(refreshToken, user.id, new Date().toISOString());
 
     // Set refresh token as HttpOnly cookie
     res.cookie("refreshToken", refreshToken, {
@@ -179,7 +179,7 @@ router.post("/refresh", (req, res) => {
     const rotated = db.transaction(() => {
       const result = db.prepare("DELETE FROM refresh_tokens WHERE token = ?").run(refreshToken);
       if (result.changes === 0) return false;
-      db.prepare("INSERT INTO refresh_tokens (token, createdAt) VALUES (?, ?)").run(newRefreshToken, new Date().toISOString());
+      db.prepare("INSERT INTO refresh_tokens (token, userId, createdAt) VALUES (?, ?, ?)").run(newRefreshToken, user.id, new Date().toISOString());
       return true;
     })();
 
@@ -243,6 +243,8 @@ router.post("/forgot-password", forgotPasswordRateLimit, validate(schemas.forgot
   }
 
   db.prepare("UPDATE users SET password = ? WHERE email = ? COLLATE NOCASE").run(hashedPassword, email);
+  // Revoke any existing sessions — the account is being reset, so old tokens must die.
+  db.prepare("DELETE FROM refresh_tokens WHERE userId = ?").run(user.id);
 
   res.json({
     success: true,
@@ -275,6 +277,11 @@ router.post("/change-password", authenticateToken, validate(schemas.changePasswo
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashedPassword, user.id);
+
+    // Revoke all OTHER sessions (a stolen token shouldn't survive a password change),
+    // but keep the caller's current session alive.
+    const currentRefresh = req.cookies?.refreshToken || null;
+    db.prepare("DELETE FROM refresh_tokens WHERE userId = ? AND token IS NOT ?").run(user.id, currentRefresh);
 
     logger.info({ email: user.email }, "password changed");
     res.json({ success: true, message: "Password changed successfully." });

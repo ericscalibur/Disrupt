@@ -304,21 +304,40 @@ router.post(
         };
       }
 
-      // 9. Atomically approve draft + record transaction
-      db.transaction(() => {
-        db.prepare(
-          "UPDATE drafts SET status = 'approved', approvedAt = ?, approvedBy = ? WHERE id = ?"
-        ).run(approvedAt, req.user.email, draftId);
+      // 9. Money has ALREADY been sent at this point. Record it durably; if the DB
+      //    write fails we must NOT leave the draft stuck in 'processing' (which looks
+      //    like an in-flight payment) — flag it for manual reconciliation instead.
+      try {
+        db.transaction(() => {
+          db.prepare(
+            "UPDATE drafts SET status = 'approved', approvedAt = ?, approvedBy = ? WHERE id = ?"
+          ).run(approvedAt, req.user.email, draftId);
 
-        db.prepare(`
-          INSERT OR REPLACE INTO transactions
-            (id, date, type, receiver, lightningAddress, invoice, amount, currency,
-             note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate, receiptId)
-          VALUES
-            (@id, @date, @type, @receiver, @lightningAddress, @invoice, @amount, @currency,
-             @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate, @receiptId)
-        `).run(transaction);
-      })();
+          db.prepare(`
+            INSERT OR REPLACE INTO transactions
+              (id, date, type, receiver, lightningAddress, invoice, amount, currency,
+               note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate, receiptId)
+            VALUES
+              (@id, @date, @type, @receiver, @lightningAddress, @invoice, @amount, @currency,
+               @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate, @receiptId)
+          `).run(transaction);
+        })();
+      } catch (recordErr) {
+        try {
+          db.prepare("UPDATE drafts SET status = 'paid_unrecorded' WHERE id = ?").run(draftId);
+        } catch (_) {}
+        logger.error(
+          { recordErr: recordErr.message, draftId, transaction },
+          "PAYMENT SENT BUT FAILED TO RECORD — manual reconciliation needed"
+        );
+        return res.status(500).json({
+          success: false,
+          needsReconciliation: true,
+          message:
+            "Payment was sent but could not be recorded. It has been flagged for manual reconciliation — do NOT retry.",
+          transaction,
+        });
+      }
 
       logger.info({ draftId, amount, recipient: draft.contact, approvedBy: req.user.email, paymentHash }, "draft approved");
       res.json({ success: true, transaction });

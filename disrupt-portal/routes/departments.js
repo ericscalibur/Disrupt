@@ -75,6 +75,14 @@ router.delete(
           .json({ success: false, message: "Department not found." });
       }
 
+      // Managers may only delete their own department (which cascades to its users).
+      if (req.user.role === "Manager" && department !== req.user.department) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied: Managers can only delete their own department.",
+        });
+      }
+
       const employeesInDepartment = db
         .prepare("SELECT name, email FROM users WHERE department = ?")
         .all(department);

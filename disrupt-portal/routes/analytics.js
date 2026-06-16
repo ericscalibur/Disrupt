@@ -3,12 +3,22 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
-const { authenticateToken } = require("../middleware/auth");
+const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-router.get("/analytics/recipient", authenticateToken, (req, res) => {
+router.get("/analytics/recipient", authenticateToken, authorizeRoles("Admin", "Manager", "Bookkeeper"), (req, res) => {
   const { recipientId, recipientType } = req.query;
   if (!recipientId || !recipientType) {
     return res.status(400).json({ success: false, message: "recipientId and recipientType required." });
+  }
+
+  // Managers may only view analytics for employees within their own department.
+  if (req.user.role === "Manager" && recipientType === "employee") {
+    const target = db
+      .prepare("SELECT department FROM users WHERE email = ? COLLATE NOCASE")
+      .get(recipientId);
+    if (!target || target.department !== req.user.department) {
+      return res.status(403).json({ success: false, message: "Access denied: recipient is outside your department." });
+    }
   }
 
   const rows = db.prepare(`

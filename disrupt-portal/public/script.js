@@ -33,6 +33,7 @@ let token = sessionStorage.getItem("token");
 let editTeamMemberModal;
 let inputsContainer;
 let batchPaymentData = []; // store batch payment data for editing
+let batchIdempotencyKey = null; // one key per loaded batch, so re-sends are rejected
 let currentImportType = null;
 let currentImportRows = [];
 let currentBtcUsdRate = null; // cached rate for USD display in batch table
@@ -2515,6 +2516,18 @@ function toggleContactField() {
   }
 }
 
+// Generate a unique idempotency key per payment submit so the server can reject
+// a double-click / retry of the identical request. Falls back to a Math.random
+// UUID when crypto.randomUUID is unavailable (non-secure context, e.g. http .onion).
+function newIdempotencyKey() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  const hex = (n) =>
+    Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return `${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}`;
+}
+
 async function submitNewPayment(event) {
   event.preventDefault();
 
@@ -2621,6 +2634,7 @@ async function submitNewPayment(event) {
     paymentAmount: netPaymentAmount,
     paymentNote,
     btcUsdRate: btcToUsdRate || null,
+    idempotencyKey: newIdempotencyKey(),
     taxWithholding: {
       applied: isEmployeeTaxWithholding || isContractorTaxWithholding,
       type: taxType,
@@ -2653,6 +2667,11 @@ async function submitNewPayment(event) {
         );
       } else {
         alert("Payment sent!");
+      }
+      // Surface a tax-remittance failure prominently — the employee was paid but
+      // the withheld tax did NOT send and needs manual follow-up.
+      if (data.warning) {
+        alert("⚠️ " + data.warning);
       }
       closeNewPaymentModal();
       await loadTransactions();
@@ -4187,8 +4206,10 @@ async function renderBatchTable(data) {
   }
   const rate = currentBtcUsdRate;
 
-  // Store the data globally for editing
+  // Store the data globally for editing, and mint one idempotency key for this
+  // batch so re-submitting the same loaded batch can't double-send.
   batchPaymentData = data;
+  batchIdempotencyKey = newIdempotencyKey();
 
   const tbody = document.querySelector("#batchTable tbody");
   if (!tbody) {
@@ -4542,7 +4563,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Error response from server:", errorData);
-        throw new Error(errorData.message || "Failed to update team member");
+        throw new Error(
+          errorData.errors?.[0]?.message ||
+            errorData.message ||
+            "Failed to update team member",
+        );
       }
 
       const savedMember = await response.json();
@@ -5307,7 +5332,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ payments: batchData }),
+          body: JSON.stringify({ payments: batchData, idempotencyKey: batchIdempotencyKey }),
         });
 
         const results = await response.json();

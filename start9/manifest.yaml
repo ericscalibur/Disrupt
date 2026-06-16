@@ -1,9 +1,17 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.2.4
+version: 1.2.5
 release-notes: |
-  - Fixed: editing a team member's email address now saves correctly (Admins and
-    Managers); duplicate emails are rejected with a clear message
+  Security & reliability hardening:
+  - Closed a privilege-escalation hole: Managers can no longer grant the Admin role,
+    edit users outside their department, or change their own role
+  - Analytics payroll data is now restricted to Admins, Managers (own department),
+    and Bookkeepers — no longer readable by every logged-in user
+  - Sessions are now revoked on password change, password reset, and user deletion
+  - Payments are now idempotent: a double-click or retry can't send twice
+  - A payment whose record fails to save is flagged for reconciliation, never lost
+  - Admins/Managers can set a user's password from the edit dialog (now works), and
+    failed tax remittances are surfaced clearly
 license: GPL-3.0
 min-os-version: 0.3.5
 wrapper-repo: https://github.com/ericscalibur/Disrupt

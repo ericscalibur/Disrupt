@@ -329,6 +329,7 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       paymentNote,
       taxWithholding,
       btcUsdRate: clientBtcUsdRate,
+      idempotencyKey,
     } = req.body;
 
     const amount = Number(paymentAmount);
@@ -344,6 +345,17 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
 
     if (!recipient) {
       return res.status(404).json({ success: false, message: "Recipient not found." });
+    }
+
+    // Idempotency: atomically claim the key so a double-click / retry of the
+    // identical request can't fire a second real payment.
+    if (idempotencyKey) {
+      const claim = db
+        .prepare("INSERT OR IGNORE INTO processed_payments (idempotencyKey, createdAt) VALUES (?, ?)")
+        .run(idempotencyKey, new Date().toISOString());
+      if (claim.changes === 0) {
+        return res.status(409).json({ success: false, message: "Duplicate payment request ignored." });
+      }
     }
 
     // ── On-chain payment path ─────────────────────────────────────────────────
@@ -673,6 +685,11 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       success: true,
       employeeTransaction,
       taxTransaction: taxTransaction || null,
+      // Surface a tax-remittance failure prominently: the employee was paid, but the
+      // withheld tax was NOT sent and needs manual follow-up.
+      warning: taxPaymentFailed
+        ? `Employee was paid, but the ${taxAmount} sat tax withholding FAILED to send and was not remitted. Please retry the tax payment manually.`
+        : null,
       taxWithholding: isTaxWithholding
         ? {
             applied: true,
@@ -845,13 +862,24 @@ router.post(
   authorizeRoles("Admin", "Manager"),
   validate(schemas.batchPayment),
   async (req, res) => {
-    const { payments } = req.body;
+    const { payments, idempotencyKey } = req.body;
     logger.debug("Batch payment request received with payments:", payments);
 
     if (!payments || !Array.isArray(payments)) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid batch payment data." });
+    }
+
+    // Idempotency: claim the key so a re-submitted batch can't re-send the
+    // payments that already succeeded.
+    if (idempotencyKey) {
+      const claim = db
+        .prepare("INSERT OR IGNORE INTO processed_payments (idempotencyKey, createdAt) VALUES (?, ?)")
+        .run(idempotencyKey, new Date().toISOString());
+      if (claim.changes === 0) {
+        return res.status(409).json({ success: false, message: "Duplicate batch payment request ignored." });
+      }
     }
 
     const paymentStatuses = [];

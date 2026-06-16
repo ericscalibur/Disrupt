@@ -96,6 +96,8 @@ router.post(
         }
 
         db.prepare("DELETE FROM users WHERE email = ? COLLATE NOCASE").run(email);
+        // Revoke the deleted user's sessions so their tokens can't outlive the account.
+        db.prepare("DELETE FROM refresh_tokens WHERE userId = ?").run(userToRemove.id);
         return res.json({ success: true });
       }
 
@@ -167,6 +169,32 @@ router.put("/team-members/:id", authenticateToken, authorizeRoles(...authorizedR
       return res.status(404).json({ message: "User not found" });
     }
 
+    // ── Authorization guards (mirror the add-user route) ──────────────────────
+    if (req.user.role === "Manager") {
+      // Managers may only edit users within their own department...
+      if (user.department !== req.user.department) {
+        return res.status(403).json({
+          message: "Access denied: Managers can only edit users within their department.",
+        });
+      }
+      // ...cannot grant the Admin role...
+      if (updates.role === "Admin") {
+        return res.status(403).json({
+          message: "Access denied: Managers cannot grant the Admin role.",
+        });
+      }
+      // ...and cannot move a user into a different department.
+      if (updates.department && updates.department !== req.user.department) {
+        return res.status(403).json({
+          message: "Access denied: Managers can only assign users to their own department.",
+        });
+      }
+    }
+    // No one may change their own role (prevents self-escalation and self-lockout).
+    if (id === req.user.id && updates.role && updates.role !== user.role) {
+      return res.status(403).json({ message: "You cannot change your own role." });
+    }
+
     // If the email is changing, make sure it isn't already taken by another user.
     if (updates.email && updates.email.toLowerCase() !== user.email.toLowerCase()) {
       const taken = db
@@ -175,6 +203,13 @@ router.put("/team-members/:id", authenticateToken, authorizeRoles(...authorizedR
       if (taken) {
         return res.status(400).json({ message: "That email is already in use by another user." });
       }
+    }
+
+    // Hash a new password if an admin/manager set one in the edit modal, and
+    // revoke the user's existing sessions so an old token can't outlive the reset.
+    if (updates.password) {
+      updates.password = await bcrypt.hash(updates.password, 10);
+      db.prepare("DELETE FROM refresh_tokens WHERE userId = ?").run(id);
     }
 
     const updated = updateEmployeeById(id, updates);

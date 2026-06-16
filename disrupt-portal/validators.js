@@ -18,6 +18,14 @@ const btcAddress = z
     /^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/,
     "Must be a valid Bitcoin address (bc1..., 1..., or 3...)"
   );
+const strongPassword = z
+  .string()
+  .min(8, "Password must be at least 8 characters.")
+  .max(128)
+  .regex(/[A-Za-z]/, "Password must include a letter.")
+  .regex(/[0-9]/, "Password must include a number.")
+  .regex(/[^A-Za-z0-9]/, "Password must include a special character.");
+const idempotencyKey = z.string().min(8).max(128);
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 const schemas = {
@@ -43,6 +51,7 @@ const schemas = {
     department: nonEmpty().optional(),
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
     btcAddress: btcAddress.optional().or(z.literal("")).optional(),
+    password: strongPassword.optional(),
   }),
 
   addDepartment: z.object({
@@ -84,13 +93,7 @@ const schemas = {
 
   changePassword: z.object({
     currentPassword: z.string().min(1).max(128),
-    newPassword: z
-      .string()
-      .min(8, "Password must be at least 8 characters.")
-      .max(128)
-      .regex(/[A-Za-z]/, "Password must include a letter.")
-      .regex(/[0-9]/, "Password must include a number.")
-      .regex(/[^A-Za-z0-9]/, "Password must include a special character."),
+    newPassword: strongPassword,
   }),
 
   addSupplier: z.object({
@@ -123,14 +126,15 @@ const schemas = {
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
     btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     paymentRail: z.enum(["lightning", "onchain"]).optional(),
-    paymentAmount: z.number().positive(),
+    paymentAmount: z.number().int().positive(),
     paymentNote: z.string().max(1000).optional(),
+    idempotencyKey: idempotencyKey.optional(),
     taxWithholding: z
       .object({
         applied: z.boolean(),
-        originalAmount: z.number().positive(),
-        netAmount: z.number().positive(),
-        taxAmount: z.number().nonnegative(),
+        originalAmount: z.number().int().positive(),
+        netAmount: z.number().int().positive(),
+        taxAmount: z.number().int().nonnegative(),
         type: z.string().optional(),
       })
       .optional(),
@@ -160,6 +164,7 @@ const schemas = {
       )
       .min(1)
       .max(500),
+    idempotencyKey: idempotencyKey.optional(),
   }),
 
   decodeInvoice: z.object({
