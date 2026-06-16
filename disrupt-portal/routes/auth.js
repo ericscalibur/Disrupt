@@ -235,7 +235,10 @@ router.post("/forgot-password", forgotPasswordRateLimit, validate(schemas.forgot
       from: '"Disrupt Portal" <support@disrupt.com>',
       to: user.email,
       subject: "Your Temporary Password",
-      text: `Your temporary password is: ${tempPassword}\n\nPlease log in and change your password immediately.`,
+      text:
+        `Your temporary password is: ${tempPassword}\n\n` +
+        `Log in with it, then use the "Change Password" button on the Home page to set your own.\n\n` +
+        `Keep this temporary password handy — you'll need to enter it again as your "current password" when changing it.`,
     });
   } catch (err) {
     logger.error("Failed to send email:", err);
