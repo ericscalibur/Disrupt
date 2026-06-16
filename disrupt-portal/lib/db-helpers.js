@@ -36,7 +36,7 @@ function getSupplierById(id) {
 }
 
 function updateEmployeeById(id, updates) {
-  const allowed = ["name", "role", "department", "lightningAddress", "btcAddress", "password"];
+  const allowed = ["name", "email", "role", "department", "lightningAddress", "btcAddress", "password"];
   const fields = Object.keys(updates).filter((k) => allowed.includes(k));
   if (fields.length === 0) return getEmployeeById(id);
   const setClause = fields.map((k) => `${k} = @${k}`).join(", ");

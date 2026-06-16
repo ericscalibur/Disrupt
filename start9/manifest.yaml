@@ -1,12 +1,9 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.2.3
+version: 1.2.4
 release-notes: |
-  - New: team members can change their own password from the Home page; pairs with
-    the Forgot Password flow so new members can self-onboard without admin help
-  - Fixed: Analytics rail chart now shows the ratio of amounts sent via Lightning vs
-    on-chain, not the number of transactions
-  - Fixed: closing the Edit Team Member dialog no longer throws a console error
+  - Fixed: editing a team member's email address now saves correctly (Admins and
+    Managers); duplicate emails are rejected with a clear message
 license: GPL-3.0
 min-os-version: 0.3.5
 wrapper-repo: https://github.com/ericscalibur/Disrupt

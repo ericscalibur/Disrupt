@@ -38,6 +38,7 @@ const schemas = {
 
   editUser: z.object({
     name: nonEmpty().optional(),
+    email: email.optional(),
     role: z.enum(["Admin", "Manager", "Bookkeeper", "Employee"]).optional(),
     department: nonEmpty().optional(),
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),

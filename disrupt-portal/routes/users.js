@@ -166,6 +166,17 @@ router.put("/team-members/:id", authenticateToken, authorizeRoles(...authorizedR
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    // If the email is changing, make sure it isn't already taken by another user.
+    if (updates.email && updates.email.toLowerCase() !== user.email.toLowerCase()) {
+      const taken = db
+        .prepare("SELECT id FROM users WHERE email = ? COLLATE NOCASE AND id != ?")
+        .get(updates.email, id);
+      if (taken) {
+        return res.status(400).json({ message: "That email is already in use by another user." });
+      }
+    }
+
     const updated = updateEmployeeById(id, updates);
     const { password: _pw, ...safeUser } = updated;
     res.json(safeUser);
