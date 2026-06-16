@@ -35,11 +35,13 @@ router.get("/analytics/recipient", authenticateToken, (req, res) => {
   }, 0);
   const taxWithheldSats = txns.reduce((s, t) => s + (t.taxWithholding?.taxAmount || 0), 0);
 
+  // Breakdown by rail, summed in sats (not transaction count)
   const railBreakdown = { lightning: 0, onchain: 0, batch: 0 };
   successful.forEach((t) => {
-    if (t.type === "onchain") railBreakdown.onchain++;
-    else if (t.type === "batch") railBreakdown.batch++;
-    else railBreakdown.lightning++;
+    const sats = Number(t.amount) || 0;
+    if (t.type === "onchain") railBreakdown.onchain += sats;
+    else if (t.type === "batch") railBreakdown.batch += sats;
+    else railBreakdown.lightning += sats;
   });
 
   // Group by month

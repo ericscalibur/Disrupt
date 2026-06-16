@@ -643,6 +643,35 @@ br {
     opacity: 0.85;
 }
 
+.welcome-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.change-password-btn {
+    background-color: #3498db;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+}
+
+.change-password-btn:hover {
+    opacity: 0.85;
+}
+
+.password-hint {
+    font-size: 0.85em;
+    color: #888;
+    margin: 4px 0 12px;
+}
+
 .departments-list {
     list-style: none;
     margin: 0;

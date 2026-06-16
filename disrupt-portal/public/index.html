@@ -172,7 +172,17 @@
                 <div class="main-content">
                     <!-- Welcome Content -->
                     <div id="welcomeContent" class="content-card">
-                        <h2 id="welcomeh2">Welcome</h2>
+                        <div class="welcome-header">
+                            <h2 id="welcomeh2">Welcome</h2>
+                            <button
+                                type="button"
+                                id="openChangePasswordBtn"
+                                class="change-password-btn"
+                                onclick="openChangePasswordModal()"
+                            >
+                                Change Password
+                            </button>
+                        </div>
                         <p>You have successfully logged in.</p>
                         <div
                             class="user-details"
@@ -627,6 +637,68 @@
                                 <div class="modal-footer">
                                     <button type="submit" class="submit-btn">
                                         Send
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Change Password Modal -->
+                    <div id="changePasswordModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <span class="modal-title">Change Password</span>
+                                <button
+                                    class="close-btn"
+                                    onclick="closeChangePasswordModal()"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <form
+                                id="changePasswordForm"
+                                onsubmit="submitChangePassword(event)"
+                                autocomplete="off"
+                            >
+                                <div class="form-group">
+                                    <label for="currentPassword"
+                                        >Current Password</label
+                                    >
+                                    <input
+                                        type="password"
+                                        id="currentPassword"
+                                        autocomplete="current-password"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="newPassword">New Password</label>
+                                    <input
+                                        type="password"
+                                        id="newPassword"
+                                        autocomplete="new-password"
+                                        required
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label for="confirmNewPassword"
+                                        >Confirm New Password</label
+                                    >
+                                    <input
+                                        type="password"
+                                        id="confirmNewPassword"
+                                        autocomplete="new-password"
+                                        required
+                                    />
+                                </div>
+                                <p class="password-hint">
+                                    Must be at least 8 characters and include a
+                                    letter, a number, and a special character.
+                                </p>
+                                <div id="changePasswordMessage" class="error"></div>
+                                <div class="modal-footer">
+                                    <button type="submit" class="submit-btn">
+                                        Update Password
                                     </button>
                                 </div>
                             </form>

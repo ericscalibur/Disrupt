@@ -250,4 +250,38 @@ router.post("/forgot-password", forgotPasswordRateLimit, validate(schemas.forgot
   });
 });
 
+// Authenticated user changes their own password
+router.post("/change-password", authenticateToken, validate(schemas.changePassword), async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) {
+      logger.warn({ email: user.email }, "change-password failed: wrong current password");
+      return res.status(401).json({ success: false, message: "Current password is incorrect." });
+    }
+
+    if (await bcrypt.compare(newPassword, user.password)) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from your current password.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashedPassword, user.id);
+
+    logger.info({ email: user.email }, "password changed");
+    res.json({ success: true, message: "Password changed successfully." });
+  } catch (err) {
+    logger.error("Change password error:", err);
+    res.status(500).json({ success: false, message: "Server error changing password." });
+  }
+});
+
 module.exports = router;

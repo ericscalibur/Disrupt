@@ -4500,7 +4500,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Close modal handler
   closeButton.addEventListener("click", () => {
     editTeamMemberModal.style.display = "none";
-    form.reset();
+    editTeamMemberForm.reset();
     inputsContainer.innerHTML = "";
     currentMember = null;
   });
@@ -5880,10 +5880,11 @@ function renderAnalyticsCharts(stats, byMonth, transactions) {
 
   const { lightning, onchain, batch } = stats.railBreakdown;
   const railEntries = [
-    { label: "⚡ Lightning", count: lightning, color: "rgba(241,196,15,0.85)" },
-    { label: "₿ On-Chain", count: onchain, color: "rgba(231,76,60,0.85)" },
-    { label: "📋 Batch", count: batch, color: "rgba(52,152,219,0.85)" },
-  ].filter((e) => e.count > 0);
+    { label: "⚡ Lightning", sats: lightning, color: "rgba(241,196,15,0.85)" },
+    { label: "₿ On-Chain", sats: onchain, color: "rgba(231,76,60,0.85)" },
+    { label: "📋 Batch", sats: batch, color: "rgba(52,152,219,0.85)" },
+  ].filter((e) => e.sats > 0);
+  const railTotalSats = railEntries.reduce((s, e) => s + e.sats, 0);
 
   const donutCtx = document.getElementById("analyticsDonutChart")?.getContext("2d");
   if (donutCtx) {
@@ -5899,7 +5900,7 @@ function renderAnalyticsCharts(stats, byMonth, transactions) {
           labels: railEntries.map((e) => e.label),
           datasets: [
             {
-              data: railEntries.map((e) => e.count),
+              data: railEntries.map((e) => e.sats),
               backgroundColor: railEntries.map((e) => e.color),
               borderColor: "rgba(255,255,255,0.08)",
               borderWidth: 1,
@@ -5913,7 +5914,10 @@ function renderAnalyticsCharts(stats, byMonth, transactions) {
             legend: { position: "bottom", labels: { color: legendColor, padding: 14, font: { size: 11 } } },
             tooltip: {
               callbacks: {
-                label: (ctx) => `${ctx.label}: ${ctx.parsed} payment${ctx.parsed !== 1 ? "s" : ""}`,
+                label: (ctx) => {
+                const pct = railTotalSats ? Math.round((ctx.parsed / railTotalSats) * 100) : 0;
+                return `${ctx.label}: ${ctx.parsed.toLocaleString()} SATS (${pct}%)`;
+              },
               },
             },
           },
@@ -5950,6 +5954,92 @@ function toggleAnalyticsChartCurrency() {
   const btn = document.getElementById("analyticsToggleUsd");
   if (btn) btn.textContent = analyticsShowUsd ? "Show SATS" : "Show USD";
 }
+
+// ── Change Password ─────────────────────────────────────────────────────────
+function openChangePasswordModal() {
+  const modal = document.getElementById("changePasswordModal");
+  if (!modal) return;
+  document.getElementById("changePasswordForm").reset();
+  const msg = document.getElementById("changePasswordMessage");
+  msg.textContent = "";
+  modal.style.display = "flex";
+  document.getElementById("currentPassword").focus();
+}
+
+function closeChangePasswordModal() {
+  const modal = document.getElementById("changePasswordModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  const msg = document.getElementById("changePasswordMessage");
+  const currentPassword = document.getElementById("currentPassword").value;
+  const newPassword = document.getElementById("newPassword").value;
+  const confirmNewPassword = document.getElementById("confirmNewPassword").value;
+
+  msg.style.color = "red";
+
+  if (newPassword !== confirmNewPassword) {
+    msg.textContent = "New passwords do not match.";
+    return;
+  }
+
+  // Mirror server-side rules for instant feedback
+  if (
+    newPassword.length < 8 ||
+    !/[A-Za-z]/.test(newPassword) ||
+    !/[0-9]/.test(newPassword) ||
+    !/[^A-Za-z0-9]/.test(newPassword)
+  ) {
+    msg.textContent =
+      "Password must be at least 8 characters and include a letter, a number, and a special character.";
+    return;
+  }
+
+  if (currentPassword === newPassword) {
+    msg.textContent = "New password must be different from your current password.";
+    return;
+  }
+
+  const submitBtn = event.target.querySelector("button[type=submit]");
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const response = await authFetch(`${API_BASE}/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok && data.success) {
+      closeChangePasswordModal();
+      const successMsg = document.getElementById("successMessage");
+      if (successMsg) successMsg.textContent = "Password changed successfully!";
+      const successModal = document.getElementById("successModal");
+      if (successModal) successModal.style.display = "flex";
+    } else {
+      msg.textContent =
+        data.errors?.[0]?.message ||
+        data.message ||
+        "Failed to change password.";
+    }
+  } catch (err) {
+    console.error("Change password error:", err);
+    msg.textContent = "Error changing password. Please try again.";
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+// Close the Change Password modal when clicking outside its content
+window.addEventListener("click", (event) => {
+  const modal = document.getElementById("changePasswordModal");
+  if (modal && event.target === modal) {
+    modal.style.display = "none";
+  }
+});
 
 function renderAnalyticsTable(transactions) {
   const tbody = document.getElementById("analyticsTableBody");

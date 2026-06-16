@@ -29,6 +29,10 @@ logs/
 
 # Release artifacts
 releases/
+*.s9pk
+docker-images/
+# Build copies start9/manifest.yaml here; the canonical one lives in start9/
+/manifest.yaml
 
 # macOS
 .DS_Store
