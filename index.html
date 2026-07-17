@@ -121,20 +121,58 @@
       font-size: 0.95rem;
     }
 
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 1.25rem;
+    .features-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4.5rem;
+      max-width: 820px;
+      margin: 0 auto;
     }
-    .feature-card {
+    .feature-row {
+      display: flex;
+      align-items: center;
+      gap: 2.5rem;
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .feature-row.visible { opacity: 1; transform: translateY(0); }
+    .feature-row:nth-child(even) { flex-direction: row-reverse; }
+    .feature-row:nth-child(even) .feature-text { text-align: right; }
+    .feature-icon {
+      font-size: 3.5rem;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.5rem;
+      border-radius: 20px;
+      width: 120px;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
-    .feature-icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
-    .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; color: #fff; }
-    .feature-card p  { font-size: 0.875rem; color: var(--muted); }
+    .feature-text h3 {
+      font-size: clamp(1.4rem, 3.5vw, 1.8rem);
+      font-weight: 800;
+      margin-bottom: 0.6rem;
+      color: #fff;
+    }
+    .feature-text p {
+      font-size: clamp(1rem, 2.5vw, 1.15rem);
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    @media (max-width: 600px) {
+      .feature-row,
+      .feature-row:nth-child(even) { flex-direction: column; gap: 1.25rem; }
+      .feature-text,
+      .feature-row:nth-child(even) .feature-text { text-align: center; }
+      .feature-icon { width: 96px; height: 96px; font-size: 2.75rem; }
+      .features-list { gap: 3.5rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .feature-row { opacity: 1; transform: none; transition: none; }
+    }
 
     /* ── Carousel ── */
     .screenshots-section {
@@ -293,46 +331,62 @@
   <section id="features">
     <div class="section-title">Free from Fiat. Bitcoin only.</div>
     <div class="section-sub">Built on the Blink API for instant Lightning payments</div>
-    <div class="features-grid">
-      <div class="feature-card">
+    <div class="features-list">
+      <div class="feature-row">
         <div class="feature-icon">⚡</div>
-        <h3>Lightning Payments</h3>
-        <p>Send sats instantly via the Blink API. Pay invoices, Lightning addresses, or run batch payroll from a CSV.</p>
+        <div class="feature-text">
+          <h3>Pay anyone in seconds</h3>
+          <p>Send sats instantly via the Blink API — to Lightning addresses, invoices, or on-chain Bitcoin addresses. No wire fees, no banking hours, no waiting days for settlement.</p>
+        </div>
       </div>
-      <div class="feature-card">
+      <div class="feature-row">
         <div class="feature-icon">📋</div>
-        <h3>Draft & Approval Flow</h3>
-        <p>Employees submit payment drafts. Managers approve or decline. Full audit trail on every transaction.</p>
+        <div class="feature-text">
+          <h3>Approvals, not chaos</h3>
+          <p>Employees submit payment drafts. Managers approve or decline with one click. Every payment carries a full audit trail — including cryptographic proof it was paid.</p>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">📊</div>
-        <h3>Accounting Dashboard</h3>
-        <p>Real-time BTC balance, full transaction history, and payment receipts — all in one view.</p>
-      </div>
-      <div class="feature-card">
+      <div class="feature-row">
         <div class="feature-icon">💸</div>
-        <h3>Batch Payments</h3>
-        <p>Upload a CSV with names, amounts, and Lightning addresses. Send to your whole team in one click.</p>
+        <div class="feature-text">
+          <h3>Run payroll in one click</h3>
+          <p>Upload a CSV with names, amounts, and addresses — pay your entire team in a single batch, mixing Lightning and on-chain payments.</p>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🏢</div>
-        <h3>Supplier Management</h3>
-        <p>Keep your vendors organized with Lightning addresses on file — ready to pay in seconds.</p>
-      </div>
-      <div class="feature-card">
+      <div class="feature-row">
         <div class="feature-icon">🇸🇻</div>
-        <h3>El Salvador Payroll Tax</h3>
-        <p>Automatic ISSS + AFP withholding on employee payments. Tax is split and sent to your designated address.</p>
+        <div class="feature-text">
+          <h3>Tax withholding on autopilot</h3>
+          <p>Automatic ISSS + AFP withholding on employee payments. The net goes to your employee, the withheld tax goes straight to your designated address — in the same payment flow.</p>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🔐</div>
-        <h3>JWT Auth</h3>
-        <p>Short-lived access tokens + rotating refresh tokens. Password reset via email. No session storage needed.</p>
+      <div class="feature-row">
+        <div class="feature-icon">📊</div>
+        <div class="feature-text">
+          <h3>Books your accountant will love</h3>
+          <p>Real-time BTC balance, transaction categories, fiat value captured at the moment of payment, and full history export to CSV — all in one view.</p>
+        </div>
       </div>
-      <div class="feature-card">
+      <div class="feature-row">
+        <div class="feature-icon">🏢</div>
+        <div class="feature-text">
+          <h3>Suppliers on speed dial</h3>
+          <p>Keep your vendors organized with Lightning addresses on file — ready to pay in seconds, with complete payment history per supplier.</p>
+        </div>
+      </div>
+      <div class="feature-row">
         <div class="feature-icon">🗄️</div>
-        <h3>Self-Hosted</h3>
-        <p>Runs locally on any machine. Your business records — users, drafts, approvals, receipts — live in a database on your hardware, not someone else's server.</p>
+        <div class="feature-text">
+          <h3>Your data, your hardware</h3>
+          <p>Self-hosted on any machine — or one-click install on Start9, with remote access from anywhere via Tor. Your business records — users, drafts, approvals, receipts — never leave your server.</p>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-text">
+          <h3>Locked down by default</h3>
+          <p>Role-based access for Admins, Managers, Bookkeepers, and Employees. Short-lived tokens with rotation, validated inputs, and email password recovery.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -438,6 +492,23 @@
   </footer>
 
   <script>
+    (function() {
+      var rows = document.querySelectorAll('.feature-row');
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.35 });
+        rows.forEach(function(row) { observer.observe(row); });
+      } else {
+        rows.forEach(function(row) { row.classList.add('visible'); });
+      }
+    })();
+
     (function() {
       const track = document.getElementById('carouselTrack');
       const dotsContainer = document.getElementById('carouselDots');
