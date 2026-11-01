@@ -152,4 +152,23 @@ describe("POST /api/pay — idempotency & integer amounts", () => {
     assert.equal(res.status, 409);
     assert.match(res.body.message, /duplicate/i);
   });
+
+  it("refuses tax withholding on an on-chain payment without claiming the key", async () => {
+    const key = "onchain-tax-123456";
+    const res = await request(app).post("/api/pay")
+      .set("Authorization", `Bearer ${adminToken()}`)
+      .send({
+        ...base,
+        lightningAddress: "",
+        btcAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        paymentRail: "onchain",
+        paymentAmount: 8975,
+        idempotencyKey: key,
+        taxWithholding: { applied: true, type: "employee", originalAmount: 10000, taxAmount: 2650, netAmount: 8975 },
+      });
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /on-chain/i);
+    const claimed = db.prepare("SELECT 1 FROM processed_payments WHERE idempotencyKey = ?").get(key);
+    assert.equal(claimed, undefined);
+  });
 });

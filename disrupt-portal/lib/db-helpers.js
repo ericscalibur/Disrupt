@@ -12,6 +12,26 @@ function dbTxnToObj(row) {
   };
 }
 
+// Fiat book value of a sats amount at the captured rate, rounded to cents.
+// Computed once at write time and stored on the transaction — reports must
+// never re-derive it from a live rate.
+function fiatValue(amountSats, btcUsdRate) {
+  const sats = Number(amountSats);
+  const rate = Number(btcUsdRate);
+  if (!Number.isFinite(sats) || !Number.isFinite(rate) || rate <= 0) return null;
+  return Math.round((sats * rate / 100000000) * 100) / 100;
+}
+
+// Resolve a client-supplied categoryId to a valid, non-archived category id
+// (or null) so foreign-key inserts can never fail on a bad value.
+function resolveCategoryId(categoryId) {
+  if (!categoryId) return null;
+  const row = db
+    .prepare("SELECT id FROM categories WHERE id = ? AND archived = 0")
+    .get(String(categoryId));
+  return row ? row.id : null;
+}
+
 // Write an immutable audit log entry
 function auditLog(actor, action, target, detail) {
   try {
@@ -46,6 +66,8 @@ function updateEmployeeById(id, updates) {
 
 module.exports = {
   dbTxnToObj,
+  fiatValue,
+  resolveCategoryId,
   auditLog,
   getEmployeeById,
   getEmployeeByEmail,

@@ -20,11 +20,21 @@ router.get("/suppliers", authenticateToken, async (req, res) => {
   }
 });
 
+// A tax-doc receipt must exist and belong to the requester (same rule as draft receipts)
+function validTaxDocReceipt(taxDocReceiptId, userEmail) {
+  if (!taxDocReceiptId) return true;
+  const receipt = db.prepare("SELECT uploadedBy FROM receipts WHERE id = ?").get(taxDocReceiptId);
+  return !!receipt && receipt.uploadedBy === userEmail;
+}
+
 // Add Supplier
 router.post("/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"), validate(schemas.addSupplier), async (req, res) => {
-  const { company, contact, email, lightningAddress, btcAddress, note } = req.body;
+  const { company, contact, email, lightningAddress, btcAddress, note, taxDocReceiptId } = req.body;
 
   try {
+    if (!validTaxDocReceipt(taxDocReceiptId, req.user.email)) {
+      return res.status(400).json({ success: false, message: "Invalid tax document." });
+    }
     const byEmail = db.prepare("SELECT id FROM suppliers WHERE email = ?").get(email);
     const byLn = lightningAddress
       ? db.prepare("SELECT id FROM suppliers WHERE lightningAddress = ?").get(lightningAddress)
@@ -44,11 +54,12 @@ router.post("/suppliers", authenticateToken, authorizeRoles("Admin", "Manager"),
       lightningAddress: lightningAddress || null,
       btcAddress: btcAddress || null,
       note: note || "",
+      taxDocReceiptId: taxDocReceiptId || null,
       createdAt: new Date().toISOString(),
     };
     db.prepare(`
-      INSERT INTO suppliers (id, company, contact, email, lightningAddress, btcAddress, note, createdAt)
-      VALUES (@id, @company, @contact, @email, @lightningAddress, @btcAddress, @note, @createdAt)
+      INSERT INTO suppliers (id, company, contact, email, lightningAddress, btcAddress, note, taxDocReceiptId, createdAt)
+      VALUES (@id, @company, @contact, @email, @lightningAddress, @btcAddress, @note, @taxDocReceiptId, @createdAt)
     `).run(newSupplier);
     res.json({ success: true, supplier: newSupplier });
   } catch (err) {
@@ -107,7 +118,11 @@ router.put("/suppliers/:id", authenticateToken, authorizeRoles(...authorizedRole
       return res.status(404).json({ message: "Supplier not found" });
     }
 
-    const allowed = ["company", "contact", "email", "lightningAddress", "btcAddress", "note"];
+    if (updates.taxDocReceiptId && !validTaxDocReceipt(updates.taxDocReceiptId, req.user.email)) {
+      return res.status(400).json({ success: false, message: "Invalid tax document." });
+    }
+
+    const allowed = ["company", "contact", "email", "lightningAddress", "btcAddress", "note", "taxDocReceiptId"];
     const fields = Object.keys(updates).filter((k) => allowed.includes(k));
     if (fields.length > 0) {
       const setClause = fields.map((k) => `${k} = @${k}`).join(", ");

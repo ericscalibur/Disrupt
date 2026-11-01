@@ -838,6 +838,16 @@ function updateDraftRecipientDropdown() {
     document.getElementById("draftRecipientEmail").value = "";
     document.getElementById("draftRecipientLightningAddress").value = "";
   }
+
+  // Employee payments default to Payroll; supplier drafts start uncategorized
+  const categorySelect = document.getElementById("draftCategorySelect");
+  if (categorySelect) {
+    if (type === "employee" && (categoriesList || []).some((c) => c.id === "cat_payroll")) {
+      categorySelect.value = "cat_payroll";
+    } else {
+      categorySelect.value = "";
+    }
+  }
 }
 
 // LOADS REMAINING DATA FIELDS AFTER RECIPIENT SELECTED
@@ -953,6 +963,7 @@ async function showContent(contentId, event) {
     "pendingContent",
     "batchContent",
     "analyticsContent",
+    "reportsContent",
   ];
 
   // Hide all content sections
@@ -1022,6 +1033,9 @@ async function showContent(contentId, event) {
         break;
       case "analytics":
         await initAnalyticsPage();
+        break;
+      case "reports":
+        initReportsPage();
         break;
       default:
         console.warn(`No data loader defined for contentId: ${contentId}`);
@@ -1911,6 +1925,38 @@ function populateEditSupplierForm(supplier) {
   form.elements["lightningAddress"].value = supplier.lightningAddress || "";
   form.elements["btcAddress"].value = supplier.btcAddress || "";
   form.elements["note"].value = supplier.note || "";
+
+  // Tax document zone: show current state; undefined = not changed in this edit
+  editSupplierTaxDocId = undefined;
+  const docInput = document.getElementById("editSupplierTaxDocInput");
+  if (docInput) docInput.value = "";
+  const actions = document.getElementById("editSupplierTaxDocActions");
+  if (supplier.taxDocReceiptId) {
+    resetSupplierTaxDocZone(
+      "editSupplierTaxDocStatus",
+      "editSupplierTaxDocZone",
+      "📎 Click to replace tax document",
+    );
+    if (actions) {
+      actions.style.display = "block";
+      actions.innerHTML = "";
+      const link = document.createElement("a");
+      link.href = "#";
+      link.textContent = "View current document";
+      link.onclick = (e) => {
+        e.preventDefault();
+        viewReceipt(supplier.taxDocReceiptId);
+      };
+      actions.appendChild(link);
+    }
+  } else {
+    resetSupplierTaxDocZone("editSupplierTaxDocStatus", "editSupplierTaxDocZone");
+    if (actions) {
+      actions.style.display = "none";
+      actions.innerHTML = "";
+    }
+  }
+
   document.getElementById("editSupplierModal").style.display = "flex";
 }
 
@@ -1933,6 +1979,9 @@ document
       note: form.elements["note"].value,
       createdAt: currentSupplier.createdAt,
     };
+    if (editSupplierTaxDocId !== undefined) {
+      updatedSupplier.taxDocReceiptId = editSupplierTaxDocId;
+    }
 
     try {
       const response = await authFetch(
@@ -1997,8 +2046,20 @@ function renderSuppliers(suppliers) {
       <td>${escapeHtml(lightningAddress)}</td>
       <td>${escapeHtml(btcAddress)}</td>
       <td>${escapeHtml(note)}</td>
+      <td>${
+        supplier.taxDocReceiptId
+          ? `<button type="button" class="view-taxdoc-btn" data-receipt-id="${escapeHtml(supplier.taxDocReceiptId)}" style="background:none;border:none;cursor:pointer;font-size:1.1em;" title="View tax document">📄</button>`
+          : "—"
+      }</td>
       <td>${createdAt}</td>
     `;
+    const docBtn = tr.querySelector(".view-taxdoc-btn");
+    if (docBtn) {
+      docBtn.addEventListener("click", (e) => {
+        e.stopPropagation(); // don't open the edit modal
+        viewReceipt(docBtn.getAttribute("data-receipt-id"));
+      });
+    }
     tbody.appendChild(tr);
   });
 
@@ -2638,6 +2699,13 @@ async function submitNewPayment(event) {
   const isContractorTaxWithholding =
     applyContractorTaxWithholding && recipientType === "employee";
 
+  // On-chain has no tax leg; the server refuses this too.
+  if (currentPaymentRail === "onchain" && (isEmployeeTaxWithholding || isContractorTaxWithholding)) {
+    alert("Tax withholding isn't available for on-chain payments. Pay this employee over Lightning, or turn withholding off.");
+    resetSubmitButton(submitBtn);
+    return;
+  }
+
   let netPaymentAmount = paymentAmount;
   let taxWithholdingAmount = 0;
   let taxType = "none";
@@ -2645,7 +2713,8 @@ async function submitNewPayment(event) {
   if (isEmployeeTaxWithholding) {
     const totalRate = (taxRates.employeeDeductionRate + taxRates.employerContributionRate) / 100;
     taxWithholdingAmount = Math.floor(paymentAmount * totalRate);
-    netPaymentAmount = paymentAmount - taxWithholdingAmount;
+    // Only the employee deduction comes out of gross; the employer share is on top.
+    netPaymentAmount = paymentAmount - Math.floor(paymentAmount * (taxRates.employeeDeductionRate / 100));
     taxType = "employee";
   } else if (isContractorTaxWithholding) {
     taxWithholdingAmount = Math.floor(paymentAmount * (taxRates.contractorWithholdingRate / 100));
@@ -3289,6 +3358,63 @@ function updateNavigationForRole() {
       analyticsNav.style.display = "none";
     }
   }
+
+  const reportsNav = document.getElementById("reportsNav");
+  if (reportsNav) {
+    if (currentUser.role === "Admin" || currentUser.role === "Bookkeeper") {
+      reportsNav.style.display = "block";
+    } else {
+      reportsNav.style.display = "none";
+    }
+  }
+}
+
+// ── Reports tab ───────────────────────────────────────────────────────────────
+function initReportsPage() {
+  const input = document.getElementById("reportPeriodInput");
+  if (input && !input.value) {
+    // Default to last month — the period an accountant typically closes
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  const status = document.getElementById("reportStatus");
+  if (status) status.textContent = "";
+}
+
+async function downloadMonthlyReport() {
+  const period = document.getElementById("reportPeriodInput").value;
+  const status = document.getElementById("reportStatus");
+  const btn = document.getElementById("downloadReportBtn");
+  if (!period) {
+    status.textContent = "Pick a month first.";
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = "Building package…";
+  try {
+    const resp = await authFetch(`${API_BASE}/reports/package/${period}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || `Server error: ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `disrupt-report-${period}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = `✓ disrupt-report-${period}.zip downloaded`;
+  } catch (err) {
+    console.error("Report download failed:", err);
+    status.textContent = "Failed: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function updateDepartmentsSection() {
@@ -3642,13 +3768,53 @@ async function populateSupplierSelect() {
   }
 }
 
+let categoriesList = [];
+
+async function loadCategoriesForDraftModal() {
+  const select = document.getElementById("draftCategorySelect");
+  if (!select) return;
+  try {
+    const response = await authFetch(`${API_BASE}/categories`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.success || !Array.isArray(data.categories)) return;
+
+    categoriesList = data.categories;
+    select.innerHTML = "<option value=''>— Uncategorized —</option>";
+
+    // Group options by kind so the dropdown reads naturally
+    const kindLabels = {
+      expense: "Expenses",
+      income: "Income",
+      payroll: "Payroll",
+      tax: "Taxes",
+    };
+    for (const kind of ["expense", "payroll", "tax", "income"]) {
+      const group = categoriesList.filter((c) => c.kind === kind);
+      if (group.length === 0) continue;
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = kindLabels[kind] || kind;
+      group.forEach((cat) => {
+        const option = document.createElement("option");
+        option.value = cat.id;
+        option.textContent = cat.name;
+        optgroup.appendChild(option);
+      });
+      select.appendChild(optgroup);
+    }
+  } catch (err) {
+    console.error("Error loading categories:", err);
+  }
+}
+
 async function openDraftPaymentModal() {
   document.getElementById("draftPaymentModal").style.display = "flex";
   resetDraftReceipt();
-  // Load both lists in parallel, then populate the dropdown
+  // Load all lists in parallel, then populate the dropdowns
   await Promise.all([
     loadEmployeesForPaymentModal(),
     loadSuppliersForPaymentModal(),
+    loadCategoriesForDraftModal(),
   ]);
   // Reset type to default and populate
   document.getElementById("draftRecipientType").value = "employee";
@@ -3742,9 +3908,63 @@ async function handleReceiptFileSelected(e) {
   }
 }
 
+// Upload a document to the receipts store; returns the receiptId. Shared by
+// the supplier tax-doc zones (the draft receipt flow has its own handler).
+async function uploadDocumentFile(file) {
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+  if (file.size > MAX_SIZE) throw new Error("File too large (max 10 MB).");
+  if (!ALLOWED.includes(file.type)) throw new Error("Only JPEG, PNG, WebP, or PDF allowed.");
+
+  const formData = new FormData();
+  formData.append("receipt", file);
+  const resp = await authFetch(`${API_BASE}/receipts`, {
+    method: "POST",
+    headers: { "Content-Type": null }, // let browser set multipart/form-data + boundary
+    body: formData,
+  });
+  const data = await resp.json();
+  if (!data.success) throw new Error(data.message || "Upload failed");
+  return data.receiptId;
+}
+
+// Supplier tax document state: string = newly uploaded receiptId,
+// undefined = unchanged (edit modal only)
+let supplierTaxDocId = null;
+let editSupplierTaxDocId = undefined;
+
+async function handleSupplierTaxDocSelected(e, statusElId, zoneElId) {
+  const file = e.target.files[0];
+  if (!file) return null;
+  const status = document.getElementById(statusElId);
+  const zone = document.getElementById(zoneElId);
+  status.textContent = "Uploading…";
+  zone.style.borderColor = "#888";
+  try {
+    const receiptId = await uploadDocumentFile(file);
+    zone.style.borderColor = "#2ecc71";
+    status.textContent = `✓ ${file.name}`;
+    return receiptId;
+  } catch (err) {
+    zone.style.borderColor = "#e74c3c";
+    status.textContent = "Upload failed: " + err.message;
+    e.target.value = "";
+    return null;
+  }
+}
+
+function resetSupplierTaxDocZone(statusElId, zoneElId, message) {
+  const status = document.getElementById(statusElId);
+  const zone = document.getElementById(zoneElId);
+  if (status) status.textContent = message || "📎 Click to attach tax document";
+  if (zone) zone.style.borderColor = "#555";
+}
+
 function openAddSupplierModal() {
   document.getElementById("addSupplierModal").style.display = "flex";
   document.getElementById("addSupplierForm").reset();
+  supplierTaxDocId = null;
+  resetSupplierTaxDocZone("supplierTaxDocStatus", "supplierTaxDocZone");
 }
 function closeAddSupplierModal() {
   document.getElementById("addSupplierModal").style.display = "none";
@@ -3788,6 +4008,7 @@ async function submitAddSupplier(event) {
         lightningAddress,
         btcAddress,
         note,
+        taxDocReceiptId: supplierTaxDocId || undefined,
       }),
     });
 
@@ -4191,6 +4412,21 @@ function detectPaymentRail(address) {
   return null;
 }
 
+const BATCH_TAX_TYPES = ["employee", "contractor", "none"];
+
+// A blank Type means no withholding. Anything unrecognized is kept as typed so
+// it can be caught before sending, never treated as "none".
+function normalizeBatchType(value) {
+  return String(value || "").trim().toLowerCase() || "none";
+}
+
+function batchRowTotalSats(sats, type) {
+  if (type !== "employee") return sats;
+  const dedRate  = taxRates.employeeDeductionRate    / 100;
+  const contRate = taxRates.employerContributionRate / 100;
+  return sats + Math.floor(sats * (dedRate + contRate)) - Math.floor(sats * dedRate);
+}
+
 function parseCsv(csvData) {
   console.log("Parsing CSV data...");
   try {
@@ -4280,6 +4516,7 @@ async function renderBatchTable(data) {
 
     const address = row["Address"] || row["Lightning-Address"] || "";
     row["Address"] = address; // normalize to Address key
+    row["Type"] = normalizeBatchType(row["Type"]);
     const rail = detectPaymentRail(address);
     const railDisplay = rail === "onchain" ? "₿ On-Chain" : rail === "invoice" ? "⚡ Invoice" : rail === "lightning" ? "⚡ Lightning" : "—";
 
@@ -4300,6 +4537,7 @@ async function renderBatchTable(data) {
     tr.innerHTML = `
             <td>${escapeHtml(row["Date"] || "")}</td>
             <td>${escapeHtml(row["Name"] || "")}</td>
+            <td>${escapeHtml(row["Type"])}</td>
             <td>${escapeHtml(satsAmount != null ? String(satsAmount) : "")}</td>
             <td>${usdDisplay}</td>
             <td>${escapeHtml(address)}</td>
@@ -4350,6 +4588,7 @@ function openBatchEditModal(rowIndex) {
   // Populate form fields with current row data
   document.getElementById("batchEditDate").value = row["Date"] || "";
   document.getElementById("batchEditName").value = row["Name"] || "";
+  document.getElementById("batchEditType").value = BATCH_TAX_TYPES.includes(row["Type"]) ? row["Type"] : "";
   document.getElementById("batchEditAmount").value = row["Amount(sats)"] || "";
   document.getElementById("batchEditAddress").value =
     row["Address"] || row["Lightning-Address"] || "";
@@ -4399,8 +4638,9 @@ function handleBatchEditSubmit(event) {
   const amount = formData.get("amount");
   const address = formData.get("address").trim();
   const note = formData.get("note").trim();
+  const type = formData.get("type");
 
-  if (!date || !name || !amount || !address) {
+  if (!date || !name || !amount || !address || !type) {
     alert("Error: All fields are required");
     return;
   }
@@ -4415,6 +4655,11 @@ function handleBatchEditSubmit(event) {
     return;
   }
 
+  if (type !== "none" && detectPaymentRail(address) !== "lightning") {
+    alert("Error: Tax withholding needs a Lightning address");
+    return;
+  }
+
   const newUsd = currentBtcUsdRate
     ? ((parseInt(amount) / 100_000_000) * currentBtcUsdRate).toFixed(2)
     : (batchPaymentData[rowIndex]["Amount(usd)"] || "");
@@ -4422,6 +4667,7 @@ function handleBatchEditSubmit(event) {
   const updatedData = {
     Date: date,
     Name: name,
+    Type: type,
     "Amount(sats)": amount,
     "Amount(usd)": newUsd,
     Address: address,
@@ -4502,8 +4748,8 @@ function updateBatchTableStatus(statuses) {
   tableRows.forEach((row, index) => {
     const statusCell = row.querySelector("td:last-child");
     if (statuses[index] && statuses[index].status) {
-      statusCell.innerText = statuses[index].status;
-      if (statuses[index].status === "Success") {
+      statusCell.innerText = statuses[index].taxPaymentFailed ? "Paid, tax failed" : statuses[index].status;
+      if (statuses[index].status === "Success" && !statuses[index].taxPaymentFailed) {
         statusCell.style.color = "green";
       } else {
         statusCell.style.color = "red";
@@ -4942,6 +5188,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Receipt file input handler
   document.getElementById("draftReceiptInput").addEventListener("change", handleReceiptFileSelected);
 
+  // Supplier tax document file inputs (add + edit modals)
+  const addTaxDocInput = document.getElementById("supplierTaxDocInput");
+  if (addTaxDocInput) {
+    addTaxDocInput.addEventListener("change", async (e) => {
+      const id = await handleSupplierTaxDocSelected(e, "supplierTaxDocStatus", "supplierTaxDocZone");
+      if (id) supplierTaxDocId = id;
+    });
+  }
+  const editTaxDocInput = document.getElementById("editSupplierTaxDocInput");
+  if (editTaxDocInput) {
+    editTaxDocInput.addEventListener("change", async (e) => {
+      const id = await handleSupplierTaxDocSelected(e, "editSupplierTaxDocStatus", "editSupplierTaxDocZone");
+      if (id) editSupplierTaxDocId = id;
+    });
+  }
+
   document
     .getElementById("draftPaymentForm")
     .addEventListener("submit", async (e) => {
@@ -5017,6 +5279,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         amount,
         note,
         receiptId: draftReceiptId || undefined,
+        categoryId:
+          document.getElementById("draftCategorySelect").value || undefined,
       };
 
       try {
@@ -5349,15 +5613,37 @@ document.addEventListener("DOMContentLoaded", async () => {
           amount: rowData["Amount(sats)"] || "",
           address: rowData["Address"] || rowData["Lightning-Address"] || "",
           note: rowData["Note"] || `${rowData["Name"] || ""} - ${rowData["Date"] || ""}`,
+          type: normalizeBatchType(rowData["Type"]),
         });
       });
+
+      const badType = batchData.filter((p) => !BATCH_TAX_TYPES.includes(p.type));
+      if (badType.length > 0) {
+        alert(`Type must be employee, contractor or none. Fix these rows: ${badType.map((p) => p.name).join(", ")}`);
+        return;
+      }
+
+      const withheld = batchData.filter((p) => p.type !== "none");
+      const notLightning = withheld.filter((p) => detectPaymentRail(p.address) !== "lightning");
+      if (notLightning.length > 0) {
+        alert(`Tax withholding needs a Lightning address. Fix these rows: ${notLightning.map((p) => p.name).join(", ")}`);
+        return;
+      }
+
+      const totalSats = batchData.reduce((sum, p) => sum + batchRowTotalSats(parseInt(p.amount) || 0, p.type), 0);
+      const proceed = confirm(
+        `Send ${batchData.length} payment${batchData.length !== 1 ? "s" : ""}?\n\n` +
+        `With tax withholding: ${withheld.length}\n` +
+        `No withholding: ${batchData.length - withheld.length}\n` +
+        `Total wallet spend: ${totalSats.toLocaleString()} SATS\n\n` +
+        `Amounts on withheld rows are gross pay. Click OK and please wait while the payments are processed.`,
+      );
+      if (!proceed) return;
 
       const sendBatchBtn = document.getElementById("sendBatchBtn");
       const originalBtnText = sendBatchBtn.textContent;
       sendBatchBtn.disabled = true;
       sendBatchBtn.textContent = "Sending...";
-
-      alert(`Sending ${batchData.length} payment${batchData.length !== 1 ? "s" : ""}. Click OK and please wait while the payments are processed.`);
 
       try {
         const response = await authFetch(`${API_BASE}/batch-payment`, {
@@ -5373,7 +5659,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           updateBatchTableStatus(results.paymentStatuses);
           const succeeded = results.paymentStatuses.filter((s) => s.status === "Success").length;
           const failed = results.paymentStatuses.filter((s) => s.status !== "Success").length;
-          if (failed === 0) {
+          const taxFailed = results.paymentStatuses.filter((s) => s.taxPaymentFailed);
+          if (taxFailed.length > 0) {
+            alert(
+              `⚠️ ${taxFailed.length} employee${taxFailed.length !== 1 ? "s were" : " was"} paid, but the tax payment FAILED and was not remitted: ` +
+              `${taxFailed.map((s) => s.name || s.address).join(", ")}. Please send these tax payments manually.`,
+            );
+          }
+          if (failed === 0 && taxFailed.length === 0) {
             alert(`All ${succeeded} payment${succeeded !== 1 ? "s" : ""} sent successfully!`);
           } else {
             alert(`Batch complete: ${succeeded} succeeded, ${failed} failed. Check the Status column for details.`);
@@ -5475,11 +5768,11 @@ function calculateEmployeeTaxWithholding() {
   const employeeDeduction    = Math.floor(amount * dedRate);
   const totalDeducted        = Math.floor(amount * (dedRate + contRate));
   const employerContribution = totalDeducted - employeeDeduction;
-  const netPayment           = amount - totalDeducted;
+  const netPayment           = amount - employeeDeduction;
 
   // Update labels with current rates
   const titleEl = document.getElementById("employeeTaxTitle");
-  if (titleEl) titleEl.textContent = `Employee Tax Deductions (${(dedRate + contRate) * 100}% Total)`;
+  if (titleEl) titleEl.textContent = `Payroll Taxes (${(dedRate + contRate) * 100}% Total)`;
   const dedLabel = document.getElementById("employeeDeductionLabel");
   if (dedLabel) dedLabel.textContent = `Employee Deduction (${taxRates.employeeDeductionRate}%):`;
   const contLabel = document.getElementById("employerContributionLabel");
@@ -5489,6 +5782,7 @@ function calculateEmployeeTaxWithholding() {
   document.getElementById("employerContributionAmount").textContent = employerContribution.toLocaleString() + " SATS";
   document.getElementById("totalDeducted").textContent = totalDeducted.toLocaleString();
   document.getElementById("netPayment").textContent    = netPayment.toLocaleString();
+  document.getElementById("totalEmployerCost").textContent = (netPayment + totalDeducted).toLocaleString();
 }
 
 function calculateContractorTaxWithholding() {

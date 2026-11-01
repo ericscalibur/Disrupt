@@ -94,10 +94,14 @@ router.delete("/receipts/:id", authenticateToken, (req, res) => {
     return res.status(403).json({ success: false, message: "Access denied." });
   }
 
-  // Prevent deleting receipts already attached to a draft
+  // Prevent deleting receipts already attached to a draft or supplier
   const draft = db.prepare("SELECT id FROM drafts WHERE receiptId = ?").get(id);
   if (draft) {
     return res.status(409).json({ success: false, message: "Cannot delete a receipt attached to a draft." });
+  }
+  const supplier = db.prepare("SELECT id FROM suppliers WHERE taxDocReceiptId = ?").get(id);
+  if (supplier) {
+    return res.status(409).json({ success: false, message: "Cannot delete a document attached to a supplier." });
   }
 
   fs.unlink(path.join(UPLOAD_DIR, receipt.filename), (err) => {

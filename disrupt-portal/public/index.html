@@ -146,6 +146,15 @@
                     >
                         📊 Analytics
                     </div>
+                    <div
+                        class="nav-item"
+                        id="reportsNav"
+                        data-content="reports"
+                        onclick="showContent('reports', event)"
+                        style="display: none"
+                    >
+                        📁 Reports
+                    </div>
                     <!-- <div
                         class="nav-item"
                         data-content="settings"
@@ -540,7 +549,7 @@
                                 >
                                     <div class="deduction-breakdown">
                                         <h4 id="employeeTaxTitle">
-                                            Employee Tax Deductions
+                                            Payroll Taxes
                                         </h4>
                                         <div class="deduction-section">
                                             <h5>Employee Deductions:</h5>
@@ -560,7 +569,7 @@
 
                                         <div class="total-deduction">
                                             <strong>
-                                                Total Deducted:
+                                                Total Sent to Tax Address:
                                                 <span id="totalDeducted">0</span>
                                                 SATS</strong
                                             >
@@ -569,6 +578,13 @@
                                             <strong>
                                                 Net Payment to Employee:
                                                 <span id="netPayment">0</span>
+                                                SATS</strong
+                                            >
+                                        </div>
+                                        <div class="net-payment">
+                                            <strong>
+                                                Total Cost to Employer:
+                                                <span id="totalEmployerCost">0</span>
                                                 SATS</strong
                                             >
                                         </div>
@@ -1044,6 +1060,16 @@
                                     />
                                 </div>
                                 <div class="form-group">
+                                    <label for="draftCategorySelect"
+                                        >Category</label
+                                    >
+                                    <select id="draftCategorySelect">
+                                        <option value="">
+                                            — Uncategorized —
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
                                     <label for="draftPaymentNote"
                                         >Note (optional)</label
                                     >
@@ -1128,6 +1154,7 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Name</th>
+                                    <th>Type</th>
                                     <th>Sats</th>
                                     <th>USD</th>
                                     <th>Address</th>
@@ -1488,6 +1515,29 @@
                                         id="editSupplierNote"
                                         name="note"
                                     />
+
+                                    <label for="editSupplierTaxDocInput"
+                                        >Tax document — IVA / registration</label
+                                    >
+                                    <input
+                                        type="file"
+                                        id="editSupplierTaxDocInput"
+                                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                                        style="display: none"
+                                    />
+                                    <div
+                                        id="editSupplierTaxDocZone"
+                                        onclick="document.getElementById('editSupplierTaxDocInput').click()"
+                                        style="width:100%;padding:12px;border:2px dashed #555;border-radius:4px;text-align:center;cursor:pointer;color:#aaa;font-size:0.9em;box-sizing:border-box;transition:border-color 0.2s;"
+                                        onmouseover="this.style.borderColor='#888'"
+                                        onmouseout="this.style.borderColor='#555'"
+                                    >
+                                        <span id="editSupplierTaxDocStatus">📎 Click to attach tax document</span>
+                                    </div>
+                                    <div
+                                        id="editSupplierTaxDocActions"
+                                        style="display:none;margin-top:6px;font-size:0.85em;"
+                                    ></div>
                                 </div>
                                 <div class="modal-footer">
                                     <button type="submit" id="saveSupplierBtn">
@@ -1542,6 +1592,7 @@
                                     <th>Lightning Address</th>
                                     <th>Bitcoin Address</th>
                                     <th>Note</th>
+                                    <th>Tax Doc</th>
                                     <th>Created At</th>
                                 </tr>
                             </thead>
@@ -1549,6 +1600,43 @@
                                 <!-- Suppliers will be rendered here -->
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Reports Content -->
+                    <div
+                        id="reportsContent"
+                        class="content-card"
+                        style="display: none"
+                    >
+                        <h2>Reports</h2>
+                        <p style="color: #aaa; max-width: 560px">
+                            Download a monthly accountant package — expense,
+                            income, payroll and withholding CSVs, a printable
+                            summary, and every attached receipt. All values are
+                            converted at the exchange rate captured when each
+                            payment was made.
+                        </p>
+                        <div
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 12px;
+                                margin-top: 16px;
+                            "
+                        >
+                            <input type="month" id="reportPeriodInput" />
+                            <button
+                                class="add-btn"
+                                id="downloadReportBtn"
+                                onclick="downloadMonthlyReport()"
+                            >
+                                ⬇ Download Package
+                            </button>
+                        </div>
+                        <p
+                            id="reportStatus"
+                            style="margin-top: 10px; color: #aaa"
+                        ></p>
                     </div>
 
                     <!-- Analytics Content -->
@@ -1734,6 +1822,27 @@
                                         maxlength="100"
                                     />
                                 </div>
+                                <div class="form-group">
+                                    <label for="supplierTaxDocInput"
+                                        >Tax document — IVA / registration
+                                        (optional)</label
+                                    >
+                                    <input
+                                        type="file"
+                                        id="supplierTaxDocInput"
+                                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                                        style="display: none"
+                                    />
+                                    <div
+                                        id="supplierTaxDocZone"
+                                        onclick="document.getElementById('supplierTaxDocInput').click()"
+                                        style="width:100%;padding:12px;border:2px dashed #555;border-radius:4px;text-align:center;cursor:pointer;color:#aaa;font-size:0.9em;box-sizing:border-box;transition:border-color 0.2s;"
+                                        onmouseover="this.style.borderColor='#888'"
+                                        onmouseout="this.style.borderColor='#555'"
+                                    >
+                                        <span id="supplierTaxDocStatus">📎 Click to attach tax document</span>
+                                    </div>
+                                </div>
                                 <div class="modal-footer">
                                     <button type="submit" class="submit-btn">
                                         Save
@@ -1833,6 +1942,15 @@
                                         placeholder="user@wallet.com or bc1q..."
                                         required
                                     />
+                                </div>
+                                <div class="form-group">
+                                    <label for="batchEditType">Tax Withholding</label>
+                                    <select id="batchEditType" name="type" required>
+                                        <option value="">Select...</option>
+                                        <option value="employee">Employee (amount is gross)</option>
+                                        <option value="contractor">Contractor (amount is gross)</option>
+                                        <option value="none">None</option>
+                                    </select>
                                 </div>
                                 <div class="form-group">
                                     <label for="batchEditNote">Note</label>

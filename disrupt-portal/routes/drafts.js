@@ -19,6 +19,7 @@ const approveRateLimit = rateLimit({
   legacyHeaders: false,
 });
 const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBtcUsdRate, onChainPaymentSend } = require("../lib/blink");
+const { fiatValue, resolveCategoryId } = require("../lib/db-helpers");
 
 // GET DRAFTS
 router.get("/drafts", authenticateToken, async (req, res) => {
@@ -60,6 +61,7 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       amount,
       note,
       receiptId,
+      categoryId,
     } = req.body;
 
     // Auto-generate title from contact/company if not provided
@@ -100,15 +102,16 @@ router.post("/drafts", authenticateToken, validate(schemas.createDraft), async (
       dateCreated: new Date().toISOString(),
       status: "pending",
       receiptId: receiptId || null,
+      categoryId: resolveCategoryId(categoryId),
     };
 
     db.prepare(`
       INSERT INTO drafts
         (id, title, recipientEmail, company, contact, recipientLightningAddress,
-         recipientBtcAddress, paymentRail, amount, note, createdBy, department, dateCreated, status, receiptId)
+         recipientBtcAddress, paymentRail, amount, note, createdBy, department, dateCreated, status, receiptId, categoryId)
       VALUES
         (@id, @title, @recipientEmail, @company, @contact, @recipientLightningAddress,
-         @recipientBtcAddress, @paymentRail, @amount, @note, @createdBy, @department, @dateCreated, @status, @receiptId)
+         @recipientBtcAddress, @paymentRail, @amount, @note, @createdBy, @department, @dateCreated, @status, @receiptId, @categoryId)
     `).run(newDraft);
 
     // Respond with success and new draft
@@ -232,7 +235,9 @@ router.post(
           approvedAt,
           approvedBy: req.user.email,
           btcUsdRate,
+          amountFiat: fiatValue(amount, btcUsdRate),
           receiptId: draft.receiptId || null,
+          categoryId: draft.categoryId || null,
         };
 
       // ── Lightning path ───────────────────────────────────────────────────────
@@ -300,7 +305,9 @@ router.post(
           approvedAt,
           approvedBy: req.user.email,
           btcUsdRate,
+          amountFiat: fiatValue(amount, btcUsdRate),
           receiptId: draft.receiptId || null,
+          categoryId: draft.categoryId || null,
         };
       }
 
@@ -316,10 +323,10 @@ router.post(
           db.prepare(`
             INSERT OR REPLACE INTO transactions
               (id, date, type, receiver, lightningAddress, invoice, amount, currency,
-               note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate, receiptId)
+               note, direction, status, paymentHash, preImage, approvedStatus, approvedAt, approvedBy, btcUsdRate, amountFiat, receiptId, categoryId)
             VALUES
               (@id, @date, @type, @receiver, @lightningAddress, @invoice, @amount, @currency,
-               @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate, @receiptId)
+               @note, @direction, @status, @paymentHash, @preImage, @approvedStatus, @approvedAt, @approvedBy, @btcUsdRate, @amountFiat, @receiptId, @categoryId)
           `).run(transaction);
         })();
       } catch (recordErr) {

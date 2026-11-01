@@ -18,10 +18,18 @@ describe("calcEmployeeTax", () => {
     assert.equal(EMPLOYEE_RATE, 0.265);
   });
 
-  it("taxSats + netSats always equals grossSats", () => {
+  it("only the employee deduction comes out of gross", () => {
     for (const gross of [1, 7, 99, 1_000, 10_000, 99_999, 1_000_000]) {
-      const { taxSats, netSats } = calcEmployeeTax(gross);
-      assert.equal(taxSats + netSats, gross, `conservation failed for gross=${gross}`);
+      const { netSats, deductionSats } = calcEmployeeTax(gross);
+      assert.equal(netSats + deductionSats, gross, `conservation failed for gross=${gross}`);
+    }
+  });
+
+  it("wallet spends gross plus the employer share", () => {
+    for (const gross of [1, 7, 99, 1_000, 10_000, 99_999, 1_000_000]) {
+      const { taxSats, netSats, deductionSats, employerSats } = calcEmployeeTax(gross);
+      assert.equal(deductionSats + employerSats, taxSats, `tax split failed for gross=${gross}`);
+      assert.equal(netSats + taxSats, gross + employerSats, `wallet total failed for gross=${gross}`);
     }
   });
 
@@ -33,9 +41,11 @@ describe("calcEmployeeTax", () => {
   });
 
   it("correct result for 10,000 sats", () => {
-    const { taxSats, netSats } = calcEmployeeTax(10_000);
+    const { taxSats, netSats, deductionSats, employerSats } = calcEmployeeTax(10_000);
+    assert.equal(deductionSats, 1_025);
+    assert.equal(employerSats, 1_625);
     assert.equal(taxSats, 2_650);
-    assert.equal(netSats, 7_350);
+    assert.equal(netSats, 8_975);
   });
 
   it("correct result for 100,000 sats", () => {

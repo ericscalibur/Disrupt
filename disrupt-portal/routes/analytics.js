@@ -43,7 +43,10 @@ router.get("/analytics/recipient", authenticateToken, authorizeRoles("Admin", "M
   const totalUsd = successful.reduce((s, t) => {
     return s + ((Number(t.amount) || 0) / 100_000_000) * (t.btcUsdRate || 0);
   }, 0);
-  const taxWithheldSats = txns.reduce((s, t) => s + (t.taxWithholding?.taxAmount || 0), 0);
+  const taxWithheldSats = txns.reduce((s, t) => {
+    const w = t.taxWithholding;
+    return s + (w ? (w.originalAmount - w.netAmount) || 0 : 0);
+  }, 0);
 
   // Breakdown by rail, summed in sats (not transaction count)
   const railBreakdown = { lightning: 0, onchain: 0, batch: 0 };
