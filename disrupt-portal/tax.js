@@ -20,12 +20,24 @@ const CONTRACTOR_RATE            = parseFloat(process.env.CONTRACTOR_WITHHOLDING
 
 /**
  * Calculate employee withholding for a gross payment.
+ *
+ * Only the employee deduction comes out of gross. The employer contribution
+ * is an extra cost on top, so the wallet spends gross + employerSats in total:
+ * netSats to the employee and taxSats (both shares) to the tax address.
+ *
  * @param {number} grossSats
- * @returns {{ taxSats: number, netSats: number, rate: number }}
+ * @returns {{ taxSats: number, netSats: number, deductionSats: number, employerSats: number, rate: number }}
  */
 function calcEmployeeTax(grossSats) {
   const taxSats = Math.floor(grossSats * EMPLOYEE_RATE);
-  return { taxSats, netSats: grossSats - taxSats, rate: EMPLOYEE_RATE };
+  const deductionSats = Math.floor(grossSats * EMPLOYEE_DEDUCTION_RATE);
+  return {
+    taxSats,
+    netSats: grossSats - deductionSats,
+    deductionSats,
+    employerSats: taxSats - deductionSats,
+    rate: EMPLOYEE_RATE,
+  };
 }
 
 /**

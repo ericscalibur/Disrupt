@@ -63,6 +63,17 @@ const schemas = {
     confirmDelete: z.boolean().optional(),
   }),
 
+  addCategory: z.object({
+    name: nonEmpty(100),
+    kind: z.enum(["expense", "income", "payroll", "tax"]),
+  }),
+
+  editCategory: z.object({
+    name: nonEmpty(100).optional(),
+    kind: z.enum(["expense", "income", "payroll", "tax"]).optional(),
+    archived: z.boolean().optional(),
+  }),
+
   createDraft: z.object({
     title: z.string().max(255).optional(),
     recipientEmail: email,
@@ -74,6 +85,7 @@ const schemas = {
     amount: z.number().int().positive(),
     note: z.string().max(1000).optional(),
     receiptId: z.string().uuid().optional(),
+    categoryId: z.string().max(64).optional(),
   }).refine(
     (d) => (d.paymentRail === "onchain") ? !!d.recipientBtcAddress : !!d.recipientLightningAddress,
     { message: "A payment address is required for the selected rail." }
@@ -103,6 +115,7 @@ const schemas = {
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
     btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     note: z.string().max(1000).optional(),
+    taxDocReceiptId: z.string().uuid().nullable().optional(),
   }).refine(
     (d) => (d.lightningAddress && d.lightningAddress.trim()) || (d.btcAddress && d.btcAddress.trim()),
     { message: "At least one payment address (Lightning or Bitcoin) is required." }
@@ -115,6 +128,7 @@ const schemas = {
     lightningAddress: lnAddress.optional().or(z.literal("")).optional(),
     btcAddress: btcAddress.optional().or(z.literal("")).optional(),
     note: z.string().max(1000).optional(),
+    taxDocReceiptId: z.string().uuid().nullable().optional(),
   }).refine(
     // When the edit touches the address fields, at least one must remain set —
     // don't let a supplier be left with no payable address. (Updates that omit
@@ -137,6 +151,7 @@ const schemas = {
     paymentRail: z.enum(["lightning", "onchain"]).optional(),
     paymentAmount: z.number().int().positive(),
     paymentNote: z.string().max(1000).optional(),
+    categoryId: z.string().max(64).optional(),
     idempotencyKey: idempotencyKey.optional(),
     taxWithholding: z
       .object({
@@ -169,6 +184,7 @@ const schemas = {
           amount: z.union([z.string(), z.number()]).transform(Number).pipe(z.number().int().positive()),
           name: z.string().max(255).optional(),
           note: z.string().max(1000).optional(),
+          type: z.enum(["employee", "contractor", "none"]).optional(),
         }),
       )
       .min(1)

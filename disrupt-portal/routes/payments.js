@@ -17,10 +17,10 @@ const paymentRateLimit = rateLimit({
 });
 const logger = require("../logger");
 const { schemas, validate } = require("../validators");
-const { validateTaxWithholding } = require("../tax");
+const { validateTaxWithholding, calcEmployeeTax, calcContractorTax } = require("../tax");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const { blinkPost, getBlinkWallets, fetchPreImageFromBlink, getBlinkTransactions, getBtcUsdRate, onChainPaymentSend } = require("../lib/blink");
-const { dbTxnToObj, auditLog, getEmployeeByEmail, getSupplierById } = require("../lib/db-helpers");
+const { dbTxnToObj, fiatValue, resolveCategoryId, auditLog, getEmployeeByEmail, getSupplierById } = require("../lib/db-helpers");
 
 const TAX_LIGHTNING_ADDRESS = process.env.TAX_LIGHTNING_ADDRESS;
 
@@ -245,11 +245,12 @@ router.post("/transactions", authenticateToken, validate(schemas.sendTransaction
       direction: "SENT",
       status: result.payment.status,
       btcUsdRate: btcUsdRate,
+      amountFiat: fiatValue(amountSats, btcUsdRate),
     };
 
     db.prepare(`
-      INSERT OR REPLACE INTO transactions (id, date, receiver, amount, currency, note, type, direction, status, btcUsdRate)
-      VALUES (@id, @date, @receiver, @amount, @currency, @note, @type, @direction, @status, @btcUsdRate)
+      INSERT OR REPLACE INTO transactions (id, date, receiver, amount, currency, note, type, direction, status, btcUsdRate, amountFiat)
+      VALUES (@id, @date, @receiver, @amount, @currency, @note, @type, @direction, @status, @btcUsdRate, @amountFiat)
     `).run(newTxn);
 
     // Respond with success and payment info
@@ -297,13 +298,14 @@ router.post("/transactions/local", authenticateToken, authorizeRoles("Admin", "M
       invoice: invoice || null,
       paymentHash: paymentHash || null,
       btcUsdRate,
+      amountFiat: currency === "USD" ? Number(amount) || null : fiatValue(amount, btcUsdRate),
     };
 
     db.prepare(`
       INSERT OR REPLACE INTO transactions
-        (id, date, receiver, amount, currency, note, type, direction, status, lightningAddress, invoice, paymentHash, btcUsdRate)
+        (id, date, receiver, amount, currency, note, type, direction, status, lightningAddress, invoice, paymentHash, btcUsdRate, amountFiat)
       VALUES
-        (@id, @date, @receiver, @amount, @currency, @note, @type, @direction, @status, @lightningAddress, @invoice, @paymentHash, @btcUsdRate)
+        (@id, @date, @receiver, @amount, @currency, @note, @type, @direction, @status, @lightningAddress, @invoice, @paymentHash, @btcUsdRate, @amountFiat)
     `).run(newTransaction);
 
     res.json({ success: true, transaction: newTransaction });
@@ -327,6 +329,7 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       paymentRail = "lightning",
       paymentAmount,
       paymentNote,
+      categoryId,
       taxWithholding,
       btcUsdRate: clientBtcUsdRate,
       idempotencyKey,
@@ -334,6 +337,19 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
 
     const amount = Number(paymentAmount);
     const note = paymentNote || "";
+    // Explicit pick wins; employee payments default to Payroll, else uncategorized
+    const paymentCategoryId =
+      resolveCategoryId(categoryId) ||
+      (recipientType === "employee" ? resolveCategoryId("cat_payroll") : null);
+
+    // The on-chain path sends one payment and has no tax leg, so withheld tax
+    // would be neither remitted nor recorded. Refuse before anything is claimed.
+    if (paymentRail === "onchain" && taxWithholding?.applied) {
+      return res.status(400).json({
+        success: false,
+        message: "Tax withholding isn't available for on-chain payments. Pay this employee over Lightning, or turn withholding off.",
+      });
+    }
 
     // Lookup recipient for validation
     let recipient;
@@ -407,6 +423,8 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
         paymentHash: txnId,
         preImage: null,
         btcUsdRate,
+        amountFiat: fiatValue(amount, btcUsdRate),
+        categoryId: paymentCategoryId,
         taxWithholding: null,
         taxPaymentFailed: 0,
       };
@@ -415,11 +433,11 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
         INSERT OR REPLACE INTO transactions
           (id, date, type, recipientType, recipientId, contact, company, lightningAddress,
            invoice, amount, currency, note, direction, status, paymentHash, preImage,
-           btcUsdRate, taxWithholding, taxPaymentFailed)
+           btcUsdRate, amountFiat, categoryId, taxWithholding, taxPaymentFailed)
         VALUES
           (@id, @date, @type, @recipientType, @recipientId, @contact, @company, @lightningAddress,
            @invoice, @amount, @currency, @note, @direction, @status, @paymentHash, @preImage,
-           @btcUsdRate, @taxWithholding, @taxPaymentFailed)
+           @btcUsdRate, @amountFiat, @categoryId, @taxWithholding, @taxPaymentFailed)
       `).run({ ...onchainTxn, taxWithholding: null });
 
       auditLog(req.user.email, "onchain_payment_sent", btcAddress, { amount, contact, company });
@@ -610,6 +628,8 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       paymentHash: employeePaymentHash,
       preImage: await fetchPreImageFromBlink(employeePaymentHash),
       btcUsdRate: btcUsdRate,
+      amountFiat: fiatValue(employeeAmount, btcUsdRate),
+      categoryId: paymentCategoryId,
       taxPaymentFailed: taxPaymentFailed ? 1 : 0,
       taxWithholding: isTaxWithholding
         ? {
@@ -643,6 +663,8 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
         relatedEmployeePayment: employeePaymentHash,
         taxType: taxWithholding.type || "employee",
         btcUsdRate: btcUsdRate,
+        amountFiat: fiatValue(taxAmount, btcUsdRate),
+        categoryId: resolveCategoryId("cat_tax"),
       };
     }
 
@@ -651,21 +673,21 @@ router.post("/pay", authenticateToken, authorizeRoles("Admin", "Manager"), payme
       INSERT OR REPLACE INTO transactions
         (id, date, type, recipientType, recipientId, contact, company, lightningAddress,
          invoice, amount, currency, note, direction, status, paymentHash, preImage,
-         btcUsdRate, taxWithholding, taxPaymentFailed)
+         btcUsdRate, amountFiat, categoryId, taxWithholding, taxPaymentFailed)
       VALUES
         (@id, @date, @type, @recipientType, @recipientId, @contact, @company, @lightningAddress,
          @invoice, @amount, @currency, @note, @direction, @status, @paymentHash, @preImage,
-         @btcUsdRate, @taxWithholding, @taxPaymentFailed)
+         @btcUsdRate, @amountFiat, @categoryId, @taxWithholding, @taxPaymentFailed)
     `);
     const insertTaxStmt = db.prepare(`
       INSERT OR REPLACE INTO transactions
         (id, date, type, recipientType, recipientId, contact, company, lightningAddress,
          invoice, amount, currency, note, direction, status, paymentHash, preImage,
-         btcUsdRate, relatedEmployeePayment, taxType)
+         btcUsdRate, amountFiat, categoryId, relatedEmployeePayment, taxType)
       VALUES
         (@id, @date, @type, @recipientType, @recipientId, @contact, @company, @lightningAddress,
          @invoice, @amount, @currency, @note, @direction, @status, @paymentHash, @preImage,
-         @btcUsdRate, @relatedEmployeePayment, @taxType)
+         @btcUsdRate, @amountFiat, @categoryId, @relatedEmployeePayment, @taxType)
     `);
     db.transaction(() => {
       insertTxnStmt.run({
@@ -842,16 +864,17 @@ router.post("/pay-invoice", authenticateToken, authorizeRoles("Admin", "Manager"
     paymentHash,
     preImage: await fetchPreImageFromBlink(paymentHash),
     btcUsdRate: btcUsdRate,
+    amountFiat: fiatValue(amount, btcUsdRate),
   };
 
   // Step 6: Save transaction
   db.prepare(`
     INSERT OR REPLACE INTO transactions
       (id, date, type, receiver, lightningAddress, invoice, amount, currency,
-       note, direction, status, paymentHash, preImage, btcUsdRate)
+       note, direction, status, paymentHash, preImage, btcUsdRate, amountFiat)
     VALUES
       (@id, @date, @type, @receiver, @lightningAddress, @invoice, @amount, @currency,
-       @note, @direction, @status, @paymentHash, @preImage, @btcUsdRate)
+       @note, @direction, @status, @paymentHash, @preImage, @btcUsdRate, @amountFiat)
   `).run({ ...transaction, id: String(transaction.id) });
   return res.json({ success: true, transaction });
 });
@@ -869,6 +892,40 @@ router.post(
       return res
         .status(400)
         .json({ success: false, message: "Invalid batch payment data." });
+    }
+
+    const detectRail = (addr) => {
+      if (!addr) return null;
+      if (/^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(addr)) return "onchain";
+      if (/^lnbc/i.test(addr)) return "invoice";
+      if (/^[^@\s]+@[^@\s]+$/.test(addr)) return "lightning";
+      return null;
+    };
+
+    // Amounts on withheld rows are gross. Tax is always computed here, never
+    // taken from the client.
+    const calcRowTax = (payment) => {
+      if (payment.type === "employee") return calcEmployeeTax(Number(payment.amount));
+      if (payment.type === "contractor") return calcContractorTax(Number(payment.amount));
+      return null;
+    };
+
+    // Refuse the whole batch before any money moves. Only a Lightning address
+    // can take the reduced net amount alongside a separate tax payment.
+    const taxedRows = payments.filter((p) => calcRowTax(p));
+    const unsupported = taxedRows.filter((p) => detectRail(p.address) !== "lightning");
+    if (unsupported.length > 0) {
+      const names = unsupported.map((p) => p.name || p.address).join(", ");
+      return res.status(400).json({
+        success: false,
+        message: `Tax withholding needs a Lightning address. No payments were sent. Fix these rows: ${names}`,
+      });
+    }
+    if (taxedRows.length > 0 && !TAX_LIGHTNING_ADDRESS) {
+      return res.status(400).json({
+        success: false,
+        message: "No tax Lightning address is configured. No payments were sent.",
+      });
     }
 
     // Idempotency: claim the key so a re-submitted batch can't re-send the
@@ -906,13 +963,17 @@ router.post(
       });
     }
 
-    const detectRail = (addr) => {
-      if (!addr) return null;
-      if (/^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(addr)) return "onchain";
-      if (/^lnbc/i.test(addr)) return "invoice";
-      if (/^[^@\s]+@[^@\s]+$/.test(addr)) return "lightning";
-      return null;
+    const paymentHashOf = (invoice) => {
+      try {
+        return bolt11.decode(invoice).tags.find((t) => t.tagName === "payment_hash")?.data || null;
+      } catch (err) {
+        logger.warn("Failed to decode batch invoice:", err);
+        return null;
+      }
     };
+
+    // Withholding details per successful row, kept off the client response.
+    const withholdings = new Map();
 
     for (const payment of payments) {
       const { address, amount } = payment;
@@ -947,14 +1008,33 @@ router.post(
           }
         } else if (rail === "lightning") {
           // Lightning address — resolve via LNURL then pay
+          const tax = calcRowTax(payment);
+          const payAmount = tax ? tax.netSats : Number(amount);
           let invoice;
           try {
-            const lnurlResp = await lnurlPay.requestInvoice({ lnUrlOrAddress: address, tokens: Number(amount), comment: payment.note || "" });
+            const lnurlResp = await lnurlPay.requestInvoice({ lnUrlOrAddress: address, tokens: payAmount, comment: payment.note || "" });
             invoice = lnurlResp.invoice;
             if (!invoice) throw new Error("Could not resolve invoice from Lightning Address.");
           } catch (err) {
             paymentStatuses.push({ ...payment, status: "Failed", error: "LNURL error: " + err.message });
             continue;
+          }
+          // Resolve the tax invoice first, so a bad tax address fails the row
+          // before the employee is paid.
+          let taxInvoice = null;
+          if (tax && tax.taxSats > 0) {
+            try {
+              const taxLnurlResp = await lnurlPay.requestInvoice({
+                lnUrlOrAddress: TAX_LIGHTNING_ADDRESS,
+                tokens: tax.taxSats,
+                comment: `Tax withholding for ${payment.name || address} - ${payment.note || ""}`,
+              });
+              taxInvoice = taxLnurlResp.invoice;
+              if (!taxInvoice) throw new Error("Could not resolve tax withholding invoice.");
+            } catch (err) {
+              paymentStatuses.push({ ...payment, status: "Failed", error: "Tax LNURL error: " + err.message });
+              continue;
+            }
           }
           const mutation = `
             mutation payInvoice($input: LnInvoicePaymentInput!) {
@@ -970,7 +1050,43 @@ router.post(
             paymentStatuses.push({ ...payment, status: "Failed", error: result.errors[0].message });
           } else {
             logger.info({ address, amount }, "batch lightning payment sent");
-            paymentStatuses.push({ ...payment, status: "Success" });
+            const status = { ...payment, status: "Success" };
+            paymentStatuses.push(status);
+
+            if (tax) {
+              // The employee is paid, so from here a failure can't fail the row.
+              // It is flagged for manual follow-up, as in /pay.
+              let taxPaid = false;
+              let taxError = null;
+              if (taxInvoice) {
+                try {
+                  const taxResp = await blinkPost({ query: mutation, variables: { input: { walletId, paymentRequest: taxInvoice } } });
+                  const taxResult = taxResp.data.data.lnInvoicePaymentSend;
+                  if (taxResult.errors && taxResult.errors.length > 0) taxError = taxResult.errors[0].message;
+                  else taxPaid = true;
+                } catch (err) {
+                  taxError = err.message;
+                }
+              }
+              if (taxError) {
+                logger.error({ address, taxAmount: tax.taxSats, errMsg: taxError }, "batch tax payment failed");
+                auditLog(req.user.email, "TAX_PAYMENT_FAILED", payment.name || address, taxError);
+                status.taxPaymentFailed = true;
+                status.error = `Paid, but the ${tax.taxSats} sat tax payment FAILED and needs manual follow-up: ${taxError}`;
+              }
+              const paymentHash = paymentHashOf(invoice);
+              const taxPaymentHash = taxPaid ? paymentHashOf(taxInvoice) : null;
+              withholdings.set(status, {
+                tax,
+                taxPaid,
+                taxInvoice,
+                invoice,
+                paymentHash,
+                preImage: await fetchPreImageFromBlink(paymentHash),
+                taxPaymentHash,
+                taxPreImage: await fetchPreImageFromBlink(taxPaymentHash),
+              });
+            }
           }
         } else {
           paymentStatuses.push({ ...payment, status: "Failed", error: "Unrecognized address format." });
@@ -993,25 +1109,98 @@ router.post(
         const btcUsdRate = await getBtcUsdRate();
         const insertBatch = db.prepare(`
           INSERT OR REPLACE INTO transactions
-            (id, date, type, receiver, lightningAddress, amount, currency, note, direction, status, btcUsdRate)
+            (id, date, type, recipientType, receiver, lightningAddress, invoice, amount, currency, note, direction, status,
+             paymentHash, preImage, btcUsdRate, amountFiat, categoryId, taxWithholding, taxPaymentFailed)
           VALUES
-            (@id, @date, @type, @receiver, @lightningAddress, @amount, @currency, @note, @direction, @status, @btcUsdRate)
+            (@id, @date, @type, @recipientType, @receiver, @lightningAddress, @invoice, @amount, @currency, @note, @direction, @status,
+             @paymentHash, @preImage, @btcUsdRate, @amountFiat, @categoryId, @taxWithholding, @taxPaymentFailed)
+        `);
+        const insertBatchTax = db.prepare(`
+          INSERT OR REPLACE INTO transactions
+            (id, date, type, recipientType, recipientId, contact, company, lightningAddress, invoice, amount, currency,
+             note, direction, status, paymentHash, preImage, btcUsdRate, amountFiat, categoryId, relatedEmployeePayment, taxType)
+          VALUES
+            (@id, @date, @type, @recipientType, @recipientId, @contact, @company, @lightningAddress, @invoice, @amount, @currency,
+             @note, @direction, @status, @paymentHash, @preImage, @btcUsdRate, @amountFiat, @categoryId, @relatedEmployeePayment, @taxType)
         `);
         db.transaction(() => {
           for (const payment of successfulPayments) {
             const isOnchain = /^(bc1[a-z0-9]{6,87}|[13][a-zA-HJ-NP-Z0-9]{25,34})$/.test(payment.address);
+            const held = withholdings.get(payment);
+            if (held) {
+              const paidTo = payment.name || payment.address;
+              insertBatch.run({
+                id: `batch_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                date: new Date().toISOString(),
+                type: "batch",
+                recipientType: "employee",
+                receiver: paidTo,
+                lightningAddress: payment.address,
+                invoice: held.invoice,
+                amount: held.tax.netSats,
+                currency: "SATS",
+                note: `${payment.note || ""} (Net after tax withholding)`,
+                direction: "SENT",
+                status: "SUCCESS",
+                paymentHash: held.paymentHash,
+                preImage: held.preImage,
+                btcUsdRate: btcUsdRate,
+                amountFiat: fiatValue(held.tax.netSats, btcUsdRate),
+                categoryId: resolveCategoryId("cat_payroll"),
+                taxWithholding: JSON.stringify({
+                  originalAmount: Number(payment.amount),
+                  taxAmount: held.tax.taxSats,
+                  netAmount: held.tax.netSats,
+                }),
+                taxPaymentFailed: payment.taxPaymentFailed ? 1 : 0,
+              });
+              if (held.taxPaid) {
+                insertBatchTax.run({
+                  id: held.taxPaymentHash || `tax_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                  date: new Date().toISOString(),
+                  type: "tax_withholding",
+                  recipientType: "government",
+                  recipientId: "tax_authority",
+                  contact: "Tax Authority",
+                  company: "Government",
+                  lightningAddress: TAX_LIGHTNING_ADDRESS,
+                  invoice: held.taxInvoice,
+                  amount: held.tax.taxSats,
+                  currency: "SATS",
+                  note: `${payment.type} tax withholding for ${paidTo} - ${payment.note || ""}`,
+                  direction: "SENT",
+                  status: "SUCCESS",
+                  paymentHash: held.taxPaymentHash,
+                  preImage: held.taxPreImage,
+                  btcUsdRate: btcUsdRate,
+                  amountFiat: fiatValue(held.tax.taxSats, btcUsdRate),
+                  categoryId: resolveCategoryId("cat_tax"),
+                  relatedEmployeePayment: held.paymentHash,
+                  taxType: payment.type,
+                });
+              }
+              continue;
+            }
             insertBatch.run({
               id: `batch_${Date.now()}_${Math.random().toString(36).slice(2)}`,
               date: new Date().toISOString(),
               type: isOnchain ? "onchain" : "batch",
+              recipientType: null,
               receiver: payment.name || payment.address,
               lightningAddress: isOnchain ? null : payment.address,
+              invoice: null,
               amount: Number(payment.amount),
               currency: "SATS",
               note: payment.note || "",
               direction: "SENT",
               status: isOnchain ? "PENDING" : "SUCCESS",
+              paymentHash: null,
+              preImage: null,
               btcUsdRate: btcUsdRate,
+              amountFiat: fiatValue(payment.amount, btcUsdRate),
+              categoryId: null,
+              taxWithholding: null,
+              taxPaymentFailed: 0,
             });
           }
         })();

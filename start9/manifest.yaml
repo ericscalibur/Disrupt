@@ -1,11 +1,10 @@
 id: disrupt
 title: "Disrupt Portal"
-version: 1.2.7
+version: 1.3.1
 release-notes: |
-  - Added a show/hide (eyeball) toggle to every password field
-  - Tax withholding preview now matches the amount actually sent to the penny (sat)
-  - Supplier edits can no longer leave a supplier with no payment address
-  - Login no longer leaks whether an email is registered (constant-time response)
+  - New: transaction categories for accountant-ready bookkeeping
+  - New: reports with fiat amounts recorded at time of payment
+  - Config screen now makes clear the email/SMTP fields are required for password recovery
 license: GPL-3.0
 min-os-version: 0.3.5
 wrapper-repo: https://github.com/ericscalibur/Disrupt

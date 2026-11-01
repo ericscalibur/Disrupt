@@ -63,6 +63,8 @@ The portal is available at **http://localhost:3000**.
 - Two-part structure: employee-side deduction (withheld from pay) and employer-side contribution (additional)
 - Separate contractor withholding rate
 - When the checkbox is applied, the net amount goes to the employee and the withheld amount is automatically sent to the configured tax Lightning address in the same payment flow
+- Batch CSVs work the same way: add a `Type` column set to `employee`, `contractor` or `none`. Amounts on `employee` and `contractor` rows are gross, and those rows need a Lightning address. A blank `Type` means no withholding
+- Withholding is not available for on-chain payments or Lightning invoices
 - All withholding recorded per transaction
 
 ### Team & Suppliers

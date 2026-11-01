@@ -72,31 +72,31 @@ spec:
     default: ~
   email_user:
     type: string
-    name: Email Address (optional)
-    description: Gmail/SMTP address used for password-reset emails
+    name: Email Address — required for password recovery
+    description: "Gmail/SMTP address used to send password-reset emails. If left blank, users who forget their password CANNOT recover their account and an Admin must reset it manually."
     nullable: true
     masked: false
     placeholder: "your-email@gmail.com"
     default: ~
   email_pass:
     type: string
-    name: Email App Password (optional)
-    description: Gmail App Password or SMTP password
+    name: Email App Password — required for password recovery
+    description: "App Password for the email address above (for Gmail: Google Account → Security → App Passwords). Password-reset emails cannot be sent without it."
     nullable: true
     masked: true
     default: ~
   email_host:
     type: string
-    name: SMTP Host (optional)
-    description: SMTP server hostname
+    name: SMTP Host — required for password recovery
+    description: "SMTP server that sends password-reset emails. Keep smtp.gmail.com if using a Gmail address."
     nullable: true
     masked: false
     placeholder: "smtp.gmail.com"
     default: "smtp.gmail.com"
   email_port:
     type: number
-    name: SMTP Port (optional)
-    description: SMTP server port
+    name: SMTP Port — required for password recovery
+    description: "SMTP server port for password-reset emails. 587 is correct for Gmail and most providers."
     nullable: true
     range: "[1,65535]"
     default: 587

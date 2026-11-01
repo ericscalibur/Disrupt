@@ -118,6 +118,19 @@ db.exec(`
     uploadedBy   TEXT NOT NULL,
     uploadedAt   TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS categories (
+    id        TEXT PRIMARY KEY,
+    name      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind      TEXT NOT NULL DEFAULT 'expense',
+    sortOrder INTEGER DEFAULT 0,
+    archived  INTEGER DEFAULT 0
+  );
 `);
 
 // Non-destructive schema additions for already-existing databases
@@ -125,11 +138,14 @@ const existingTxnCols = db.prepare("PRAGMA table_info(transactions)").all().map(
 if (!existingTxnCols.includes("draftId"))          db.exec("ALTER TABLE transactions ADD COLUMN draftId TEXT");
 if (!existingTxnCols.includes("taxPaymentFailed")) db.exec("ALTER TABLE transactions ADD COLUMN taxPaymentFailed INTEGER DEFAULT 0");
 if (!existingTxnCols.includes("receiptId"))        db.exec("ALTER TABLE transactions ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
+if (!existingTxnCols.includes("categoryId"))       db.exec("ALTER TABLE transactions ADD COLUMN categoryId TEXT REFERENCES categories(id)");
+if (!existingTxnCols.includes("amountFiat"))       db.exec("ALTER TABLE transactions ADD COLUMN amountFiat REAL");
 
 const existingDraftCols = db.prepare("PRAGMA table_info(drafts)").all().map((c) => c.name);
 if (!existingDraftCols.includes("receiptId"))         db.exec("ALTER TABLE drafts ADD COLUMN receiptId TEXT REFERENCES receipts(id)");
 if (!existingDraftCols.includes("recipientBtcAddress")) db.exec("ALTER TABLE drafts ADD COLUMN recipientBtcAddress TEXT");
 if (!existingDraftCols.includes("paymentRail"))         db.exec("ALTER TABLE drafts ADD COLUMN paymentRail TEXT NOT NULL DEFAULT 'lightning'");
+if (!existingDraftCols.includes("categoryId"))          db.exec("ALTER TABLE drafts ADD COLUMN categoryId TEXT REFERENCES categories(id)");
 
 const existingUserCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
 if (!existingUserCols.includes("btcAddress")) db.exec("ALTER TABLE users ADD COLUMN btcAddress TEXT");
@@ -162,5 +178,48 @@ if (supplierLnCol && supplierLnCol.notnull === 1) {
 } else if (!existingSupplierCols.find((c) => c.name === "btcAddress")) {
   db.exec("ALTER TABLE suppliers ADD COLUMN btcAddress TEXT");
 }
+
+// Supplier tax registration document (e.g. IVA card) — reuses the receipts store
+const supplierColsNow = db.prepare("PRAGMA table_info(suppliers)").all().map((c) => c.name);
+if (!supplierColsNow.includes("taxDocReceiptId")) {
+  db.exec("ALTER TABLE suppliers ADD COLUMN taxDocReceiptId TEXT REFERENCES receipts(id)");
+}
+
+// Default settings (INSERT OR IGNORE — never overwrites a configured value)
+db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run("fiatCurrency", "USD");
+
+// Seed default categories on first run. Fixed ids so server code can reference
+// them (e.g. auto-categorizing payroll/tax transactions); names are editable.
+if (db.prepare("SELECT COUNT(*) AS n FROM categories").get().n === 0) {
+  const seedCategory = db.prepare(
+    "INSERT INTO categories (id, name, kind, sortOrder) VALUES (?, ?, ?, ?)"
+  );
+  db.transaction(() => {
+    seedCategory.run("cat_payroll",       "Payroll",                 "payroll", 1);
+    seedCategory.run("cat_tax",           "Taxes & Withholding",     "tax",     2);
+    seedCategory.run("cat_inventory",     "Inventory & Supplies",    "expense", 3);
+    seedCategory.run("cat_rent",          "Rent & Utilities",        "expense", 4);
+    seedCategory.run("cat_services",      "Professional Services",   "expense", 5);
+    seedCategory.run("cat_software",      "Software & Subscriptions","expense", 6);
+    seedCategory.run("cat_transport",     "Travel & Transport",      "expense", 7);
+    seedCategory.run("cat_marketing",     "Marketing",               "expense", 8);
+    seedCategory.run("cat_other_expense", "Other Expenses",          "expense", 9);
+    seedCategory.run("cat_sales",         "Sales",                   "income", 10);
+    seedCategory.run("cat_other_income",  "Other Income",            "income", 11);
+  })();
+}
+
+// Backfill amountFiat (the locked-in book value) for rows recorded before the
+// column existed. Idempotent — only touches NULL rows — so it runs every start
+// and also catches rows written by any code path that missed the value.
+db.exec(`
+  UPDATE transactions
+     SET amountFiat = ROUND(amount * btcUsdRate / 100000000.0, 2)
+   WHERE amountFiat IS NULL AND btcUsdRate IS NOT NULL AND amount IS NOT NULL
+     AND (currency = 'SATS' OR currency IS NULL);
+  UPDATE transactions
+     SET amountFiat = amount
+   WHERE amountFiat IS NULL AND amount IS NOT NULL AND currency = 'USD';
+`);
 
 module.exports = db;

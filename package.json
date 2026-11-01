@@ -1,6 +1,6 @@
 {
   "name": "disrupt-portal",
-  "version": "1.2.7",
+  "version": "1.3.1",
   "description": "Lightning Network-enabled business payment platform with configurable payroll tax withholding",
   "main": "disrupt-portal/server.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "migrate": "node disrupt-portal/migrate-to-sqlite.js",
     "install-setup": "./install.sh",
     "generate-jwt": "node -e \"console.log('ACCESS_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex')); console.log('REFRESH_TOKEN_SECRET=' + require('crypto').randomBytes(64).toString('hex'));\"",
-    "test": "node --test test/tax.test.js test/api.test.js test/changePassword.test.js test/editTeamMember.test.js test/security.test.js",
+    "test": "node --test test/tax.test.js test/api.test.js test/changePassword.test.js test/editTeamMember.test.js test/security.test.js test/batchTax.test.js",
     "test:unit": "node --test test/tax.test.js",
     "test:api": "node --test test/api.test.js"
   },
@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@getalby/sdk": "^5.1.0",
+    "archiver": "^8.0.0",
     "axios": "^1.9.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",

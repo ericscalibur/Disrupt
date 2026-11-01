@@ -50,9 +50,9 @@ Disrupt Portal is a comprehensive business management platform that combines tra
 - Complete transaction history
 
 ### 🇸🇻 **El Salvador Tax Compliance**
-- **Automatic 26.5% tax withholding** for employee payments
-- Dual payments: 73.5% to employee, 26.5% to tax authorities
-- Complete breakdown of employee (10.25%) and employer (16.25%) contributions
+- **Automatic payroll tax split** for employee payments
+- Dual payments: 89.75% of gross pay to the employee, 26.5% of gross pay to your tax address
+- Complete breakdown of employee (10.25%, withheld from pay) and employer (16.25%, paid on top) contributions
 - Instant tax payments via Lightning Network
 
 ### 👥 **Team Management**
@@ -84,10 +84,12 @@ Disrupt Portal is a comprehensive business management platform that combines tra
 ## 🛡️ **Enterprise-Grade Security & Data Sovereignty**
 
 ### 🏢 **Complete Organizational Isolation**
-- **Self-Hosted Architecture** - Your data never leaves your control
+- **Self-Hosted Architecture** - Your business records live only on your own server
 - **Separate Lightning Wallets** - Each organization has independent payment infrastructure
-- **Zero Data Sharing** - No multi-tenant risks or cross-contamination
-- **Private Database** - Your transactions, users, and business data stay completely isolated
+- **Zero Multi-Tenant Risk** - No shared infrastructure, no cross-contamination between organizations
+- **Private Database** - Users, roles, drafts, approvals, receipts, categories, and notes stay completely isolated on your hardware
+
+> **Honest scope:** payments are executed through your own [Blink](https://blink.sv) wallet, so Blink — like any wallet provider — has a record of your wallet's transactions (amounts, dates, addresses). Everything around the payment — who requested it, who approved it, receipts, categories, tax breakdowns — exists only on your server.
 
 ### 🔒 **Advanced Security Features**
 - **JWT Authentication** with refresh token rotation
@@ -124,7 +126,7 @@ Disrupt Portal is a comprehensive business management platform that combines tra
 ## 💡 **Use Cases**
 
 ### **Scenario 1: Payroll Processing**
-*"Every two weeks, Maria (HR Manager) uploads a CSV with 50 employee payments. The system automatically calculates tax withholding, sends 73.5% to employees and 26.5% to tax authorities via Lightning - all in under 5 minutes."*
+*"Every two weeks, Maria (HR Manager) uploads a CSV with 50 employee payments, each marked as an employee or contractor. The system automatically calculates tax withholding, sends each employee their net pay and the combined employee and employer taxes to the company's tax address via Lightning - all in under 5 minutes."*
 
 ### **Scenario 2: International Suppliers**
 *"Carlos (Procurement) needs to pay a supplier in Argentina. He enters the Lightning address, amount, and note. Payment arrives instantly, supplier is happy, no wire transfer fees or delays."*
@@ -224,7 +226,7 @@ Whether you're a 5-person startup or a 500-employee company, Disrupt Portal grow
 - **Self-Hosted** - Complete sovereignty over your financial data
 - **Lightning Native** - Built for the Bitcoin economy with separate wallets
 - **El Salvador Ready** - Tax compliance included out of the box
-- **Zero Data Sharing** - Your instance is completely isolated and private
+- **Zero Multi-Tenant Risk** - Your instance is completely isolated from other organizations
 - **Enterprise Scalable** - Run multiple instances for complex organizations
 
 ---
