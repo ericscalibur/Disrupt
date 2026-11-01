@@ -7,19 +7,21 @@
 #
 # HOW GITHUB ACTIONS WORK (quick primer):
 # - This file lives at .github/workflows/build-s9pk.yml in your repo
-# - "on:" says WHEN it runs (here: when you publish a release, or manually)
+# - "on:" says WHEN it runs (here: only when started manually)
 # - "jobs:" are the machines GitHub spins up; "steps:" run in order on them
 # - Each "uses:" pulls in a pre-made action (like an npm package for CI)
 # - Each "run:" is just a shell command
 # - Works the same in Deploy-Deadman-Switch — copy this file there too
 #   (its Makefile must call `start-sdk pack`, like Disrupt's does)
 
+#
+# MANUAL ONLY: releases are built and signed locally. This can't currently build
+# start-sdk from source, because its avahi-sys dependency repo is gone.
+
 name: Build s9pk
 
 on:
-  release:
-    types: [published]      # runs when you click "Publish release" on GitHub
-  workflow_dispatch:         # also lets you run it manually from the Actions tab
+  workflow_dispatch:         # runs only when started from the Actions tab
 
 jobs:
   build:
