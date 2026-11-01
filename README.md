@@ -2,6 +2,8 @@
 
 A Lightning Network-enabled business payment platform for small teams. Handles employee payroll, supplier payments, on-chain Bitcoin, batch processing, and configurable tax withholding — all from a single web interface.
 
+Want help setting this up for your business? [The Bitcoin Hardware Store](https://tbhs.sv) offers private sessions, in person in El Salvador or remotely.
+
 ---
 
 ## Quick Start
